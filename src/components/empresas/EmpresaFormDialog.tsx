@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, FileText, Settings } from "lucide-react";
+import { Loader2, Building2, FileText, Settings, Search, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { useCreateEmpresa, useUpdateEmpresa, Empresa } from "@/hooks/useSupabaseData";
 
@@ -79,14 +79,38 @@ const formatCNPJ = (value: string) => {
     .replace(/(\d{4})(\d)/, '$1-$2');
 };
 
+const formatCEP = (value: string) => {
+  const numbers = value.replace(/\D/g, '').slice(0, 8);
+  return numbers.replace(/(\d{5})(\d)/, '$1-$2');
+};
+
+const formatPhone = (value: string) => {
+  const numbers = value.replace(/\D/g, '').slice(0, 11);
+  if (numbers.length <= 10) {
+    return numbers
+      .replace(/(\d{2})(\d)/, '($1) $2')
+      .replace(/(\d{4})(\d)/, '$1-$2');
+  }
+  return numbers
+    .replace(/(\d{2})(\d)/, '($1) $2')
+    .replace(/(\d{5})(\d)/, '$1-$2');
+};
+
 const empresaSchema = z.object({
   // Dados básicos
   razao_social: z.string().min(3, "Razão social deve ter no mínimo 3 caracteres").max(150),
   nome_fantasia: z.string().max(100).optional().nullable(),
   cnpj: z.string().refine(val => validateCNPJ(val), "CNPJ inválido"),
   inscricao_estadual: z.string().max(20).optional().nullable(),
+  telefone: z.string().max(20).optional().nullable(),
+  cnae_principal: z.string().max(10).optional().nullable(),
   
-  // Endereço
+  // Endereço completo
+  logradouro: z.string().max(150).optional().nullable(),
+  numero: z.string().max(10).optional().nullable(),
+  complemento: z.string().max(60).optional().nullable(),
+  bairro: z.string().max(60).optional().nullable(),
+  cep: z.string().max(10).optional().nullable(),
   uf: z.string().length(2, "UF deve ter 2 caracteres"),
   municipio: z.string().min(2, "Município é obrigatório").max(100),
   codigo_municipio: z.string().length(7, "Código do município deve ter 7 dígitos").optional().nullable(),
@@ -119,8 +143,28 @@ const UFs = [
   "RS", "RO", "RR", "SC", "SP", "SE", "TO"
 ];
 
+// Interface para resposta da BrasilAPI
+interface CNPJData {
+  razao_social: string;
+  nome_fantasia: string | null;
+  cnpj: string;
+  logradouro: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cep: string;
+  uf: string;
+  municipio: string;
+  codigo_municipio: number;
+  ddd_telefone_1: string;
+  cnae_fiscal: number;
+  cnae_fiscal_descricao: string;
+  descricao_tipo_de_logradouro: string;
+}
+
 export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: EmpresaFormDialogProps) {
   const [activeTab, setActiveTab] = useState("dados");
+  const [isSearchingCNPJ, setIsSearchingCNPJ] = useState(false);
   const createEmpresa = useCreateEmpresa();
   const updateEmpresa = useUpdateEmpresa();
   
@@ -133,6 +177,13 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       nome_fantasia: "",
       cnpj: "",
       inscricao_estadual: "",
+      telefone: "",
+      cnae_principal: "",
+      logradouro: "",
+      numero: "",
+      complemento: "",
+      bairro: "",
+      cep: "",
       uf: "SP",
       municipio: "",
       codigo_municipio: "",
@@ -150,8 +201,15 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       form.reset({
         razao_social: empresa.razao_social,
         nome_fantasia: empresa.nome_fantasia || "",
-        cnpj: empresa.cnpj,
+        cnpj: formatCNPJ(empresa.cnpj),
         inscricao_estadual: empresa.inscricao_estadual || "",
+        telefone: (empresa as any).telefone || "",
+        cnae_principal: (empresa as any).cnae_principal || "",
+        logradouro: (empresa as any).logradouro || "",
+        numero: (empresa as any).numero || "",
+        complemento: (empresa as any).complemento || "",
+        bairro: (empresa as any).bairro || "",
+        cep: (empresa as any).cep ? formatCEP((empresa as any).cep) : "",
         uf: empresa.uf,
         municipio: empresa.municipio,
         codigo_municipio: empresa.codigo_municipio || "",
@@ -168,6 +226,13 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         nome_fantasia: "",
         cnpj: "",
         inscricao_estadual: "",
+        telefone: "",
+        cnae_principal: "",
+        logradouro: "",
+        numero: "",
+        complemento: "",
+        bairro: "",
+        cep: "",
         uf: "SP",
         municipio: "",
         codigo_municipio: "",
@@ -181,6 +246,70 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
     }
   }, [empresa, form]);
 
+  const searchCNPJ = async () => {
+    const cnpj = form.getValues("cnpj");
+    const cleanCNPJ = cnpj.replace(/\D/g, '');
+    
+    if (cleanCNPJ.length !== 14) {
+      toast.error("CNPJ inválido. Digite os 14 dígitos.");
+      return;
+    }
+
+    if (!validateCNPJ(cnpj)) {
+      toast.error("CNPJ inválido. Verifique os dígitos.");
+      return;
+    }
+
+    setIsSearchingCNPJ(true);
+    
+    try {
+      const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCNPJ}`);
+      
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error("CNPJ não encontrado na base da Receita Federal");
+        }
+        throw new Error("Erro ao consultar CNPJ");
+      }
+      
+      const data: CNPJData = await response.json();
+      
+      // Preencher formulário com dados retornados
+      form.setValue("razao_social", data.razao_social || "");
+      form.setValue("nome_fantasia", data.nome_fantasia || "");
+      
+      // Endereço
+      const logradouro = data.descricao_tipo_de_logradouro 
+        ? `${data.descricao_tipo_de_logradouro} ${data.logradouro}` 
+        : data.logradouro;
+      form.setValue("logradouro", logradouro || "");
+      form.setValue("numero", data.numero || "");
+      form.setValue("complemento", data.complemento || "");
+      form.setValue("bairro", data.bairro || "");
+      form.setValue("cep", data.cep ? formatCEP(data.cep) : "");
+      form.setValue("uf", data.uf || "SP");
+      form.setValue("municipio", data.municipio || "");
+      form.setValue("codigo_municipio", data.codigo_municipio?.toString().padStart(7, '0') || "");
+      
+      // Telefone
+      if (data.ddd_telefone_1) {
+        form.setValue("telefone", formatPhone(data.ddd_telefone_1.replace(/\D/g, '')));
+      }
+      
+      // CNAE
+      if (data.cnae_fiscal) {
+        form.setValue("cnae_principal", data.cnae_fiscal.toString());
+      }
+      
+      toast.success("Dados do CNPJ carregados com sucesso!");
+      
+    } catch (error: any) {
+      toast.error(error.message || "Erro ao buscar dados do CNPJ");
+    } finally {
+      setIsSearchingCNPJ(false);
+    }
+  };
+
   const handleClose = () => {
     form.reset();
     setActiveTab("dados");
@@ -190,12 +319,21 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
   const onSubmit = async (data: EmpresaFormData) => {
     try {
       const cleanCNPJ = data.cnpj.replace(/\D/g, '');
+      const cleanCEP = data.cep?.replace(/\D/g, '') || null;
+      const cleanPhone = data.telefone?.replace(/\D/g, '') || null;
       
       const empresaData = {
         razao_social: data.razao_social,
         nome_fantasia: data.nome_fantasia || null,
         cnpj: cleanCNPJ,
         inscricao_estadual: data.inscricao_estadual || null,
+        telefone: cleanPhone,
+        cnae_principal: data.cnae_principal || null,
+        logradouro: data.logradouro || null,
+        numero: data.numero || null,
+        complemento: data.complemento || null,
+        bairro: data.bairro || null,
+        cep: cleanCEP,
         uf: data.uf,
         municipio: data.municipio,
         codigo_municipio: data.codigo_municipio || null,
@@ -235,7 +373,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
           <DialogDescription>
             {isEditing 
               ? "Atualize os dados da empresa cadastrada" 
-              : "Preencha os dados da empresa para cadastro. Campos com * são obrigatórios."
+              : "Digite o CNPJ e clique em buscar para preencher automaticamente os dados."
             }
           </DialogDescription>
         </DialogHeader>
@@ -243,10 +381,14 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="dados" className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Dados
+                </TabsTrigger>
+                <TabsTrigger value="endereco" className="flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Endereço
                 </TabsTrigger>
                 <TabsTrigger value="fiscal" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
@@ -260,6 +402,47 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
 
               <TabsContent value="dados" className="space-y-4 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* CNPJ com botão de busca */}
+                  <div className="col-span-2">
+                    <FormField
+                      control={form.control}
+                      name="cnpj"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>CNPJ *</FormLabel>
+                          <div className="flex gap-2">
+                            <FormControl>
+                              <Input 
+                                placeholder="00.000.000/0000-00" 
+                                {...field}
+                                onChange={(e) => field.onChange(formatCNPJ(e.target.value))}
+                                className="flex-1"
+                              />
+                            </FormControl>
+                            <Button 
+                              type="button" 
+                              variant="secondary"
+                              onClick={searchCNPJ}
+                              disabled={isSearchingCNPJ}
+                              className="shrink-0"
+                            >
+                              {isSearchingCNPJ ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Search className="h-4 w-4" />
+                              )}
+                              <span className="ml-2 hidden sm:inline">Buscar</span>
+                            </Button>
+                          </div>
+                          <FormDescription>
+                            Digite o CNPJ e clique em buscar para preencher automaticamente
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
                   <FormField
                     control={form.control}
                     name="razao_social"
@@ -290,15 +473,30 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
 
                   <FormField
                     control={form.control}
-                    name="cnpj"
+                    name="inscricao_estadual"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>CNPJ *</FormLabel>
+                        <FormLabel>Inscrição Estadual</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Inscrição estadual" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="telefone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Telefone</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="00.000.000/0000-00" 
-                            {...field}
-                            onChange={(e) => field.onChange(formatCNPJ(e.target.value))}
+                            placeholder="(00) 00000-0000" 
+                            {...field} 
+                            value={field.value || ""}
+                            onChange={(e) => field.onChange(formatPhone(e.target.value))}
                           />
                         </FormControl>
                         <FormMessage />
@@ -308,12 +506,41 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
 
                   <FormField
                     control={form.control}
-                    name="inscricao_estadual"
+                    name="cnae_principal"
+                    render={({ field }) => (
+                      <FormItem className="col-span-2">
+                        <FormLabel>CNAE Principal</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="0000000" 
+                            {...field} 
+                            value={field.value || ""}
+                            onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 7))}
+                          />
+                        </FormControl>
+                        <FormDescription>Código CNAE da atividade principal</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="endereco" className="space-y-4 mt-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="cep"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Inscrição Estadual</FormLabel>
+                        <FormLabel>CEP</FormLabel>
                         <FormControl>
-                          <Input placeholder="Inscrição estadual" {...field} value={field.value || ""} />
+                          <Input 
+                            placeholder="00000-000" 
+                            {...field} 
+                            value={field.value || ""}
+                            onChange={(e) => field.onChange(formatCEP(e.target.value))}
+                          />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -345,6 +572,62 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
 
                   <FormField
                     control={form.control}
+                    name="logradouro"
+                    render={({ field }) => (
+                      <FormItem className="col-span-2">
+                        <FormLabel>Logradouro</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Rua, Avenida, etc." {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="numero"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Número</FormLabel>
+                        <FormControl>
+                          <Input placeholder="123" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="complemento"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Complemento</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Sala, Andar, etc." {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="bairro"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Bairro</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Bairro" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
                     name="municipio"
                     render={({ field }) => (
                       <FormItem>
@@ -361,8 +644,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                     control={form.control}
                     name="codigo_municipio"
                     render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Código IBGE</FormLabel>
+                      <FormItem className="col-span-2">
+                        <FormLabel>Código IBGE do Município</FormLabel>
                         <FormControl>
                           <Input 
                             placeholder="0000000" 
@@ -372,7 +655,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                             onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 7))}
                           />
                         </FormControl>
-                        <FormDescription>Código IBGE do município (7 dígitos)</FormDescription>
+                        <FormDescription>Código IBGE do município (7 dígitos) - preenchido automaticamente na busca do CNPJ</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -394,11 +677,14 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="simples_nacional">Simples Nacional</SelectItem>
-                          <SelectItem value="lucro_presumido">Lucro Presumido</SelectItem>
-                          <SelectItem value="lucro_real">Lucro Real</SelectItem>
+                          <SelectItem value="simples_nacional">Simples Nacional (CRT 1)</SelectItem>
+                          <SelectItem value="lucro_presumido">Lucro Presumido (CRT 3)</SelectItem>
+                          <SelectItem value="lucro_real">Lucro Real (CRT 3)</SelectItem>
                         </SelectContent>
                       </Select>
+                      <FormDescription>
+                        O CRT (Código de Regime Tributário) será definido automaticamente
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
