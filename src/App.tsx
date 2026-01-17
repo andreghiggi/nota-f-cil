@@ -3,6 +3,8 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import Empresas from "./pages/Empresas";
 import NFCe from "./pages/NFCe";
@@ -22,19 +24,21 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/empresas" element={<Empresas />} />
-          <Route path="/nfce" element={<NFCe />} />
-          <Route path="/certificados" element={<Certificados />} />
-          <Route path="/tokens" element={<Tokens />} />
-          <Route path="/logs" element={<Logs />} />
-          <Route path="/configuracoes" element={<Configuracoes />} />
-          <Route path="/docs" element={<DocumentacaoAPI />} />
-          <Route path="/auth" element={<Auth />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+            <Route path="/empresas" element={<ProtectedRoute><Empresas /></ProtectedRoute>} />
+            <Route path="/nfce" element={<ProtectedRoute><NFCe /></ProtectedRoute>} />
+            <Route path="/certificados" element={<ProtectedRoute><Certificados /></ProtectedRoute>} />
+            <Route path="/tokens" element={<ProtectedRoute><Tokens /></ProtectedRoute>} />
+            <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+            <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+            <Route path="/docs" element={<ProtectedRoute><DocumentacaoAPI /></ProtectedRoute>} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
