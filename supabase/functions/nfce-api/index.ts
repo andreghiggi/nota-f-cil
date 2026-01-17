@@ -419,6 +419,15 @@ Deno.serve(async (req) => {
         p_ip_origem: req.headers.get('x-forwarded-for')
       });
 
+      // Send webhook notification
+      try {
+        await supabase.functions.invoke('send-webhook', {
+          body: { nfce_id: nfceId, evento: 'nfce.cancelada' }
+        });
+      } catch (webhookError) {
+        console.error('Webhook dispatch error:', webhookError);
+      }
+
       return new Response(
         JSON.stringify({
           success: true,

@@ -10,6 +10,7 @@ import Empresas from "./pages/Empresas";
 import NFCe from "./pages/NFCe";
 import Certificados from "./pages/Certificados";
 import Tokens from "./pages/Tokens";
+import Webhooks from "./pages/Webhooks";
 import Logs from "./pages/Logs";
 import Configuracoes from "./pages/Configuracoes";
 import DocumentacaoAPI from "./pages/DocumentacaoAPI";
@@ -32,6 +33,7 @@ const App = () => (
             <Route path="/nfce" element={<ProtectedRoute><NFCe /></ProtectedRoute>} />
             <Route path="/certificados" element={<ProtectedRoute><Certificados /></ProtectedRoute>} />
             <Route path="/tokens" element={<ProtectedRoute><Tokens /></ProtectedRoute>} />
+            <Route path="/webhooks" element={<ProtectedRoute><Webhooks /></ProtectedRoute>} />
             <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
             <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
             <Route path="/docs" element={<ProtectedRoute><DocumentacaoAPI /></ProtectedRoute>} />
