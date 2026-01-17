@@ -27,6 +27,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useCertificados } from "@/hooks/useSupabaseData";
 import { CertificadoUploadDialog } from "@/components/certificados/CertificadoUploadDialog";
+import { AlertasVencimento } from "@/components/certificados/AlertasVencimento";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -170,6 +171,17 @@ export default function Certificados() {
             Upload Certificado
           </Button>
         </div>
+
+        {/* Alertas de Vencimento */}
+        {certificados && certificados.length > 0 && (
+          <AlertasVencimento 
+            certificados={certificados.map(c => ({
+              ...c,
+              empresas: c.empresas as { nome_fantasia: string | null; cnpj: string } | null
+            }))}
+            onRenovar={() => setUploadDialogOpen(true)}
+          />
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
