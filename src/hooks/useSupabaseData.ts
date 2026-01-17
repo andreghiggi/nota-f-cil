@@ -103,7 +103,21 @@ export function useCreateEmpresa() {
   const queryClient = useQueryClient();
   
   return useMutation({
-    mutationFn: async (empresa: Omit<Empresa, 'id' | 'user_id' | 'created_at' | 'updated_at' | 'numero_nfce_atual'>) => {
+    mutationFn: async (empresa: {
+      razao_social: string;
+      nome_fantasia?: string | null;
+      cnpj: string;
+      inscricao_estadual?: string | null;
+      uf: string;
+      municipio: string;
+      codigo_municipio?: string | null;
+      regime_tributario: 'simples_nacional' | 'lucro_presumido' | 'lucro_real';
+      ambiente: 'homologacao' | 'producao';
+      serie_nfce: string;
+      csc_id?: string | null;
+      csc_token?: string | null;
+      ativo?: boolean;
+    }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('User not authenticated');
       
@@ -115,6 +129,60 @@ export function useCreateEmpresa() {
       
       if (error) throw error;
       return data as Empresa;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['empresas'] });
+    }
+  });
+}
+
+export function useUpdateEmpresa() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...empresa }: {
+      id: string;
+      razao_social?: string;
+      nome_fantasia?: string | null;
+      cnpj?: string;
+      inscricao_estadual?: string | null;
+      uf?: string;
+      municipio?: string;
+      codigo_municipio?: string | null;
+      regime_tributario?: 'simples_nacional' | 'lucro_presumido' | 'lucro_real';
+      ambiente?: 'homologacao' | 'producao';
+      serie_nfce?: string;
+      csc_id?: string | null;
+      csc_token?: string | null;
+      ativo?: boolean;
+    }) => {
+      const { data, error } = await supabase
+        .from('empresas')
+        .update(empresa)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data as Empresa;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['empresas'] });
+    }
+  });
+}
+
+export function useDeleteEmpresa() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('empresas')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['empresas'] });
