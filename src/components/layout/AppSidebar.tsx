@@ -9,7 +9,8 @@ import {
   HelpCircle,
   LogOut,
   Receipt,
-  BookOpen
+  BookOpen,
+  Webhook
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,7 @@ const navigation = [
   { name: "NFC-e", href: "/nfce", icon: Receipt },
   { name: "Certificados", href: "/certificados", icon: ShieldCheck },
   { name: "Tokens API", href: "/tokens", icon: Key },
+  { name: "Webhooks", href: "/webhooks", icon: Webhook },
   { name: "Logs", href: "/logs", icon: Activity },
   { name: "Configurações", href: "/configuracoes", icon: Settings },
 ];

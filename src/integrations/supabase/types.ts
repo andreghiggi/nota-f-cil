@@ -588,6 +588,116 @@ export type Database = {
           },
         ]
       }
+      webhook_logs: {
+        Row: {
+          created_at: string
+          duracao_ms: number | null
+          erro: string | null
+          evento: string
+          id: string
+          nfce_id: string | null
+          payload: Json
+          response_body: string | null
+          status_code: number | null
+          sucesso: boolean
+          webhook_id: string
+        }
+        Insert: {
+          created_at?: string
+          duracao_ms?: number | null
+          erro?: string | null
+          evento: string
+          id?: string
+          nfce_id?: string | null
+          payload: Json
+          response_body?: string | null
+          status_code?: number | null
+          sucesso?: boolean
+          webhook_id: string
+        }
+        Update: {
+          created_at?: string
+          duracao_ms?: number | null
+          erro?: string | null
+          evento?: string
+          id?: string
+          nfce_id?: string | null
+          payload?: Json
+          response_body?: string | null
+          status_code?: number | null
+          sucesso?: boolean
+          webhook_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhook_logs_nfce_id_fkey"
+            columns: ["nfce_id"]
+            isOneToOne: false
+            referencedRelation: "nfce"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "webhook_logs_webhook_id_fkey"
+            columns: ["webhook_id"]
+            isOneToOne: false
+            referencedRelation: "webhooks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      webhooks: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          empresa_id: string
+          eventos: string[]
+          falhas_consecutivas: number
+          id: string
+          nome: string
+          secret: string
+          ultimo_envio: string | null
+          ultimo_status: number | null
+          updated_at: string
+          url: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          empresa_id: string
+          eventos?: string[]
+          falhas_consecutivas?: number
+          id?: string
+          nome: string
+          secret: string
+          ultimo_envio?: string | null
+          ultimo_status?: number | null
+          updated_at?: string
+          url: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          empresa_id?: string
+          eventos?: string[]
+          falhas_consecutivas?: number
+          id?: string
+          nome?: string
+          secret?: string
+          ultimo_envio?: string | null
+          ultimo_status?: number | null
+          updated_at?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "webhooks_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

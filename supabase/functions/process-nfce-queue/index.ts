@@ -376,6 +376,15 @@ Deno.serve(async (req) => {
             },
           });
 
+          // Send webhook notification
+          try {
+            await supabase.functions.invoke('send-webhook', {
+              body: { nfce_id: nfce.id, evento: 'nfce.autorizada' }
+            });
+          } catch (webhookError) {
+            console.error('Webhook dispatch error:', webhookError);
+          }
+
           authorized++;
         } else {
           console.log(`❌ NFC-e ${nfce.numero} rejected: ${result.motivoRetorno}`);
@@ -430,6 +439,18 @@ Deno.serve(async (req) => {
               tentativa: novasTentativas 
             },
           });
+
+          // Send webhook notification for final rejection or denial
+          if (isDenegada || novasTentativas >= 3) {
+            try {
+              const webhookEvento = isDenegada ? 'nfce.denegada' : 'nfce.rejeitada';
+              await supabase.functions.invoke('send-webhook', {
+                body: { nfce_id: nfce.id, evento: webhookEvento }
+              });
+            } catch (webhookError) {
+              console.error('Webhook dispatch error:', webhookError);
+            }
+          }
 
           rejected++;
         }

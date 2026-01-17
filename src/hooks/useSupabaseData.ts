@@ -350,6 +350,133 @@ export function useCreateCertificado() {
   });
 }
 
+// Webhooks hooks
+export interface Webhook {
+  id: string;
+  empresa_id: string;
+  nome: string;
+  url: string;
+  secret: string;
+  eventos: string[];
+  ativo: boolean;
+  ultimo_envio: string | null;
+  ultimo_status: number | null;
+  falhas_consecutivas: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export function useWebhooks(empresaId?: string) {
+  return useQuery({
+    queryKey: ['webhooks', empresaId],
+    queryFn: async () => {
+      let query = supabase.from('webhooks').select('*');
+      
+      if (empresaId) {
+        query = query.eq('empresa_id', empresaId);
+      }
+      
+      const { data, error } = await query.order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data as Webhook[];
+    }
+  });
+}
+
+export function useCreateWebhook() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (webhook: {
+      empresa_id: string;
+      nome: string;
+      url: string;
+      eventos: string[];
+    }) => {
+      // Generate a secret for webhook signature
+      const secret = `whsec_${crypto.randomUUID().replace(/-/g, '')}`;
+      
+      const { data, error } = await supabase
+        .from('webhooks')
+        .insert({ ...webhook, secret })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data as Webhook;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['webhooks'] });
+    }
+  });
+}
+
+export function useUpdateWebhook() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, ...webhook }: {
+      id: string;
+      nome?: string;
+      url?: string;
+      eventos?: string[];
+      ativo?: boolean;
+    }) => {
+      const { data, error } = await supabase
+        .from('webhooks')
+        .update(webhook)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data as Webhook;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['webhooks'] });
+    }
+  });
+}
+
+export function useDeleteWebhook() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('webhooks')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['webhooks'] });
+    }
+  });
+}
+
+export function useWebhookLogs(webhookId?: string) {
+  return useQuery({
+    queryKey: ['webhook-logs', webhookId],
+    queryFn: async () => {
+      if (!webhookId) return [];
+      
+      const { data, error } = await supabase
+        .from('webhook_logs')
+        .select('*')
+        .eq('webhook_id', webhookId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!webhookId
+  });
+}
+
 export function useDeleteCertificado() {
   const queryClient = useQueryClient();
   
