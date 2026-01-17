@@ -8,10 +8,13 @@ import {
   Activity,
   HelpCircle,
   LogOut,
-  Receipt
+  Receipt,
+  BookOpen
 } from "lucide-react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
@@ -25,6 +28,23 @@ const navigation = [
 
 export function AppSidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success("Logout realizado com sucesso");
+    navigate("/auth");
+  };
+
+  const getUserInitials = () => {
+    if (!user?.email) return "U";
+    const parts = user.email.split("@")[0].split(/[._-]/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
+    }
+    return user.email.substring(0, 2).toUpperCase();
+  };
 
   return (
     <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col">
@@ -64,13 +84,19 @@ export function AppSidebar() {
       {/* Bottom section */}
       <div className="p-3 border-t border-sidebar-border space-y-1">
         <Link
-          to="/ajuda"
-          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50 transition-all duration-200"
+          to="/docs"
+          className={cn(
+            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+            location.pathname === "/docs"
+              ? "bg-sidebar-accent text-sidebar-primary"
+              : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+          )}
         >
-          <HelpCircle className="h-5 w-5" />
-          Ajuda
+          <BookOpen className="h-5 w-5" />
+          Documentação API
         </Link>
         <button
+          onClick={handleSignOut}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10 transition-all duration-200"
         >
           <LogOut className="h-5 w-5" />
@@ -82,11 +108,13 @@ export function AppSidebar() {
       <div className="p-4 border-t border-sidebar-border">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-full bg-sidebar-accent flex items-center justify-center">
-            <span className="text-sm font-semibold text-sidebar-primary">AD</span>
+            <span className="text-sm font-semibold text-sidebar-primary">{getUserInitials()}</span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-sidebar-foreground truncate">Admin</p>
-            <p className="text-xs text-sidebar-foreground/60 truncate">admin@empresa.com.br</p>
+            <p className="text-sm font-medium text-sidebar-foreground truncate">
+              {user?.email?.split("@")[0] || "Usuário"}
+            </p>
+            <p className="text-xs text-sidebar-foreground/60 truncate">{user?.email}</p>
           </div>
         </div>
       </div>
