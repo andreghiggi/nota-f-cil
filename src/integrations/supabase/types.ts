@@ -14,16 +14,622 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      certificados_digitais: {
+        Row: {
+          arquivo_path: string | null
+          cnpj_certificado: string | null
+          created_at: string
+          data_emissao: string | null
+          data_vencimento: string
+          emissor: string | null
+          empresa_id: string
+          id: string
+          senha_hash: string | null
+          status: Database["public"]["Enums"]["certificado_status"]
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          arquivo_path?: string | null
+          cnpj_certificado?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          data_vencimento: string
+          emissor?: string | null
+          empresa_id: string
+          id?: string
+          senha_hash?: string | null
+          status?: Database["public"]["Enums"]["certificado_status"]
+          tipo?: string
+          updated_at?: string
+        }
+        Update: {
+          arquivo_path?: string | null
+          cnpj_certificado?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          data_vencimento?: string
+          emissor?: string | null
+          empresa_id?: string
+          id?: string
+          senha_hash?: string | null
+          status?: Database["public"]["Enums"]["certificado_status"]
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certificados_digitais_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      configuracoes_fiscais: {
+        Row: {
+          ativo: boolean
+          codigo: string
+          created_at: string
+          dados: Json | null
+          descricao: string
+          empresa_id: string
+          id: string
+          tipo: string
+          updated_at: string
+          vigencia_fim: string | null
+          vigencia_inicio: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          codigo: string
+          created_at?: string
+          dados?: Json | null
+          descricao: string
+          empresa_id: string
+          id?: string
+          tipo: string
+          updated_at?: string
+          vigencia_fim?: string | null
+          vigencia_inicio?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          codigo?: string
+          created_at?: string
+          dados?: Json | null
+          descricao?: string
+          empresa_id?: string
+          id?: string
+          tipo?: string
+          updated_at?: string
+          vigencia_fim?: string | null
+          vigencia_inicio?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "configuracoes_fiscais_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      empresas: {
+        Row: {
+          ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          ativo: boolean
+          cnpj: string
+          codigo_municipio: string | null
+          created_at: string
+          csc_id: string | null
+          csc_token: string | null
+          id: string
+          inscricao_estadual: string | null
+          municipio: string
+          nome_fantasia: string | null
+          numero_nfce_atual: number
+          razao_social: string
+          regime_tributario: Database["public"]["Enums"]["regime_tributario"]
+          serie_nfce: string
+          uf: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          ativo?: boolean
+          cnpj: string
+          codigo_municipio?: string | null
+          created_at?: string
+          csc_id?: string | null
+          csc_token?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          municipio: string
+          nome_fantasia?: string | null
+          numero_nfce_atual?: number
+          razao_social: string
+          regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
+          serie_nfce?: string
+          uf: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          ativo?: boolean
+          cnpj?: string
+          codigo_municipio?: string | null
+          created_at?: string
+          csc_id?: string | null
+          csc_token?: string | null
+          id?: string
+          inscricao_estadual?: string | null
+          municipio?: string
+          nome_fantasia?: string | null
+          numero_nfce_atual?: number
+          razao_social?: string
+          regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
+          serie_nfce?: string
+          uf?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      fila_processamento: {
+        Row: {
+          created_at: string
+          erro_ultimo: string | null
+          id: string
+          max_tentativas: number
+          nfce_id: string
+          prioridade: number
+          proximo_processamento: string
+          tentativas: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          erro_ultimo?: string | null
+          id?: string
+          max_tentativas?: number
+          nfce_id: string
+          prioridade?: number
+          proximo_processamento?: string
+          tentativas?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          erro_ultimo?: string | null
+          id?: string
+          max_tentativas?: number
+          nfce_id?: string
+          prioridade?: number
+          proximo_processamento?: string
+          tentativas?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fila_processamento_nfce_id_fkey"
+            columns: ["nfce_id"]
+            isOneToOne: true
+            referencedRelation: "nfce"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      logs_fiscais: {
+        Row: {
+          categoria: string
+          created_at: string
+          detalhes: Json | null
+          empresa_id: string | null
+          id: string
+          ip_origem: string | null
+          mensagem: string
+          nfce_id: string | null
+          tipo: string
+          token_api_id: string | null
+        }
+        Insert: {
+          categoria: string
+          created_at?: string
+          detalhes?: Json | null
+          empresa_id?: string | null
+          id?: string
+          ip_origem?: string | null
+          mensagem: string
+          nfce_id?: string | null
+          tipo: string
+          token_api_id?: string | null
+        }
+        Update: {
+          categoria?: string
+          created_at?: string
+          detalhes?: Json | null
+          empresa_id?: string | null
+          id?: string
+          ip_origem?: string | null
+          mensagem?: string
+          nfce_id?: string | null
+          tipo?: string
+          token_api_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "logs_fiscais_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "logs_fiscais_nfce_id_fkey"
+            columns: ["nfce_id"]
+            isOneToOne: false
+            referencedRelation: "nfce"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "logs_fiscais_token_api_id_fkey"
+            columns: ["token_api_id"]
+            isOneToOne: false
+            referencedRelation: "tokens_api"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfce: {
+        Row: {
+          ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          chave_acesso: string | null
+          codigo_retorno: string | null
+          created_at: string
+          data_autorizacao: string | null
+          data_emissao: string
+          empresa_id: string
+          erro_processamento: string | null
+          external_id: string | null
+          id: string
+          motivo_retorno: string | null
+          numero: string
+          payload_entrada: Json
+          processado_em: string | null
+          protocolo: string | null
+          qrcode_url: string | null
+          serie: string
+          status: Database["public"]["Enums"]["nfce_status"]
+          tentativas: number
+          token_api_id: string | null
+          updated_at: string
+          valor_cofins: number | null
+          valor_desconto: number | null
+          valor_frete: number | null
+          valor_icms: number | null
+          valor_pis: number | null
+          valor_produtos: number | null
+          valor_total: number
+          xml_envio: string | null
+          xml_retorno: string | null
+        }
+        Insert: {
+          ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          chave_acesso?: string | null
+          codigo_retorno?: string | null
+          created_at?: string
+          data_autorizacao?: string | null
+          data_emissao?: string
+          empresa_id: string
+          erro_processamento?: string | null
+          external_id?: string | null
+          id?: string
+          motivo_retorno?: string | null
+          numero: string
+          payload_entrada: Json
+          processado_em?: string | null
+          protocolo?: string | null
+          qrcode_url?: string | null
+          serie: string
+          status?: Database["public"]["Enums"]["nfce_status"]
+          tentativas?: number
+          token_api_id?: string | null
+          updated_at?: string
+          valor_cofins?: number | null
+          valor_desconto?: number | null
+          valor_frete?: number | null
+          valor_icms?: number | null
+          valor_pis?: number | null
+          valor_produtos?: number | null
+          valor_total: number
+          xml_envio?: string | null
+          xml_retorno?: string | null
+        }
+        Update: {
+          ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          chave_acesso?: string | null
+          codigo_retorno?: string | null
+          created_at?: string
+          data_autorizacao?: string | null
+          data_emissao?: string
+          empresa_id?: string
+          erro_processamento?: string | null
+          external_id?: string | null
+          id?: string
+          motivo_retorno?: string | null
+          numero?: string
+          payload_entrada?: Json
+          processado_em?: string | null
+          protocolo?: string | null
+          qrcode_url?: string | null
+          serie?: string
+          status?: Database["public"]["Enums"]["nfce_status"]
+          tentativas?: number
+          token_api_id?: string | null
+          updated_at?: string
+          valor_cofins?: number | null
+          valor_desconto?: number | null
+          valor_frete?: number | null
+          valor_icms?: number | null
+          valor_pis?: number | null
+          valor_produtos?: number | null
+          valor_total?: number
+          xml_envio?: string | null
+          xml_retorno?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfce_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfce_token_api_id_fkey"
+            columns: ["token_api_id"]
+            isOneToOne: false
+            referencedRelation: "tokens_api"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfce_eventos: {
+        Row: {
+          codigo_retorno: string | null
+          created_at: string
+          data_evento: string
+          id: string
+          justificativa: string | null
+          motivo_retorno: string | null
+          nfce_id: string
+          protocolo: string | null
+          sequencia: number
+          tipo_evento: string
+          xml_evento: string | null
+          xml_retorno: string | null
+        }
+        Insert: {
+          codigo_retorno?: string | null
+          created_at?: string
+          data_evento?: string
+          id?: string
+          justificativa?: string | null
+          motivo_retorno?: string | null
+          nfce_id: string
+          protocolo?: string | null
+          sequencia?: number
+          tipo_evento: string
+          xml_evento?: string | null
+          xml_retorno?: string | null
+        }
+        Update: {
+          codigo_retorno?: string | null
+          created_at?: string
+          data_evento?: string
+          id?: string
+          justificativa?: string | null
+          motivo_retorno?: string | null
+          nfce_id?: string
+          protocolo?: string | null
+          sequencia?: number
+          tipo_evento?: string
+          xml_evento?: string | null
+          xml_retorno?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfce_eventos_nfce_id_fkey"
+            columns: ["nfce_id"]
+            isOneToOne: false
+            referencedRelation: "nfce"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfce_itens: {
+        Row: {
+          aliquota_cofins: number | null
+          aliquota_icms: number | null
+          aliquota_pis: number | null
+          cfop: string
+          codigo_produto: string
+          created_at: string
+          csosn: string | null
+          cst_cofins: string | null
+          cst_icms: string | null
+          cst_pis: string | null
+          descricao: string
+          id: string
+          ncm: string | null
+          nfce_id: string
+          numero_item: number
+          quantidade: number
+          unidade: string
+          valor_cofins: number | null
+          valor_icms: number | null
+          valor_pis: number | null
+          valor_total: number
+          valor_unitario: number
+        }
+        Insert: {
+          aliquota_cofins?: number | null
+          aliquota_icms?: number | null
+          aliquota_pis?: number | null
+          cfop: string
+          codigo_produto: string
+          created_at?: string
+          csosn?: string | null
+          cst_cofins?: string | null
+          cst_icms?: string | null
+          cst_pis?: string | null
+          descricao: string
+          id?: string
+          ncm?: string | null
+          nfce_id: string
+          numero_item: number
+          quantidade: number
+          unidade: string
+          valor_cofins?: number | null
+          valor_icms?: number | null
+          valor_pis?: number | null
+          valor_total: number
+          valor_unitario: number
+        }
+        Update: {
+          aliquota_cofins?: number | null
+          aliquota_icms?: number | null
+          aliquota_pis?: number | null
+          cfop?: string
+          codigo_produto?: string
+          created_at?: string
+          csosn?: string | null
+          cst_cofins?: string | null
+          cst_icms?: string | null
+          cst_pis?: string | null
+          descricao?: string
+          id?: string
+          ncm?: string | null
+          nfce_id?: string
+          numero_item?: number
+          quantidade?: number
+          unidade?: string
+          valor_cofins?: number | null
+          valor_icms?: number | null
+          valor_pis?: number | null
+          valor_total?: number
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfce_itens_nfce_id_fkey"
+            columns: ["nfce_id"]
+            isOneToOne: false
+            referencedRelation: "nfce"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tokens_api: {
+        Row: {
+          created_at: string
+          empresa_id: string
+          expires_at: string | null
+          id: string
+          ip_ultimo_uso: string | null
+          nome: string
+          permissoes: string[]
+          status: Database["public"]["Enums"]["token_status"]
+          token_hash: string
+          token_prefix: string
+          ultimo_uso: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          empresa_id: string
+          expires_at?: string | null
+          id?: string
+          ip_ultimo_uso?: string | null
+          nome: string
+          permissoes?: string[]
+          status?: Database["public"]["Enums"]["token_status"]
+          token_hash: string
+          token_prefix: string
+          ultimo_uso?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          empresa_id?: string
+          expires_at?: string | null
+          id?: string
+          ip_ultimo_uso?: string | null
+          nome?: string
+          permissoes?: string[]
+          status?: Database["public"]["Enums"]["token_status"]
+          token_hash?: string
+          token_prefix?: string
+          ultimo_uso?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tokens_api_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      gerar_numero_nfce: { Args: { p_empresa_id: string }; Returns: string }
+      registrar_log: {
+        Args: {
+          p_categoria: string
+          p_detalhes?: Json
+          p_empresa_id: string
+          p_ip_origem?: string
+          p_mensagem: string
+          p_nfce_id: string
+          p_tipo: string
+          p_token_api_id: string
+        }
+        Returns: string
+      }
+      validar_token_api: {
+        Args: { p_token_hash: string }
+        Returns: {
+          ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          empresa_id: string
+          permissoes: string[]
+          token_id: string
+        }[]
+      }
     }
     Enums: {
-      [_ in never]: never
+      ambiente_sefaz: "homologacao" | "producao"
+      certificado_status: "valido" | "expirando" | "expirado" | "pendente"
+      nfce_status:
+        | "pendente"
+        | "processando"
+        | "autorizada"
+        | "rejeitada"
+        | "cancelada"
+        | "denegada"
+        | "contingencia"
+      regime_tributario: "simples_nacional" | "lucro_presumido" | "lucro_real"
+      token_status: "ativo" | "inativo" | "revogado"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +756,20 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      ambiente_sefaz: ["homologacao", "producao"],
+      certificado_status: ["valido", "expirando", "expirado", "pendente"],
+      nfce_status: [
+        "pendente",
+        "processando",
+        "autorizada",
+        "rejeitada",
+        "cancelada",
+        "denegada",
+        "contingencia",
+      ],
+      regime_tributario: ["simples_nacional", "lucro_presumido", "lucro_real"],
+      token_status: ["ativo", "inativo", "revogado"],
+    },
   },
 } as const

@@ -1,1 +1,4 @@
 project_id = "vdzkhealunurfgrujekg"
+
+[functions.nfce-api]
+verify_jwt = false

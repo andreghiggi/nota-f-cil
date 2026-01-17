@@ -10,6 +10,7 @@ import Certificados from "./pages/Certificados";
 import Tokens from "./pages/Tokens";
 import Logs from "./pages/Logs";
 import Configuracoes from "./pages/Configuracoes";
+import DocumentacaoAPI from "./pages/DocumentacaoAPI";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -29,6 +30,7 @@ const App = () => (
           <Route path="/tokens" element={<Tokens />} />
           <Route path="/logs" element={<Logs />} />
           <Route path="/configuracoes" element={<Configuracoes />} />
+          <Route path="/docs" element={<DocumentacaoAPI />} />
           <Route path="/auth" element={<Auth />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
