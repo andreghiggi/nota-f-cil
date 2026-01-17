@@ -121,19 +121,26 @@ export type Database = {
         Row: {
           ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
           ativo: boolean
+          bairro: string | null
+          cep: string | null
+          cnae_principal: string | null
           cnpj: string
           codigo_municipio: string | null
+          complemento: string | null
           created_at: string
           csc_id: string | null
           csc_token: string | null
           id: string
           inscricao_estadual: string | null
+          logradouro: string | null
           municipio: string
           nome_fantasia: string | null
+          numero: string | null
           numero_nfce_atual: number
           razao_social: string
           regime_tributario: Database["public"]["Enums"]["regime_tributario"]
           serie_nfce: string
+          telefone: string | null
           uf: string
           updated_at: string
           user_id: string
@@ -141,19 +148,26 @@ export type Database = {
         Insert: {
           ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
           ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          cnae_principal?: string | null
           cnpj: string
           codigo_municipio?: string | null
+          complemento?: string | null
           created_at?: string
           csc_id?: string | null
           csc_token?: string | null
           id?: string
           inscricao_estadual?: string | null
+          logradouro?: string | null
           municipio: string
           nome_fantasia?: string | null
+          numero?: string | null
           numero_nfce_atual?: number
           razao_social: string
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
           serie_nfce?: string
+          telefone?: string | null
           uf: string
           updated_at?: string
           user_id: string
@@ -161,19 +175,26 @@ export type Database = {
         Update: {
           ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
           ativo?: boolean
+          bairro?: string | null
+          cep?: string | null
+          cnae_principal?: string | null
           cnpj?: string
           codigo_municipio?: string | null
+          complemento?: string | null
           created_at?: string
           csc_id?: string | null
           csc_token?: string | null
           id?: string
           inscricao_estadual?: string | null
+          logradouro?: string | null
           municipio?: string
           nome_fantasia?: string | null
+          numero?: string | null
           numero_nfce_atual?: number
           razao_social?: string
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
           serie_nfce?: string
+          telefone?: string | null
           uf?: string
           updated_at?: string
           user_id?: string
