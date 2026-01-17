@@ -252,6 +252,60 @@ export function useCertificados() {
   });
 }
 
+export function useCreateCertificado() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async (certificado: {
+      empresa_id: string;
+      tipo: string;
+      arquivo_path: string;
+      cnpj_certificado?: string;
+      emissor?: string;
+      data_emissao?: string;
+      data_vencimento: string;
+      senha_hash?: string;
+      status: 'valido' | 'expirando' | 'expirado' | 'pendente';
+    }) => {
+      const { data, error } = await supabase
+        .from('certificados_digitais')
+        .insert(certificado)
+        .select()
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['certificados'] });
+    }
+  });
+}
+
+export function useDeleteCertificado() {
+  const queryClient = useQueryClient();
+  
+  return useMutation({
+    mutationFn: async ({ id, arquivoPath }: { id: string; arquivoPath?: string | null }) => {
+      // Delete file from storage if exists
+      if (arquivoPath) {
+        await supabase.storage.from('certificados').remove([arquivoPath]);
+      }
+      
+      // Delete record
+      const { error } = await supabase
+        .from('certificados_digitais')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['certificados'] });
+    }
+  });
+}
+
 // Logs hooks
 export function useLogsFiscais(filters?: { empresaId?: string; tipo?: string; limit?: number }) {
   return useQuery({
