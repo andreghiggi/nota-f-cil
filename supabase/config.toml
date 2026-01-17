@@ -2,3 +2,9 @@ project_id = "vdzkhealunurfgrujekg"
 
 [functions.nfce-api]
 verify_jwt = false
+
+[functions.validate-certificate]
+verify_jwt = false
+
+[functions.process-nfce-queue]
+verify_jwt = false
