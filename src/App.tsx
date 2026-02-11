@@ -25,25 +25,21 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <Routes>
-          <Route path="/docs" element={<DocumentacaoAPI />} />
-          <Route path="*" element={
-            <AuthProvider>
-              <Routes>
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
-                <Route path="/empresas" element={<ProtectedRoute><Empresas /></ProtectedRoute>} />
-                <Route path="/nfce" element={<ProtectedRoute><NFCe /></ProtectedRoute>} />
-                <Route path="/certificados" element={<ProtectedRoute><Certificados /></ProtectedRoute>} />
-                <Route path="/tokens" element={<ProtectedRoute><Tokens /></ProtectedRoute>} />
-                <Route path="/webhooks" element={<ProtectedRoute><Webhooks /></ProtectedRoute>} />
-                <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
-                <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </AuthProvider>
-          } />
-        </Routes>
+        <AuthProvider>
+          <Routes>
+            <Route path="/docs" element={<DocumentacaoAPI />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
+            <Route path="/empresas" element={<ProtectedRoute><Empresas /></ProtectedRoute>} />
+            <Route path="/nfce" element={<ProtectedRoute><NFCe /></ProtectedRoute>} />
+            <Route path="/certificados" element={<ProtectedRoute><Certificados /></ProtectedRoute>} />
+            <Route path="/tokens" element={<ProtectedRoute><Tokens /></ProtectedRoute>} />
+            <Route path="/webhooks" element={<ProtectedRoute><Webhooks /></ProtectedRoute>} />
+            <Route path="/logs" element={<ProtectedRoute><Logs /></ProtectedRoute>} />
+            <Route path="/configuracoes" element={<ProtectedRoute><Configuracoes /></ProtectedRoute>} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
