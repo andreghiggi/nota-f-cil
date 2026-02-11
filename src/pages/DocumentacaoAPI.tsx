@@ -1,5 +1,4 @@
-import { useAuth } from "@/contexts/AuthContext";
-import { AppLayout } from "@/components/layout/AppLayout";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { 
   Code, 
@@ -472,10 +471,17 @@ export default function DocumentacaoAPI() {
     </Button>
   );
 
-  const { user } = useAuth();
-
-  const content = (
-    <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="border-b border-border px-6 py-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Documentação da API</h1>
+          <p className="text-sm text-muted-foreground">Guia completo de integração para desenvolvedores de ERP</p>
+        </div>
+        <Link to="/auth" className="text-sm text-primary hover:underline">Acessar painel →</Link>
+      </div>
+      <main className="p-6">
+        <div className="space-y-8 animate-fade-in max-w-5xl mx-auto">
         {/* Hero Section */}
         <div className="card-elevated p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
           <div className="flex items-start gap-4">
@@ -1069,25 +1075,7 @@ export default function DocumentacaoAPI() {
             </div>
           </div>
         </div>
-      </div>
-  );
-
-  if (user) {
-    return (
-      <AppLayout title="Documentação da API" subtitle="Guia completo de integração para desenvolvedores de ERP">
-        {content}
-      </AppLayout>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-background">
-      <div className="border-b border-border px-6 py-4">
-        <h1 className="text-2xl font-bold text-foreground">Documentação da API</h1>
-        <p className="text-sm text-muted-foreground">Guia completo de integração para desenvolvedores de ERP</p>
-      </div>
-      <main className="p-6">
-        {content}
+        </div>
       </main>
     </div>
   );
