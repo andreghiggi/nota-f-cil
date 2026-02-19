@@ -116,6 +116,7 @@ Deno.serve(async (req) => {
       console.log(`   Has CSC: ${!!empresa.csc_token}`);
       console.log(`   Ambiente: ${registerBody.sped_config.tpAmb} (${empresa.ambiente})`);
       console.log(`   CRT: ${registerBody.emitente.CRT}`);
+      console.log(`   Full payload: ${JSON.stringify(registerBody).substring(0, 1000)}`);
       
       const response = await fetch(`${FISCAL_API_BASE_URL}/empresa/cadastrar`, {
         method: 'POST',
