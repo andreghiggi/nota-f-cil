@@ -202,6 +202,22 @@ export function useUpdateEmpresa() {
         .single();
       
       if (error) throw error;
+
+      // Re-register on fiscal API with updated data
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'register_empresa', empresa_id: id }
+        });
+        
+        if (fiscalError) {
+          console.error('Erro ao atualizar na API fiscal:', fiscalError);
+        } else {
+          console.log('✅ Empresa atualizada na API fiscal:', fiscalResult);
+        }
+      } catch (err) {
+        console.error('Erro ao conectar com API fiscal:', err);
+      }
+
       return data as Empresa;
     },
     onSuccess: () => {

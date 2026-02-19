@@ -37,22 +37,81 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Generate a unique API key for the fiscal API
-      const apiKeyFiscal = crypto.randomUUID();
+      // Get certificate data if exists
+      const { data: certificado } = await supabase
+        .from('certificados_digitais')
+        .select('*')
+        .eq('empresa_id', empresa_id)
+        .single();
 
-      // Register on the external fiscal API
-      console.log(`📡 Registering empresa ${empresa.cnpj} on fiscal API...`);
-      const registerBody = JSON.stringify({
-        nome: empresa.razao_social,
-        cnpj: empresa.cnpj,
+      // Download certificate file from storage if available
+      let certificadoBase64: string | null = null;
+      if (certificado?.arquivo_path) {
+        const { data: fileData, error: fileError } = await supabase.storage
+          .from('certificados')
+          .download(certificado.arquivo_path);
+        
+        if (!fileError && fileData) {
+          const arrayBuffer = await fileData.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuffer);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          certificadoBase64 = btoa(binary);
+          console.log(`📎 Certificate file loaded (${bytes.length} bytes)`);
+        } else {
+          console.warn(`⚠️ Could not download certificate: ${fileError?.message}`);
+        }
+      }
+
+      // Use existing api_key_fiscal or generate a new one
+      const apiKeyFiscal = empresa.api_key_fiscal || crypto.randomUUID();
+
+      // Build complete registration payload
+      const registerBody: any = {
+        // Identification
         api_key: apiKeyFiscal,
-      });
-      console.log(`   Request body: ${registerBody}`);
+        cnpj: empresa.cnpj,
+        razao_social: empresa.razao_social,
+        nome_fantasia: empresa.nome_fantasia || empresa.razao_social,
+        inscricao_estadual: empresa.inscricao_estadual || '',
+        
+        // Address
+        logradouro: empresa.logradouro || '',
+        numero: empresa.numero || '',
+        complemento: empresa.complemento || '',
+        bairro: empresa.bairro || '',
+        cep: empresa.cep || '',
+        municipio: empresa.municipio,
+        codigo_municipio: empresa.codigo_municipio || '',
+        uf: empresa.uf,
+        telefone: empresa.telefone || '',
+        
+        // Fiscal settings
+        regime_tributario: empresa.regime_tributario,
+        ambiente: empresa.ambiente === 'producao' ? 1 : 2,
+        serie_nfce: empresa.serie_nfce || '001',
+        cnae_principal: empresa.cnae_principal || '',
+        
+        // CSC (Código de Segurança do Contribuinte)
+        csc_id: empresa.csc_id || '',
+        csc_token: empresa.csc_token || '',
+        
+        // Certificate
+        certificado_digital: certificadoBase64 || '',
+        certificado_senha: certificado?.senha_hash || '',
+      };
+
+      console.log(`📡 Registering empresa ${empresa.cnpj} on fiscal API with full data...`);
+      console.log(`   Has certificate: ${!!certificadoBase64}`);
+      console.log(`   Has CSC: ${!!empresa.csc_id}`);
+      console.log(`   Ambiente: ${registerBody.ambiente} (${empresa.ambiente})`);
       
       const response = await fetch(`${FISCAL_API_BASE_URL}/empresa/cadastrar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: registerBody,
+        body: JSON.stringify(registerBody),
       });
       
       const responseText = await response.text();
@@ -73,17 +132,19 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Store the fiscal API key in our database
-      const { error: updateError } = await supabase
-        .from('empresas')
-        .update({ api_key_fiscal: apiKeyFiscal })
-        .eq('id', empresa_id);
+      // Store the fiscal API key in our database if new
+      if (!empresa.api_key_fiscal) {
+        const { error: updateError } = await supabase
+          .from('empresas')
+          .update({ api_key_fiscal: apiKeyFiscal })
+          .eq('id', empresa_id);
 
-      if (updateError) {
-        return new Response(
-          JSON.stringify({ error: 'Erro ao salvar API key fiscal', details: updateError.message }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        if (updateError) {
+          return new Response(
+            JSON.stringify({ error: 'Erro ao salvar API key fiscal', details: updateError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
 
       console.log(`✅ Empresa ${empresa.cnpj} registered successfully on fiscal API`);
