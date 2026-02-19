@@ -499,8 +499,11 @@ jO5PLg5SWjfcOtBG2rz02EIvQAmLcb0kGBtfdj0lW/w=
     const responseText = await response.text();
     console.log(`📥 SEFAZ response status: ${response.status}`);
     
-    if (!response.ok && response.status >= 500) {
-      throw new Error(`SEFAZ retornou status ${response.status}: ${responseText.substring(0, 500)}`);
+    if (!response.ok) {
+      if (response.status === 403) {
+        throw new Error(`SEFAZ retornou 403 (Acesso Negado). Verifique se o CNPJ está credenciado para NFC-e no ambiente de homologação/produção da SEFAZ do estado. Também confirme se o certificado digital está válido e vinculado ao CNPJ correto.`);
+      }
+      throw new Error(`SEFAZ retornou status HTTP ${response.status}. Resposta: ${responseText.substring(0, 300)}`);
     }
     
     return responseText;
