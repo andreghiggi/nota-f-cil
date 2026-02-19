@@ -920,6 +920,23 @@ async function sendToSefaz(
   const cUF = UF_CODIGOS[empresa.uf] || '43';
   const soapEnvelope = generateSOAPEnvelope(signedXml, cUF);
   
+  // ===== DIAGNOSTIC: Test statusServico first =====
+  try {
+    const statusSoapBody = `<?xml version="1.0" encoding="UTF-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeStatusServico4"><consStatServ xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><tpAmb>${nfce.ambiente === 'producao' ? '1' : '2'}</tpAmb><cUF>${cUF}</cUF><xServ>STATUS</xServ></consStatServ></nfeDadosMsg></soap12:Body></soap12:Envelope>`;
+    
+    console.log(`🔍 DIAGNOSTIC: Testing statusServico at ${endpoints.statusServico}`);
+    const statusResponse = await sendSoapToSefaz(
+      endpoints.statusServico,
+      statusSoapBody,
+      parsedCert.certPem,
+      parsedCert.keyPem
+    );
+    console.log(`🔍 DIAGNOSTIC statusServico response (${statusResponse.length} bytes): ${statusResponse.substring(0, 500)}`);
+  } catch (statusError: any) {
+    console.log(`🔍 DIAGNOSTIC statusServico ERROR: ${statusError.message}`);
+  }
+  // ===== END DIAGNOSTIC =====
+  
   // Send to SEFAZ via mTLS
   try {
     console.log('📤 Transmitindo NFC-e para SEFAZ...');
