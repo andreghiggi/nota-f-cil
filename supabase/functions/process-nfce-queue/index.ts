@@ -427,8 +427,67 @@ function signNFCeXml(
 }
 
 // ============================================================================
-// TRANSMISSÃO SEFAZ VIA mTLS (usando node:https para suporte adequado)
+// TRANSMISSÃO SEFAZ VIA mTLS (Deno.createHttpClient com caCerts ICP-Brasil)
 // ============================================================================
+
+// ICP-Brasil Root CA v5 (AC Raiz da ICP-Brasil v5)
+const ICP_BRASIL_V5 = `-----BEGIN CERTIFICATE-----
+MIIGoTCCBImgAwIBAgIBATANBgkqhkiG9w0BAQ0FADCBlzELMAkGA1UEBhMCQlIx
+EzARBgNVBAoTCklDUC1CcmFzaWwxPTA7BgNVBAsTNEluc3RpdHV0byBOYWNpb25h
+bCBkZSBUZWNub2xvZ2lhIGRhIEluZm9ybWFjYW8gLSBJVEkxNDAyBgNVBAMTK0F1
+dG9yaWRhZGUgQ2VydGlmaWNhZG9yYSBSYWl6IEJyYXNpbGVpcmEgdjUwHhcNMTYw
+MzAyMTMwMTM4WhcNMjkwMzAyMjM1OTM4WjCBlzELMAkGA1UEBhMCQlIxEzARBgNV
+BAoTCklDUC1CcmFzaWwxPTA7BgNVBAsTNEluc3RpdHV0byBOYWNpb25hbCBkZSBU
+ZWNub2xvZ2lhIGRhIEluZm9ybWFjYW8gLSBJVEkxNDAyBgNVBAMTK0F1dG9yaWRh
+ZGUgQ2VydGlmaWNhZG9yYSBSYWl6IEJyYXNpbGVpcmEgdjUwggIiMA0GCSqGSIb3
+DQEBAQUAA4ICDwAwggIKAoICAQD3LCaVnHCHTGKdlCnFGvMAUq2MJMbRNLxTdWwS
+SqJgKsHQ+JBnXMGJx8sFv5beUghBFNBHzyj3EAOQ/v8JvhFh1cH0VaPpnPnfnlO7
+6HM4WLaIKCpGB4HPXCT6nasWVFe6xqKb5SHrK8VqkWkBFaaL3jz3JKa6FBb1sMSJ
+OCb4JBQwh/m22z0PISeqsW/mQ+3/HqI7Jpp/IU1HK3HRj7vcDswPOmx0rLb52zt2
+u+NMPH1CfY2RZZz3sMCRqlsCfV3FuslqDqNpUxdYaDmglKsnOJPF1gOfUyhiApR5
+dt9ykR5MIj5FG1ZMhJdJCiSQPVyyIjg7mBKNXoC7rIwb2pqF9q3lV6taFomaJXMv
+sNOMAk7hIfQ8hhZ13SgJFl2k3/zcHyFjh2N76hRMxk/3+Tus5WfNs+W8ofnBKrFf
+2PXyN2jaU3jzN2qzMqSahLWJi1NDEW8yikSt/Ux2/ERCmiWsb2z/gPIKFeSLlIpJ
+f2THzrzh2a3E/MWc2CCAS4GmNNHUJWOujt1YVX1bEf3FQUvNh65McUq/fJJu2gcB
+SjP4W5BeGjIOVxnYTbQQEMc+bFbU2kexhHk6eMpTdL/LarUlaKQp1H1KYLDkGdo5
+M56eED2LSUBj/ScGBVK/VZn0DSS9IwBlMR9OdNAVNiR/VaHd1BQKgbDhPn7lXIXT
+fUaFHQIDAQABo4H1MIHyME4GA1UdIARHMEUwQwYFYEwBAQAwOjA4BggrBgEFBQcC
+ARYsaHR0cDovL2FjcmFpei5pY3BicmFzaWwuZ292LmJyL0RQQ2FjcmFpei5wZGYw
+PQYDVR0fBDYwNDAyoDCgLoYsaHR0cDovL2FjcmFpei5pY3BicmFzaWwuZ292LmJy
+L0xDUmFjcmFpei5jcmwwHQYDVR0OBBYEFKCj+TG3OKnGCIRNVlSuVXmYyhtjMA8G
+A1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMBEGCWCGSAGG+EIBAQQEAwIA
+Bw0aL2E4ZX5kYuI5CupqcByvAUq+YYabgwANBgkqhkiG9w0BAQ0FAAOCAgEAMFn9
+JIhigYQLpRY09tBO/feta0W1x5v+TfLDOhVGJOIw55Qj0pVfMCzLKdMaUo6ycSNY
+L7EBHfQ4E6qG0hXMUi9mjJBiDECRiPnuagu2tWpBNMhqaP2P4WK+a0+2Hx1jNB7j
+HIFHlRIbJLcD2Ihh0E5V3B3rTRq+eCBKpmsjz82sNORGfOyobNHjDAiVNEjULff2p
+6MTLY3cPn/yTiB/WokRF8KoRfY2Q9fLMBaSFgN/QqtUCVVX2aSIPF0Op6VXJpFXo
+OkEhLoGGGbrTHEUCBng7eFk/CJD1MFBdqzKIKWevhJz0FTnalb77bnPCPpdGX0xN
+bOCbzgOWmsB0uIFVqMJLM4+EhMFqBst7u+UNaHObuGEWzhJCCE1GHdKXbwtN+w0d
+dE7iBR1JbzviF/VNknKR+gz/AAUbWX9Fw2WLHC4z8RMGm6LePSi4YKS5KUAq0I/X
+UX6Dxf/HOdNlK0xH2+JJqFMRwf8P/U/Y4EWdjYDCMD7GCnYOebooYXdrhsBkKQNf
+OJKFoxeNBF9HBf4XLCJGeN5EFBOl+NCC13LN0tHRWbHG2PU55g0QqUXfOjYFf+D2
+UpVWbU+N/aJ7DWz0F+XBKwME4umBGI5+u+wXsS1w0Biq+WJhkpJVVdPuqLJZdm6
+VEQp0mXbJssJI0CgPjL1Mm3RJELI6PxuyJ/mnrU=
+-----END CERTIFICATE-----`;
+
+// ICP-Brasil Root CA v10 (AC Raiz da ICP-Brasil v10)
+const ICP_BRASIL_V10 = `-----BEGIN CERTIFICATE-----
+MIICqTCCAk+gAwIBAgIBATAKBggqhkjOPQQDAzCBmTELMAkGA1UEBhMCQlIxEzAR
+BgNVBAoMCklDUC1CcmFzaWwxPTA7BgNVBAsMNEluc3RpdHV0byBOYWNpb25hbCBk
+ZSBUZWNub2xvZ2lhIGRhIEluZm9ybWFjYW8gLSBJVEkxNjA0BgNVBAMMLUF1dG9y
+aWRhZGUgQ2VydGlmaWNhZG9yYSBSYWl6IEJyYXNpbGVpcmEgdjEwMB4XDTE5MDcx
+MDEzMDMyNFoXDTMyMDcxMDIzNTkzMFowgZkxCzAJBgNVBAYTAkJSMRMwEQYDVQQK
+DApJQ1AtQnJhc2lsMT0wOwYDVQQLDDRJbnN0aXR1dG8gTmFjaW9uYWwgZGUgVGVj
+bm9sb2dpYSBkYSBJbmZvcm1hY2FvIC0gSVRJMTYwNAYDVQQDDC1BdXRvcmlkYWRl
+IENlcnRpZmljYWRvcmEgUmFpeiBCcmFzaWxlaXJhIHYxMDB2MBAGByqGSM49AgEG
+BSuBBAAiA2IABBA5mlERxn8Pp3Bqh/MtjMCnT4vBMcj2LMbDWP2BOUoyiAGKPHKi
+Ynj3TkuV3nFnaPi49gBfCIkVJJ+btM2VJDFFl8p7VqVCrVJ9z/xsE8DkaAt/AvlE
+Kt0hNrQ8qD7lXqNjMGEwHQYDVR0OBBYEFNHhj7ZReXvZFkzMjPx4BPkOzYZjMA8G
+A1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgEGMB8GA1UdIwQYMBaAFNHhj7ZR
+eXvZFkzMjPx4BPkOzYZjMAoGCCqGSM49BAMDA2gAMGUCMGQJJE+LU6Gj1A21l7p6
+wJ75C0mF/VmZ2uzjVrJBmKaMFYKVITNFUYxfWwBCMCUCMQCmlWxGpGC0qnDfHm1m
+IlXGQPxmHC6B3G5hNn2xPj1B6kHqClU8q+ysqJBr6mI=
+-----END CERTIFICATE-----`;
 
 async function sendSoapToSefaz(
   url: string,
@@ -438,55 +497,38 @@ async function sendSoapToSefaz(
 ): Promise<string> {
   console.log(`📤 Sending SOAP request to: ${url}`);
   
-  // Use node:https for proper mTLS support
-  const https = await import('node:https');
-  const { URL } = await import('node:url');
-  
-  const parsedUrl = new URL(url);
-  
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: parsedUrl.hostname,
-      port: 443,
-      path: parsedUrl.pathname,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote"',
-        'Content-Length': new TextEncoder().encode(soapBody).length,
-      },
-      cert: certPem,
-      key: keyPem,
-      rejectUnauthorized: false, // SEFAZ uses ICP-Brasil certs, skip strict chain validation
-    };
-    
-    const req = https.request(options, (res: any) => {
-      let data = '';
-      res.on('data', (chunk: any) => { data += chunk; });
-      res.on('end', () => {
-        console.log(`📥 SEFAZ response status: ${res.statusCode}`);
-        
-        if (res.statusCode === 403) {
-          reject(new Error(`SEFAZ retornou 403 (Acesso Negado). Verifique se o CNPJ está credenciado para NFC-e no ambiente de homologação/produção da SEFAZ do estado. Resposta: ${data.substring(0, 300)}`));
-          return;
-        }
-        
-        if (res.statusCode >= 500) {
-          reject(new Error(`SEFAZ retornou status HTTP ${res.statusCode}. Resposta: ${data.substring(0, 300)}`));
-          return;
-        }
-        
-        resolve(data);
-      });
-    });
-    
-    req.on('error', (error: any) => {
-      console.error(`❌ HTTPS request error: ${error.message}`);
-      reject(new Error(`Erro de conexão com SEFAZ: ${error.message}`));
-    });
-    
-    req.write(soapBody);
-    req.end();
+  // Use Deno.createHttpClient for proper mTLS with ICP-Brasil trust
+  const client = Deno.createHttpClient({
+    caCerts: [ICP_BRASIL_V5, ICP_BRASIL_V10],
+    certChain: certPem,
+    privateKey: keyPem,
   });
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/soap+xml; charset=utf-8',
+    },
+    body: soapBody,
+    // @ts-ignore - Deno specific option
+    client,
+  });
+  
+  const responseText = await response.text();
+  console.log(`📥 SEFAZ response status: ${response.status}`);
+  
+  if (response.status === 403) {
+    throw new Error(`SEFAZ retornou 403 (Acesso Negado). Resposta: ${responseText.substring(0, 500)}`);
+  }
+  
+  if (response.status >= 500) {
+    throw new Error(`SEFAZ retornou status HTTP ${response.status}. Resposta: ${responseText.substring(0, 500)}`);
+  }
+  
+  // Close the client
+  try { client.close(); } catch { /* ignore */ }
+  
+  return responseText;
 }
 
 // ============================================================================
