@@ -35,7 +35,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
 import { DANFCeDialog } from "@/components/nfce/DANFCeDialog";
+import { QRCodeDialog } from "@/components/nfce/QRCodeDialog";
+import { CancelDialog } from "@/components/nfce/CancelDialog";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 const statusLabels: Record<string, string> = {
   pendente: "Pendente",
@@ -66,6 +69,12 @@ export default function NFCe() {
   const [search, setSearch] = useState("");
   const [danfceNfceId, setDanfceNfceId] = useState<string | null>(null);
   const [danfceOpen, setDanfceOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrData, setQrData] = useState<{ url: string | null; chave: string | null; numero: string }>({ url: null, chave: null, numero: "" });
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelNfce, setCancelNfce] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: nfceList = [], isLoading } = useQuery({
     queryKey: ["nfce", statusFilter, search],
@@ -100,6 +109,46 @@ export default function NFCe() {
 
   const truncateChave = (chave: string) =>
     `${chave.substring(0, 12)}...${chave.substring(chave.length - 8)}`;
+
+  const handleDownloadXml = async (nfceId: string, numero: string) => {
+    const { data, error } = await supabase.from("nfce").select("xml_envio, xml_retorno").eq("id", nfceId).single();
+    if (error || !data?.xml_envio) {
+      toast.error("XML não disponível para esta NFC-e");
+      return;
+    }
+    const xml = data.xml_retorno || data.xml_envio;
+    const blob = new Blob([xml], { type: "application/xml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `nfce_${numero}.xml`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("XML baixado com sucesso");
+  };
+
+  const handleReprocessar = async (nfceId: string, numero: string) => {
+    const { error } = await supabase.from("nfce").update({ status: "pendente", tentativas: 0, erro_processamento: null }).eq("id", nfceId);
+    if (error) { toast.error("Erro ao reprocessar"); return; }
+    await supabase.from("fila_processamento").upsert({ nfce_id: nfceId, tentativas: 0, proximo_processamento: new Date().toISOString(), erro_ultimo: null }, { onConflict: "nfce_id" });
+    queryClient.invalidateQueries({ queryKey: ["nfce"] });
+    toast.success(`NFC-e ${numero} enviada para reprocessamento`);
+  };
+
+  const handleCancelar = async (justificativa: string) => {
+    setCancelLoading(true);
+    try {
+      await supabase.from("nfce_eventos").insert({ nfce_id: cancelNfce.id, tipo_evento: "cancelamento", justificativa });
+      await supabase.from("nfce").update({ status: "cancelada" }).eq("id", cancelNfce.id);
+      queryClient.invalidateQueries({ queryKey: ["nfce"] });
+      toast.success(`NFC-e ${cancelNfce.numero} cancelada com sucesso`);
+      setCancelOpen(false);
+    } catch {
+      toast.error("Erro ao cancelar NFC-e");
+    } finally {
+      setCancelLoading(false);
+    }
+  };
 
   return (
     <AppLayout title="NFC-e" subtitle="Gerenciamento de Notas Fiscais de Consumidor Eletrônicas">
@@ -243,14 +292,20 @@ export default function NFCe() {
                             <DropdownMenuItem onClick={() => { setDanfceNfceId(nfce.id); setDanfceOpen(true); }}>
                               <Printer className="h-4 w-4 mr-2" />Imprimir DANFE
                             </DropdownMenuItem>
-                            <DropdownMenuItem><QrCode className="h-4 w-4 mr-2" />QR Code</DropdownMenuItem>
-                            <DropdownMenuItem><Download className="h-4 w-4 mr-2" />Download XML</DropdownMenuItem>
-                            {nfce.status === "rejeitada" && (
-                              <DropdownMenuItem><RefreshCw className="h-4 w-4 mr-2" />Reprocessar</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setQrData({ url: nfce.qrcode_url, chave: nfce.chave_acesso, numero: nfce.numero }); setQrOpen(true); }}>
+                              <QrCode className="h-4 w-4 mr-2" />QR Code
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDownloadXml(nfce.id, nfce.numero)}>
+                              <Download className="h-4 w-4 mr-2" />Download XML
+                            </DropdownMenuItem>
+                            {(nfce.status === "rejeitada" || nfce.status === "pendente") && (
+                              <DropdownMenuItem onClick={() => handleReprocessar(nfce.id, nfce.numero)}>
+                                <RefreshCw className="h-4 w-4 mr-2" />Reprocessar
+                              </DropdownMenuItem>
                             )}
                             <DropdownMenuSeparator />
                             {nfce.status === "autorizada" && (
-                              <DropdownMenuItem className="text-destructive">
+                              <DropdownMenuItem className="text-destructive" onClick={() => { setCancelNfce({ id: nfce.id, numero: nfce.numero }); setCancelOpen(true); }}>
                                 <XCircle className="h-4 w-4 mr-2" />Cancelar
                               </DropdownMenuItem>
                             )}
@@ -269,6 +324,22 @@ export default function NFCe() {
           open={danfceOpen}
           onOpenChange={setDanfceOpen}
           nfceId={danfceNfceId}
+        />
+
+        <QRCodeDialog
+          open={qrOpen}
+          onOpenChange={setQrOpen}
+          qrcodeUrl={qrData.url}
+          chaveAcesso={qrData.chave}
+          numero={qrData.numero}
+        />
+
+        <CancelDialog
+          open={cancelOpen}
+          onOpenChange={setCancelOpen}
+          numero={cancelNfce.numero}
+          onConfirm={handleCancelar}
+          loading={cancelLoading}
         />
       </div>
     </AppLayout>
