@@ -885,6 +885,7 @@ async function sendToSefaz(
     );
     
     console.log(`📥 Resposta SEFAZ recebida (${responseXml.length} bytes)`);
+    console.log(`📥 Response preview: ${responseXml.substring(0, 800)}`);
     
     // Parse response
     const parsed = parseSefazResponse(responseXml);
