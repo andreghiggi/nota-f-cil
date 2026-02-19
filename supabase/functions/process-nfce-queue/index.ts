@@ -283,7 +283,7 @@ const QRCODE_URLS: Record<string, { homologacao: string; producao: string }> = {
   PR: { homologacao: 'http://www.dfeportal.fazenda.pr.gov.br/dfe-portal/rest/servico/consultaNFCe', producao: 'http://www.dfeportal.fazenda.pr.gov.br/dfe-portal/rest/servico/consultaNFCe' },
   PE: { homologacao: 'http://nfcehomolog.sefaz.pe.gov.br/nfce-web/consultarNFCe', producao: 'http://nfce.sefaz.pe.gov.br/nfce-web/consultarNFCe' },
   PI: { homologacao: 'http://www.sefaz.pi.gov.br/nfce/qrcode', producao: 'http://www.sefaz.pi.gov.br/nfce/qrcode' },
-  RJ: { homologacao: 'http://www4.fazenda.rj.gov.br/consultaNFCe/QRCode', producao: 'http://www4.fazenda.rj.gov.br/consultaNFCe/QRCode' },
+  RJ: { homologacao: 'https://www.nfce.fazenda.rj.gov.br/nfce/QRCode', producao: 'https://www.nfce.fazenda.rj.gov.br/nfce/QRCode' },
   RN: { homologacao: 'http://hom.nfce.set.rn.gov.br/consultarNFCe.aspx', producao: 'http://nfce.set.rn.gov.br/consultarNFCe.aspx' },
   RS: { homologacao: 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx', producao: 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx' },
   RO: { homologacao: 'http://www.nfce.sefin.ro.gov.br/consultanfce/consulta.jsp', producao: 'http://www.nfce.sefin.ro.gov.br/consultanfce/consulta.jsp' },
@@ -435,7 +435,7 @@ function generateChaveAcesso(
   return chaveBase + dv.toString();
 }
 
-// Generate QR Code hash
+// Generate QR Code hash using SHA-1
 async function generateQRCodeHash(data: string, cscToken: string): Promise<string> {
   const encoder = new TextEncoder();
   const dataWithCSC = data + cscToken;
@@ -444,26 +444,37 @@ async function generateQRCodeHash(data: string, cscToken: string): Promise<strin
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
-// Generate QR Code URL
+// Generate QR Code URL - NFC-e QR Code Versão 2.00 (NT 2015.002)
+// Online (sem contingência): URL?p=chNFe|nVersao|tpAmb|cIdToken|cHashQRCode
+// Offline (contingência):    URL?p=chNFe|nVersao|tpAmb|cDest|dhEmi|vNF|vICMSST|digVal|cIdToken|cHashQRCode
 async function generateQRCodeUrl(
   uf: string,
   chaveAcesso: string,
   ambiente: 'homologacao' | 'producao',
   cscId: string,
   cscToken: string,
-  valorTotal: number,
-  dhEmi: string
+  _valorTotal: number,
+  _dhEmi: string,
+  contingencia: boolean = false,
+  cDest: string = '',
+  digVal: string = ''
 ): Promise<string> {
   const tpAmb = ambiente === 'producao' ? '1' : '2';
-  const vNF = valorTotal.toFixed(2);
-  const dhEmiHex = encodeURIComponent(dhEmi);
-  
-  // Formato do QR Code versão 2
-  const qrCodeData = `${chaveAcesso}|2|${tpAmb}||${dhEmiHex}|${vNF}|||${cscId}|`;
-  const hash = await generateQRCodeHash(qrCodeData, cscToken);
-  
   const baseUrl = getQRCodeBaseUrl(uf, ambiente);
-  return `${baseUrl}?p=${qrCodeData}${hash}`;
+  
+  if (contingencia) {
+    // Formato OFFLINE (contingência) - 10 campos
+    const vNF = _valorTotal.toFixed(2);
+    const dhEmiEnc = encodeURIComponent(_dhEmi);
+    const qrCodeData = `${chaveAcesso}|2|${tpAmb}|${cDest}|${dhEmiEnc}|${vNF}||${digVal}|${cscId}|`;
+    const hash = await generateQRCodeHash(qrCodeData, cscToken);
+    return `${baseUrl}?p=${qrCodeData}${hash}`;
+  } else {
+    // Formato ONLINE (sem contingência) - 5 campos conforme NT 2015.002
+    const qrCodeData = `${chaveAcesso}|2|${tpAmb}|${cscId}|`;
+    const hash = await generateQRCodeHash(qrCodeData, cscToken);
+    return `${baseUrl}?p=${qrCodeData}${hash}`;
+  }
 }
 
 // Get CRT (Código de Regime Tributário) from regime_tributario
