@@ -189,8 +189,39 @@ Deno.serve(async (req) => {
         body: JSON.stringify(payload),
       });
 
-      const responseData = await response.json();
-      console.log(`📡 Fiscal API emit response (status ${response.status}):`, JSON.stringify(responseData));
+      const responseText = await response.text();
+      console.log(`📡 Fiscal API emit response (status ${response.status}):`, responseText.substring(0, 500));
+
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        console.error('❌ Fiscal API returned non-JSON response:', responseText.substring(0, 300));
+        // Update NFC-e with error instead of crashing
+        await supabase
+          .from('nfce')
+          .update({
+            status: 'rejeitada',
+            erro_processamento: `API fiscal retornou resposta inválida (status ${response.status})`,
+            motivo_retorno: responseText.substring(0, 500),
+          })
+          .eq('id', nfce_id);
+
+        await supabase.rpc('registrar_log', {
+          p_empresa_id: nfce.empresa_id,
+          p_nfce_id: nfce_id,
+          p_token_api_id: nfce.token_api_id || empresa.id,
+          p_tipo: 'erro',
+          p_categoria: 'emissao',
+          p_mensagem: `NFC-e ${nfce.numero}: API fiscal retornou resposta não-JSON (status ${response.status})`,
+          p_detalhes: { raw_response: responseText.substring(0, 500) },
+        });
+
+        return new Response(
+          JSON.stringify({ error: 'API fiscal retornou resposta inválida', details: responseText.substring(0, 300) }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       if (!response.ok) {
         // Update NFC-e with error
