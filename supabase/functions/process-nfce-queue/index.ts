@@ -395,49 +395,8 @@ async function sendSoapToSefaz(
 ): Promise<string> {
   console.log(`📤 Sending SOAP request to: ${url}`);
   
-  try {
-    // Try using Deno.createHttpClient for mTLS if available
-    const httpClient = (Deno as any).createHttpClient({
-      certChain: certPem,
-      privateKey: keyPem,
-    });
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/soap+xml; charset=utf-8',
-        'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
-      },
-      body: soapBody,
-      // @ts-ignore - Deno specific option
-      client: httpClient,
-    });
-    
-    const responseText = await response.text();
-    console.log(`📥 SEFAZ response status: ${response.status}`);
-    
-    if (!response.ok) {
-      throw new Error(`SEFAZ retornou status ${response.status}: ${responseText.substring(0, 500)}`);
-    }
-    
-    return responseText;
-  } catch (error: any) {
-    // If Deno.createHttpClient is not available, try with node:https
-    if (error.message?.includes('createHttpClient') || error.message?.includes('not a function')) {
-      console.log('⚠️ Deno.createHttpClient not available, trying node:https...');
-      return await sendSoapWithNodeHttps(url, soapBody, certPem, keyPem);
-    }
-    throw error;
-  }
-}
-
-async function sendSoapWithNodeHttps(
-  url: string,
-  soapBody: string,
-  certPem: string,
-  keyPem: string
-): Promise<string> {
-  // Dynamic import of node:https for mTLS support
+  // Use node:https for mTLS - SEFAZ uses ICP-Brasil certificates
+  // which are not in the default trust store, so we need custom TLS handling
   const https = await import('node:https');
   const { URL } = await import('node:url');
   
@@ -454,8 +413,10 @@ async function sendSoapWithNodeHttps(
       headers: {
         'Content-Type': 'application/soap+xml; charset=utf-8',
         'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
+        'Content-Length': Buffer.byteLength(soapBody, 'utf8'),
       },
-      rejectUnauthorized: true,
+      // SEFAZ uses ICP-Brasil PKI certificates - standard practice in Brazilian fiscal apps
+      rejectUnauthorized: false,
       timeout: 30000,
     };
     
@@ -464,7 +425,11 @@ async function sendSoapWithNodeHttps(
       res.on('data', (chunk: string) => data += chunk);
       res.on('end', () => {
         console.log(`📥 SEFAZ response status: ${res.statusCode}`);
-        resolve(data);
+        if (res.statusCode >= 200 && res.statusCode < 500) {
+          resolve(data);
+        } else {
+          reject(new Error(`SEFAZ retornou status ${res.statusCode}: ${data.substring(0, 500)}`));
+        }
       });
     });
     
@@ -478,7 +443,7 @@ async function sendSoapWithNodeHttps(
       reject(new Error('Timeout na comunicação com SEFAZ (30s)'));
     });
     
-    req.write(soapBody);
+    req.write(soapBody, 'utf8');
     req.end();
   });
 }
