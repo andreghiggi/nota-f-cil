@@ -68,45 +68,54 @@ Deno.serve(async (req) => {
       // Use existing api_key_fiscal or generate a new one
       const apiKeyFiscal = empresa.api_key_fiscal || crypto.randomUUID();
 
-      // Build complete registration payload
-      const registerBody: any = {
-        // Identification
-        api_key: apiKeyFiscal,
-        cnpj: empresa.cnpj,
-        razao_social: empresa.razao_social,
-        nome_fantasia: empresa.nome_fantasia || empresa.razao_social,
-        inscricao_estadual: empresa.inscricao_estadual || '',
-        
-        // Address
-        logradouro: empresa.logradouro || '',
-        numero: empresa.numero || '',
-        complemento: empresa.complemento || '',
-        bairro: empresa.bairro || '',
-        cep: empresa.cep || '',
-        municipio: empresa.municipio,
-        codigo_municipio: empresa.codigo_municipio || '',
-        uf: empresa.uf,
-        telefone: empresa.telefone || '',
-        
-        // Fiscal settings
-        regime_tributario: empresa.regime_tributario,
-        ambiente: empresa.ambiente === 'producao' ? 1 : 2,
-        serie_nfce: empresa.serie_nfce || '001',
-        cnae_principal: empresa.cnae_principal || '',
-        
-        // CSC (Código de Segurança do Contribuinte)
-        csc_id: empresa.csc_id || '',
-        csc_token: empresa.csc_token || '',
-        
-        // Certificate
-        certificado_digital: certificadoBase64 || '',
-        certificado_senha: certificado?.senha_hash || '',
+      // Map regime_tributario to CRT code
+      const crtMap: Record<string, number> = {
+        'simples_nacional': 1,
+        'lucro_presumido': 3,
+        'lucro_real': 3,
       };
 
-      console.log(`📡 Registering empresa ${empresa.cnpj} on fiscal API with full data...`);
+      // Build payload in the format expected by the PHP API
+      const registerBody = {
+        api_key: apiKeyFiscal,
+
+        sped_config: {
+          tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
+          razaosocial: empresa.razao_social,
+          cnpj: empresa.cnpj,
+          siglaUF: empresa.uf,
+          CSC: empresa.csc_token || '',
+          CSCid: empresa.csc_id || '',
+        },
+
+        certificado: {
+          pfx_base64: certificadoBase64 || '',
+          senha: certificado?.senha_hash || '',
+        },
+
+        emitente: {
+          IE: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
+          CRT: crtMap[empresa.regime_tributario] || 1,
+          CNAE: empresa.cnae_principal || '',
+          xNome: empresa.razao_social,
+          xFant: empresa.nome_fantasia || empresa.razao_social,
+          ender: {
+            xLgr: empresa.logradouro || '',
+            nro: empresa.numero || '',
+            xBairro: empresa.bairro || '',
+            cMun: empresa.codigo_municipio || '',
+            xMun: empresa.municipio,
+            UF: empresa.uf,
+            CEP: (empresa.cep || '').replace(/\D/g, ''),
+          },
+        },
+      };
+
+      console.log(`📡 Registering empresa ${empresa.cnpj} on fiscal API...`);
       console.log(`   Has certificate: ${!!certificadoBase64}`);
-      console.log(`   Has CSC: ${!!empresa.csc_id}`);
-      console.log(`   Ambiente: ${registerBody.ambiente} (${empresa.ambiente})`);
+      console.log(`   Has CSC: ${!!empresa.csc_token}`);
+      console.log(`   Ambiente: ${registerBody.sped_config.tpAmb} (${empresa.ambiente})`);
+      console.log(`   CRT: ${registerBody.emitente.CRT}`);
       
       const response = await fetch(`${FISCAL_API_BASE_URL}/empresa/cadastrar`, {
         method: 'POST',
