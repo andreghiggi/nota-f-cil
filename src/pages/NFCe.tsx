@@ -13,7 +13,8 @@ import {
   Calendar,
   QrCode,
   FileText,
-  Inbox
+  Inbox,
+  Printer
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -33,6 +34,8 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
+import { DANFCeDialog } from "@/components/nfce/DANFCeDialog";
+import { toast } from "sonner";
 
 const statusLabels: Record<string, string> = {
   pendente: "Pendente",
@@ -61,6 +64,8 @@ type NfceWithEmpresa = Tables<"nfce"> & {
 export default function NFCe() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [search, setSearch] = useState("");
+  const [danfceNfceId, setDanfceNfceId] = useState<string | null>(null);
+  const [danfceOpen, setDanfceOpen] = useState(false);
 
   const { data: nfceList = [], isLoading } = useQuery({
     queryKey: ["nfce", statusFilter, search],
@@ -232,7 +237,12 @@ export default function NFCe() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem><Eye className="h-4 w-4 mr-2" />Visualizar</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setDanfceNfceId(nfce.id); setDanfceOpen(true); }}>
+                              <Eye className="h-4 w-4 mr-2" />Visualizar Cupom
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => { setDanfceNfceId(nfce.id); setDanfceOpen(true); }}>
+                              <Printer className="h-4 w-4 mr-2" />Imprimir DANFE
+                            </DropdownMenuItem>
                             <DropdownMenuItem><QrCode className="h-4 w-4 mr-2" />QR Code</DropdownMenuItem>
                             <DropdownMenuItem><Download className="h-4 w-4 mr-2" />Download XML</DropdownMenuItem>
                             {nfce.status === "rejeitada" && (
@@ -254,6 +264,12 @@ export default function NFCe() {
             </div>
           )}
         </div>
+
+        <DANFCeDialog
+          open={danfceOpen}
+          onOpenChange={setDanfceOpen}
+          nfceId={danfceNfceId}
+        />
       </div>
     </AppLayout>
   );
