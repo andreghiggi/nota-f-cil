@@ -129,6 +129,19 @@ Deno.serve(async (req) => {
       console.log(`   Response body: ${responseText}`);
 
       let responseData: any;
+      const isHtml = responseText.trim().startsWith('<') || responseText.includes('Fatal error') || responseText.includes('Warning:');
+      
+      if (isHtml) {
+        console.error(`❌ PHP Fatal Error detected in response:`, responseText.substring(0, 800));
+        return new Response(
+          JSON.stringify({ 
+            error: 'Erro fatal na API fiscal (PHP)', 
+            details: responseText.replace(/<[^>]*>/g, '').trim().substring(0, 500)
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       try {
         responseData = JSON.parse(responseText);
       } catch {
