@@ -251,6 +251,13 @@ export function DANFCeDialog({ open, onOpenChange, nfceId }: DANFCeDialogProps) 
               {nfce.qrcode_url && (
                 <>
                   <div className="divider" />
+                  <div className="center" style={{ margin: "8px 0" }}>
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(nfce.qrcode_url)}`}
+                      alt="QR Code NFC-e"
+                      style={{ width: "150px", height: "150px", margin: "0 auto" }}
+                    />
+                  </div>
                   <div className="center small">
                     <div className="bold">Consulte pela Chave de Acesso em:</div>
                     <div style={{ wordBreak: "break-all", fontSize: "7px" }}>
