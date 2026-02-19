@@ -413,7 +413,7 @@ async function sendSoapToSefaz(
       headers: {
         'Content-Type': 'application/soap+xml; charset=utf-8',
         'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
-        'Content-Length': Buffer.byteLength(soapBody, 'utf8'),
+        'Content-Length': new TextEncoder().encode(soapBody).length,
       },
       // SEFAZ uses ICP-Brasil PKI certificates - standard practice in Brazilian fiscal apps
       rejectUnauthorized: false,
