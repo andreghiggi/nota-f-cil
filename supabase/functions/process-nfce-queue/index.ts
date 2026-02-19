@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import forge from 'npm:node-forge@1.3.1';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,7 +7,7 @@ const corsHeaders = {
 };
 
 // ============================================================================
-// CONFIGURAÇÃO DOS WEB SERVICES SEFAZ - TODOS OS ESTADOS
+// CONFIGURAÇÃO SEFAZ RS (foco inicial)
 // ============================================================================
 
 interface SefazEndpoints {
@@ -17,17 +18,26 @@ interface SefazEndpoints {
   recepcaoEvento: string;
 }
 
-interface SefazConfig {
-  homologacao: SefazEndpoints;
-  producao: SefazEndpoints;
-  usaSVRS?: boolean;  // Usa SEFAZ Virtual RS
-  usaSVAN?: boolean;  // Usa SEFAZ Virtual AN
-  usaSVCRS?: boolean; // Contingência SVCRS
-  usaSVCAN?: boolean; // Contingência SVCAN
-}
+// Endpoints SEFAZ RS para NFC-e
+const SEFAZ_RS_ENDPOINTS: Record<string, SefazEndpoints> = {
+  homologacao: {
+    autorizacao: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/NfeAutorizacao/NfeAutorizacao4.asmx',
+    retAutorizacao: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/NfeRetAutorizacao/NfeRetAutorizacao4.asmx',
+    consulta: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    statusServico: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
+    recepcaoEvento: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+  },
+  producao: {
+    autorizacao: 'https://nfce.sefazrs.rs.gov.br/ws/NfeAutorizacao/NfeAutorizacao4.asmx',
+    retAutorizacao: 'https://nfce.sefazrs.rs.gov.br/ws/NfeRetAutorizacao/NfeRetAutorizacao4.asmx',
+    consulta: 'https://nfce.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
+    statusServico: 'https://nfce.sefazrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
+    recepcaoEvento: 'https://nfce.sefazrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
+  },
+};
 
-// Endpoints da SEFAZ Virtual do Rio Grande do Sul (para estados que não têm ambiente próprio)
-const SVRS_ENDPOINTS: SefazConfig = {
+// SVRS endpoints (para outros estados que usam SEFAZ Virtual RS)
+const SVRS_ENDPOINTS: Record<string, SefazEndpoints> = {
   homologacao: {
     autorizacao: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NfeAutorizacao4.asmx',
     retAutorizacao: 'https://nfce-homologacao.svrs.rs.gov.br/ws/NfeRetAutorizacao/NfeRetAutorizacao4.asmx',
@@ -44,254 +54,9 @@ const SVRS_ENDPOINTS: SefazConfig = {
   },
 };
 
-// Configuração de endpoints por estado
-const SEFAZ_ENDPOINTS: Record<string, SefazConfig> = {
-  // ACRE - Usa SVRS
-  AC: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // ALAGOAS - Usa SVRS
-  AL: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // AMAPÁ - Usa SVRS
-  AP: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // AMAZONAS - Ambiente próprio
-  AM: {
-    homologacao: {
-      autorizacao: 'https://homnfce.sefaz.am.gov.br/nfce-services/services/NfeAutorizacao4',
-      retAutorizacao: 'https://homnfce.sefaz.am.gov.br/nfce-services/services/NfeRetAutorizacao4',
-      consulta: 'https://homnfce.sefaz.am.gov.br/nfce-services/services/NfeConsulta4',
-      statusServico: 'https://homnfce.sefaz.am.gov.br/nfce-services/services/NfeStatusServico4',
-      recepcaoEvento: 'https://homnfce.sefaz.am.gov.br/nfce-services/services/RecepcaoEvento4',
-    },
-    producao: {
-      autorizacao: 'https://nfce.sefaz.am.gov.br/nfce-services/services/NfeAutorizacao4',
-      retAutorizacao: 'https://nfce.sefaz.am.gov.br/nfce-services/services/NfeRetAutorizacao4',
-      consulta: 'https://nfce.sefaz.am.gov.br/nfce-services/services/NfeConsulta4',
-      statusServico: 'https://nfce.sefaz.am.gov.br/nfce-services/services/NfeStatusServico4',
-      recepcaoEvento: 'https://nfce.sefaz.am.gov.br/nfce-services/services/RecepcaoEvento4',
-    },
-  },
-  
-  // BAHIA - Ambiente próprio
-  BA: {
-    homologacao: {
-      autorizacao: 'https://hnfe.sefaz.ba.gov.br/webservices/NFeAutorizacao4/NFeAutorizacao4.asmx',
-      retAutorizacao: 'https://hnfe.sefaz.ba.gov.br/webservices/NFeRetAutorizacao4/NFeRetAutorizacao4.asmx',
-      consulta: 'https://hnfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx',
-      statusServico: 'https://hnfe.sefaz.ba.gov.br/webservices/NFeStatusServico4/NFeStatusServico4.asmx',
-      recepcaoEvento: 'https://hnfe.sefaz.ba.gov.br/webservices/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
-    },
-    producao: {
-      autorizacao: 'https://nfe.sefaz.ba.gov.br/webservices/NFeAutorizacao4/NFeAutorizacao4.asmx',
-      retAutorizacao: 'https://nfe.sefaz.ba.gov.br/webservices/NFeRetAutorizacao4/NFeRetAutorizacao4.asmx',
-      consulta: 'https://nfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx',
-      statusServico: 'https://nfe.sefaz.ba.gov.br/webservices/NFeStatusServico4/NFeStatusServico4.asmx',
-      recepcaoEvento: 'https://nfe.sefaz.ba.gov.br/webservices/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx',
-    },
-  },
-  
-  // CEARÁ - Usa SVRS
-  CE: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // DISTRITO FEDERAL - Usa SVRS
-  DF: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // ESPÍRITO SANTO - Usa SVRS
-  ES: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // GOIÁS - Ambiente próprio
-  GO: {
-    homologacao: {
-      autorizacao: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeAutorizacao4',
-      retAutorizacao: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeRetAutorizacao4',
-      consulta: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4',
-      statusServico: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeStatusServico4',
-      recepcaoEvento: 'https://homolog.sefaz.go.gov.br/nfe/services/NFeRecepcaoEvento4',
-    },
-    producao: {
-      autorizacao: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeAutorizacao4',
-      retAutorizacao: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeRetAutorizacao4',
-      consulta: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeConsultaProtocolo4',
-      statusServico: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeStatusServico4',
-      recepcaoEvento: 'https://nfe.sefaz.go.gov.br/nfe/services/NFeRecepcaoEvento4',
-    },
-  },
-  
-  // MARANHÃO - Usa SVRS
-  MA: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // MATO GROSSO - Ambiente próprio
-  MT: {
-    homologacao: {
-      autorizacao: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeAutorizacao4',
-      retAutorizacao: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeRetAutorizacao4',
-      consulta: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeConsulta4',
-      statusServico: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/NfeStatusServico4',
-      recepcaoEvento: 'https://homologacao.sefaz.mt.gov.br/nfcews/services/RecepcaoEvento4',
-    },
-    producao: {
-      autorizacao: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeAutorizacao4',
-      retAutorizacao: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeRetAutorizacao4',
-      consulta: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeConsulta4',
-      statusServico: 'https://nfce.sefaz.mt.gov.br/nfcews/services/NfeStatusServico4',
-      recepcaoEvento: 'https://nfce.sefaz.mt.gov.br/nfcews/services/RecepcaoEvento4',
-    },
-  },
-  
-  // MATO GROSSO DO SUL - Ambiente próprio
-  MS: {
-    homologacao: {
-      autorizacao: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeAutorizacao4',
-      retAutorizacao: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeRetAutorizacao4',
-      consulta: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeConsultaProtocolo4',
-      statusServico: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeStatusServico4',
-      recepcaoEvento: 'https://hom.nfce.sefaz.ms.gov.br/ws/NFeRecepcaoEvento4',
-    },
-    producao: {
-      autorizacao: 'https://nfce.sefaz.ms.gov.br/ws/NFeAutorizacao4',
-      retAutorizacao: 'https://nfce.sefaz.ms.gov.br/ws/NFeRetAutorizacao4',
-      consulta: 'https://nfce.sefaz.ms.gov.br/ws/NFeConsultaProtocolo4',
-      statusServico: 'https://nfce.sefaz.ms.gov.br/ws/NFeStatusServico4',
-      recepcaoEvento: 'https://nfce.sefaz.ms.gov.br/ws/NFeRecepcaoEvento4',
-    },
-  },
-  
-  // MINAS GERAIS - Ambiente próprio
-  MG: {
-    homologacao: {
-      autorizacao: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeAutorizacao4',
-      retAutorizacao: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeRetAutorizacao4',
-      consulta: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeConsultaProtocolo4',
-      statusServico: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeStatusServico4',
-      recepcaoEvento: 'https://hnfce.fazenda.mg.gov.br/nfce/services/NFeRecepcaoEvento4',
-    },
-    producao: {
-      autorizacao: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeAutorizacao4',
-      retAutorizacao: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeRetAutorizacao4',
-      consulta: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeConsultaProtocolo4',
-      statusServico: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeStatusServico4',
-      recepcaoEvento: 'https://nfce.fazenda.mg.gov.br/nfce/services/NFeRecepcaoEvento4',
-    },
-  },
-  
-  // PARÁ - Usa SVRS
-  PA: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // PARAÍBA - Usa SVRS
-  PB: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // PARANÁ - Ambiente próprio
-  PR: {
-    homologacao: {
-      autorizacao: 'https://homologacao.nfce.sefa.pr.gov.br/nfce/NFeAutorizacao4',
-      retAutorizacao: 'https://homologacao.nfce.sefa.pr.gov.br/nfce/NFeRetAutorizacao4',
-      consulta: 'https://homologacao.nfce.sefa.pr.gov.br/nfce/NFeConsultaProtocolo4',
-      statusServico: 'https://homologacao.nfce.sefa.pr.gov.br/nfce/NFeStatusServico4',
-      recepcaoEvento: 'https://homologacao.nfce.sefa.pr.gov.br/nfce/NFeRecepcaoEvento4',
-    },
-    producao: {
-      autorizacao: 'https://nfce.sefa.pr.gov.br/nfce/NFeAutorizacao4',
-      retAutorizacao: 'https://nfce.sefa.pr.gov.br/nfce/NFeRetAutorizacao4',
-      consulta: 'https://nfce.sefa.pr.gov.br/nfce/NFeConsultaProtocolo4',
-      statusServico: 'https://nfce.sefa.pr.gov.br/nfce/NFeStatusServico4',
-      recepcaoEvento: 'https://nfce.sefa.pr.gov.br/nfce/NFeRecepcaoEvento4',
-    },
-  },
-  
-  // PERNAMBUCO - Usa SVRS
-  PE: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // PIAUÍ - Usa SVRS
-  PI: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // RIO DE JANEIRO - Usa SVRS
-  RJ: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // RIO GRANDE DO NORTE - Usa SVRS
-  RN: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // RIO GRANDE DO SUL - Ambiente próprio
-  RS: {
-    homologacao: {
-      autorizacao: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/NfeAutorizacao/NfeAutorizacao4.asmx',
-      retAutorizacao: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/NfeRetAutorizacao/NfeRetAutorizacao4.asmx',
-      consulta: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
-      statusServico: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
-      recepcaoEvento: 'https://nfce-homologacao.sefazrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
-    },
-    producao: {
-      autorizacao: 'https://nfce.sefazrs.rs.gov.br/ws/NfeAutorizacao/NfeAutorizacao4.asmx',
-      retAutorizacao: 'https://nfce.sefazrs.rs.gov.br/ws/NfeRetAutorizacao/NfeRetAutorizacao4.asmx',
-      consulta: 'https://nfce.sefazrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx',
-      statusServico: 'https://nfce.sefazrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx',
-      recepcaoEvento: 'https://nfce.sefazrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx',
-    },
-  },
-  
-  // RONDÔNIA - Usa SVRS
-  RO: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // RORAIMA - Usa SVRS
-  RR: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // SANTA CATARINA - Usa SVRS
-  SC: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // SÃO PAULO - Ambiente próprio
-  SP: {
-    homologacao: {
-      autorizacao: 'https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeAutorizacao4.asmx',
-      retAutorizacao: 'https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeRetAutorizacao4.asmx',
-      consulta: 'https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeConsultaProtocolo4.asmx',
-      statusServico: 'https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeStatusServico4.asmx',
-      recepcaoEvento: 'https://homologacao.nfce.fazenda.sp.gov.br/ws/NFeRecepcaoEvento4.asmx',
-    },
-    producao: {
-      autorizacao: 'https://nfce.fazenda.sp.gov.br/ws/NFeAutorizacao4.asmx',
-      retAutorizacao: 'https://nfce.fazenda.sp.gov.br/ws/NFeRetAutorizacao4.asmx',
-      consulta: 'https://nfce.fazenda.sp.gov.br/ws/NFeConsultaProtocolo4.asmx',
-      statusServico: 'https://nfce.fazenda.sp.gov.br/ws/NFeStatusServico4.asmx',
-      recepcaoEvento: 'https://nfce.fazenda.sp.gov.br/ws/NFeRecepcaoEvento4.asmx',
-    },
-  },
-  
-  // SERGIPE - Usa SVRS
-  SE: { ...SVRS_ENDPOINTS, usaSVRS: true },
-  
-  // TOCANTINS - Usa SVRS
-  TO: { ...SVRS_ENDPOINTS, usaSVRS: true },
-};
-
-// URLs de consulta pública do QR Code por estado
-const QRCODE_URLS: Record<string, { homologacao: string; producao: string }> = {
-  AC: { homologacao: 'http://www.sefaznet.ac.gov.br/nfce/qrcode', producao: 'http://www.sefaznet.ac.gov.br/nfce/qrcode' },
-  AL: { homologacao: 'http://nfce.sefaz.al.gov.br/QRCode/consultarNFCe.jsp', producao: 'http://nfce.sefaz.al.gov.br/QRCode/consultarNFCe.jsp' },
-  AP: { homologacao: 'https://www.sefaz.ap.gov.br/nfcehml/nfce.php', producao: 'https://www.sefaz.ap.gov.br/nfce/nfce.php' },
-  AM: { homologacao: 'http://homnfce.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp', producao: 'http://sistemas.sefaz.am.gov.br/nfceweb/consultarNFCe.jsp' },
-  BA: { homologacao: 'http://hnfe.sefaz.ba.gov.br/servicos/nfce/modulos/geral/NFCEC_consulta_chave_acesso.aspx', producao: 'http://nfe.sefaz.ba.gov.br/servicos/nfce/modulos/geral/NFCEC_consulta_chave_acesso.aspx' },
-  CE: { homologacao: 'http://nfceh.sefaz.ce.gov.br/pages/ShowNFCe.html', producao: 'http://nfce.sefaz.ce.gov.br/pages/ShowNFCe.html' },
-  DF: { homologacao: 'http://dec.fazenda.df.gov.br/ConsultarNFCe.aspx', producao: 'http://dec.fazenda.df.gov.br/ConsultarNFCe.aspx' },
-  ES: { homologacao: 'http://homologacao.sefaz.es.gov.br/ConsultaNFCe/qrcode.aspx', producao: 'http://app.sefaz.es.gov.br/ConsultaNFCe/qrcode.aspx' },
-  GO: { homologacao: 'http://homolog.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe', producao: 'http://nfe.sefaz.go.gov.br/nfeweb/sites/nfce/danfeNFCe' },
-  MA: { homologacao: 'http://www.hom.nfce.sefaz.ma.gov.br/portal/consultarNFCe.jsp', producao: 'http://www.nfce.sefaz.ma.gov.br/portal/consultarNFCe.jsp' },
-  MT: { homologacao: 'http://homologacao.sefaz.mt.gov.br/nfce/consultanfce', producao: 'http://www.sefaz.mt.gov.br/nfce/consultanfce' },
-  MS: { homologacao: 'http://www.dfe.ms.gov.br/nfce/qrcode', producao: 'http://www.dfe.ms.gov.br/nfce/qrcode' },
-  MG: { homologacao: 'https://nfce.fazenda.mg.gov.br/portalnfce/sistema/qrcode.xhtml', producao: 'https://nfce.fazenda.mg.gov.br/portalnfce/sistema/qrcode.xhtml' },
-  PA: { homologacao: 'https://appnfc.sefa.pa.gov.br/portal-homologacao/view/consultas/nfce/nfceForm.seam', producao: 'https://appnfc.sefa.pa.gov.br/portal/view/consultas/nfce/nfceForm.seam' },
-  PB: { homologacao: 'http://www.receita.pb.gov.br/nfcehom', producao: 'http://www.receita.pb.gov.br/nfce' },
-  PR: { homologacao: 'http://www.dfeportal.fazenda.pr.gov.br/dfe-portal/rest/servico/consultaNFCe', producao: 'http://www.dfeportal.fazenda.pr.gov.br/dfe-portal/rest/servico/consultaNFCe' },
-  PE: { homologacao: 'http://nfcehomolog.sefaz.pe.gov.br/nfce-web/consultarNFCe', producao: 'http://nfce.sefaz.pe.gov.br/nfce-web/consultarNFCe' },
-  PI: { homologacao: 'http://www.sefaz.pi.gov.br/nfce/qrcode', producao: 'http://www.sefaz.pi.gov.br/nfce/qrcode' },
-  RJ: { homologacao: 'https://www.nfce.fazenda.rj.gov.br/nfce/QRCode', producao: 'https://www.nfce.fazenda.rj.gov.br/nfce/QRCode' },
-  RN: { homologacao: 'http://hom.nfce.set.rn.gov.br/consultarNFCe.aspx', producao: 'http://nfce.set.rn.gov.br/consultarNFCe.aspx' },
+// QR Code consultation URLs
+const QRCODE_URLS: Record<string, Record<string, string>> = {
   RS: { homologacao: 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx', producao: 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx' },
-  RO: { homologacao: 'http://www.nfce.sefin.ro.gov.br/consultanfce/consulta.jsp', producao: 'http://www.nfce.sefin.ro.gov.br/consultanfce/consulta.jsp' },
-  RR: { homologacao: 'https://www.sefaz.rr.gov.br/nfce/servlet/qrcode', producao: 'https://www.sefaz.rr.gov.br/nfce/servlet/qrcode' },
-  SC: { homologacao: 'https://hom.sat.sef.sc.gov.br/nfce/consulta/consulta.html', producao: 'https://sat.sef.sc.gov.br/nfce/consulta/consulta.html' },
-  SP: { homologacao: 'https://www.homologacao.nfce.fazenda.sp.gov.br/NFCeConsultaPublica', producao: 'https://www.nfce.fazenda.sp.gov.br/NFCeConsultaPublica' },
-  SE: { homologacao: 'http://www.hom.nfe.se.gov.br/portal/consultarNFCe.jsp', producao: 'http://www.nfe.se.gov.br/portal/consultarNFCe.jsp' },
-  TO: { homologacao: 'http://homologacao.sefaz.to.gov.br/nfce/qrcode', producao: 'http://www.sefaz.to.gov.br/nfce/qrcode' },
 };
 
 // Códigos IBGE dos estados
@@ -371,28 +136,29 @@ interface CertificadoData {
   cnpj_certificado: string | null;
 }
 
+interface ParsedCertificate {
+  privateKey: forge.pki.rsa.PrivateKey;
+  certificate: forge.pki.Certificate;
+  certPem: string;
+  keyPem: string;
+}
+
 // ============================================================================
 // FUNÇÕES AUXILIARES
 // ============================================================================
 
-// Get SEFAZ endpoints for a state
 function getSefazEndpoints(uf: string, ambiente: 'homologacao' | 'producao'): SefazEndpoints {
-  const config = SEFAZ_ENDPOINTS[uf];
-  if (!config) {
-    console.log(`⚠️ Estado ${uf} não configurado, usando SVRS como fallback`);
-    return SVRS_ENDPOINTS[ambiente];
+  if (uf === 'RS') {
+    return SEFAZ_RS_ENDPOINTS[ambiente];
   }
-  return config[ambiente];
+  // Para outros estados, usar SVRS por enquanto
+  return SVRS_ENDPOINTS[ambiente];
 }
 
-// Get QR Code URL for a state
 function getQRCodeBaseUrl(uf: string, ambiente: 'homologacao' | 'producao'): string {
   const urls = QRCODE_URLS[uf];
   if (!urls) {
-    console.log(`⚠️ URL QRCode para ${uf} não configurada, usando padrão SVRS`);
-    return ambiente === 'producao' 
-      ? 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx'
-      : 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx';
+    return 'https://www.sefaz.rs.gov.br/NFCE/NFCE-COM.aspx';
   }
   return urls[ambiente];
 }
@@ -411,7 +177,7 @@ function generateChaveAcesso(
   const ano = dataEmissao.getFullYear().toString().slice(-2);
   const mes = (dataEmissao.getMonth() + 1).toString().padStart(2, '0');
   
-  const cUF = UF_CODIGOS[uf] || '35';
+  const cUF = UF_CODIGOS[uf] || '43';
   const AAMM = ano + mes;
   const CNPJ = cnpj.replace(/\D/g, '').padStart(14, '0');
   const mod = modelo.padStart(2, '0');
@@ -435,7 +201,7 @@ function generateChaveAcesso(
   return chaveBase + dv.toString();
 }
 
-// Generate QR Code hash using SHA-1
+// QR Code hash using SHA-1
 async function generateQRCodeHash(data: string, cscToken: string): Promise<string> {
   const encoder = new TextEncoder();
   const dataWithCSC = data + cscToken;
@@ -446,58 +212,281 @@ async function generateQRCodeHash(data: string, cscToken: string): Promise<strin
 
 // Generate QR Code URL - NFC-e QR Code Versão 2.00 (NT 2015.002)
 // Online (sem contingência): URL?p=chNFe|nVersao|tpAmb|cIdToken|cHashQRCode
-// Offline (contingência):    URL?p=chNFe|nVersao|tpAmb|cDest|dhEmi|vNF|vICMSST|digVal|cIdToken|cHashQRCode
 async function generateQRCodeUrl(
   uf: string,
   chaveAcesso: string,
   ambiente: 'homologacao' | 'producao',
   cscId: string,
   cscToken: string,
-  _valorTotal: number,
-  _dhEmi: string,
-  contingencia: boolean = false,
-  cDest: string = '',
-  digVal: string = ''
 ): Promise<string> {
   const tpAmb = ambiente === 'producao' ? '1' : '2';
   const baseUrl = getQRCodeBaseUrl(uf, ambiente);
   
-  if (contingencia) {
-    // Formato OFFLINE (contingência) - 10 campos
-    const vNF = _valorTotal.toFixed(2);
-    const dhEmiEnc = encodeURIComponent(_dhEmi);
-    const qrCodeData = `${chaveAcesso}|2|${tpAmb}|${cDest}|${dhEmiEnc}|${vNF}||${digVal}|${cscId}|`;
-    const hash = await generateQRCodeHash(qrCodeData, cscToken);
-    return `${baseUrl}?p=${qrCodeData}${hash}`;
-  } else {
-    // Formato ONLINE (sem contingência) - 5 campos conforme NT 2015.002
-    const qrCodeData = `${chaveAcesso}|2|${tpAmb}|${cscId}|`;
-    const hash = await generateQRCodeHash(qrCodeData, cscToken);
-    return `${baseUrl}?p=${qrCodeData}${hash}`;
-  }
+  // Formato ONLINE (sem contingência) - 5 campos conforme NT 2015.002
+  const qrCodeData = `${chaveAcesso}|2|${tpAmb}|${cscId}|`;
+  const hash = await generateQRCodeHash(qrCodeData, cscToken);
+  return `${baseUrl}?p=${qrCodeData}${hash}`;
 }
 
-// Get CRT (Código de Regime Tributário) from regime_tributario
 function getCRT(regimeTributario: string): string {
   switch (regimeTributario) {
-    case 'simples_nacional':
-      return '1';
-    case 'simples_nacional_excesso':
-      return '2';
+    case 'simples_nacional': return '1';
+    case 'simples_nacional_excesso': return '2';
     case 'lucro_presumido':
-    case 'lucro_real':
-      return '3';
-    default:
-      return '1';
+    case 'lucro_real': return '3';
+    default: return '1';
   }
 }
 
-// Format date for XML
 function formatDateTimeXML(date: Date): string {
   return date.toISOString().replace('Z', '-03:00');
 }
 
-// Generate NFC-e XML
+// ============================================================================
+// CERTIFICADO DIGITAL - PARSE PFX
+// ============================================================================
+
+async function downloadAndParsePfx(
+  supabase: any,
+  certificado: CertificadoData
+): Promise<ParsedCertificate> {
+  console.log('🔐 Downloading certificate from storage...');
+  
+  // Download PFX from storage
+  const { data: pfxData, error: downloadError } = await supabase.storage
+    .from('certificados')
+    .download(certificado.arquivo_path);
+  
+  if (downloadError || !pfxData) {
+    throw new Error(`Erro ao baixar certificado: ${downloadError?.message || 'Arquivo não encontrado'}`);
+  }
+  
+  // Decode password from base64
+  const password = certificado.senha_hash ? atob(certificado.senha_hash) : '';
+  
+  // Parse PFX with node-forge
+  console.log('🔐 Parsing PFX certificate...');
+  const pfxArrayBuffer = await pfxData.arrayBuffer();
+  const pfxBinary = forge.util.createBuffer(new Uint8Array(pfxArrayBuffer));
+  const pfxAsn1 = forge.asn1.fromDer(pfxBinary);
+  const pfx = forge.pkcs12.pkcs12FromAsn1(pfxAsn1, password);
+  
+  // Extract private key
+  const keyBags = pfx.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
+  const keyBag = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag];
+  if (!keyBag || keyBag.length === 0 || !keyBag[0].key) {
+    throw new Error('Chave privada não encontrada no certificado');
+  }
+  const privateKey = keyBag[0].key as forge.pki.rsa.PrivateKey;
+  
+  // Extract certificate
+  const certBags = pfx.getBags({ bagType: forge.pki.oids.certBag });
+  const certBag = certBags[forge.pki.oids.certBag];
+  if (!certBag || certBag.length === 0 || !certBag[0].cert) {
+    throw new Error('Certificado não encontrado no arquivo PFX');
+  }
+  const certificate = certBag[0].cert;
+  
+  // Convert to PEM
+  const certPem = forge.pki.certificateToPem(certificate);
+  const keyPem = forge.pki.privateKeyToPem(privateKey);
+  
+  console.log('✅ Certificate parsed successfully');
+  console.log(`   Subject: ${certificate.subject.getField('CN')?.value}`);
+  console.log(`   Issuer: ${certificate.issuer.getField('CN')?.value}`);
+  console.log(`   Valid until: ${certificate.validity.notAfter.toISOString()}`);
+  
+  return { privateKey, certificate, certPem, keyPem };
+}
+
+// ============================================================================
+// ASSINATURA DIGITAL XML - XMLDSig (RSA-SHA1 + C14N)
+// ============================================================================
+
+// Simplified Canonical XML 1.0 for our generated XML
+// Since we control the XML generation, we ensure it's already canonical-compatible
+function canonicalize(xml: string): string {
+  // Remove XML declaration
+  let canonical = xml.replace(/<\?xml[^?]*\?>\s*/g, '');
+  // Remove extra whitespace between tags (but preserve content)
+  canonical = canonical.replace(/>\s+</g, '><');
+  // Ensure no self-closing tags (except for those without content)
+  // For NFC-e, all our tags either have content or are explicitly closed
+  return canonical.trim();
+}
+
+// Extract the infNFe element from the XML (the part that gets signed)
+function extractInfNFe(xml: string): string {
+  const match = xml.match(/<infNFe[^>]*>[\s\S]*<\/infNFe>/);
+  if (!match) throw new Error('infNFe element not found in XML');
+  return match[0];
+}
+
+// Compute SHA-1 digest and return as base64
+function computeSha1Digest(data: string): string {
+  const md = forge.md.sha1.create();
+  md.update(data, 'utf8');
+  return forge.util.encode64(md.digest().getBytes());
+}
+
+// Sign data with RSA-SHA1 and return as base64
+function rsaSha1Sign(data: string, privateKey: forge.pki.rsa.PrivateKey): string {
+  const md = forge.md.sha1.create();
+  md.update(data, 'utf8');
+  const signature = privateKey.sign(md);
+  return forge.util.encode64(signature);
+}
+
+// Get X.509 certificate as base64 (DER format, no PEM headers)
+function getCertificateBase64(certificate: forge.pki.Certificate): string {
+  const certAsn1 = forge.pki.certificateToAsn1(certificate);
+  const certDer = forge.asn1.toDer(certAsn1).getBytes();
+  return forge.util.encode64(certDer);
+}
+
+// Sign NFC-e XML with XMLDSig
+function signNFCeXml(
+  xml: string,
+  chaveAcesso: string,
+  parsedCert: ParsedCertificate
+): string {
+  console.log('✍️ Signing XML with certificate...');
+  
+  // 1. Extract and canonicalize infNFe
+  const infNFe = extractInfNFe(xml);
+  const canonicalInfNFe = canonicalize(infNFe);
+  
+  // 2. Compute SHA-1 digest of canonicalized infNFe
+  const digestValue = computeSha1Digest(canonicalInfNFe);
+  console.log(`   DigestValue: ${digestValue.substring(0, 20)}...`);
+  
+  // 3. Build SignedInfo element
+  const signedInfo = `<SignedInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><CanonicalizationMethod Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></CanonicalizationMethod><SignatureMethod Algorithm="http://www.w3.org/2000/09/xmldsig#rsa-sha1"></SignatureMethod><Reference URI="#NFe${chaveAcesso}"><Transforms><Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"></Transform><Transform Algorithm="http://www.w3.org/TR/2001/REC-xml-c14n-20010315"></Transform></Transforms><DigestMethod Algorithm="http://www.w3.org/2000/09/xmldsig#sha1"></DigestMethod><DigestValue>${digestValue}</DigestValue></Reference></SignedInfo>`;
+  
+  // 4. Canonicalize SignedInfo  
+  const canonicalSignedInfo = canonicalize(signedInfo);
+  
+  // 5. Sign canonicalized SignedInfo with RSA-SHA1
+  const signatureValue = rsaSha1Sign(canonicalSignedInfo, parsedCert.privateKey);
+  console.log(`   SignatureValue: ${signatureValue.substring(0, 20)}...`);
+  
+  // 6. Get X.509 certificate as base64
+  const x509Certificate = getCertificateBase64(parsedCert.certificate);
+  
+  // 7. Build complete Signature element
+  const signatureElement = `<Signature xmlns="http://www.w3.org/2000/09/xmldsig#">${signedInfo}<SignatureValue>${signatureValue}</SignatureValue><KeyInfo><X509Data><X509Certificate>${x509Certificate}</X509Certificate></X509Data></KeyInfo></Signature>`;
+  
+  // 8. Insert Signature after </infNFe> and before </NFe>
+  const signedXml = xml.replace('</NFe>', `${signatureElement}</NFe>`);
+  
+  console.log('✅ XML signed successfully');
+  return signedXml;
+}
+
+// ============================================================================
+// TRANSMISSÃO SEFAZ VIA mTLS
+// ============================================================================
+
+async function sendSoapToSefaz(
+  url: string,
+  soapBody: string,
+  certPem: string,
+  keyPem: string
+): Promise<string> {
+  console.log(`📤 Sending SOAP request to: ${url}`);
+  
+  try {
+    // Try using Deno.createHttpClient for mTLS if available
+    const httpClient = (Deno as any).createHttpClient({
+      certChain: certPem,
+      privateKey: keyPem,
+    });
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/soap+xml; charset=utf-8',
+        'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
+      },
+      body: soapBody,
+      // @ts-ignore - Deno specific option
+      client: httpClient,
+    });
+    
+    const responseText = await response.text();
+    console.log(`📥 SEFAZ response status: ${response.status}`);
+    
+    if (!response.ok) {
+      throw new Error(`SEFAZ retornou status ${response.status}: ${responseText.substring(0, 500)}`);
+    }
+    
+    return responseText;
+  } catch (error: any) {
+    // If Deno.createHttpClient is not available, try with node:https
+    if (error.message?.includes('createHttpClient') || error.message?.includes('not a function')) {
+      console.log('⚠️ Deno.createHttpClient not available, trying node:https...');
+      return await sendSoapWithNodeHttps(url, soapBody, certPem, keyPem);
+    }
+    throw error;
+  }
+}
+
+async function sendSoapWithNodeHttps(
+  url: string,
+  soapBody: string,
+  certPem: string,
+  keyPem: string
+): Promise<string> {
+  // Dynamic import of node:https for mTLS support
+  const https = await import('node:https');
+  const { URL } = await import('node:url');
+  
+  return new Promise<string>((resolve, reject) => {
+    const urlObj = new URL(url);
+    
+    const options = {
+      hostname: urlObj.hostname,
+      port: 443,
+      path: urlObj.pathname,
+      method: 'POST',
+      cert: certPem,
+      key: keyPem,
+      headers: {
+        'Content-Type': 'application/soap+xml; charset=utf-8',
+        'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
+      },
+      rejectUnauthorized: true,
+      timeout: 30000,
+    };
+    
+    const req = https.request(options, (res: any) => {
+      let data = '';
+      res.on('data', (chunk: string) => data += chunk);
+      res.on('end', () => {
+        console.log(`📥 SEFAZ response status: ${res.statusCode}`);
+        resolve(data);
+      });
+    });
+    
+    req.on('error', (err: any) => {
+      console.error('❌ HTTPS request error:', err.message);
+      reject(new Error(`Erro de comunicação com SEFAZ: ${err.message}`));
+    });
+    
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Timeout na comunicação com SEFAZ (30s)'));
+    });
+    
+    req.write(soapBody);
+    req.end();
+  });
+}
+
+// ============================================================================
+// XML GENERATION
+// ============================================================================
+
 function generateNFCeXML(
   nfce: NFCeData,
   empresa: EmpresaData,
@@ -508,16 +497,14 @@ function generateNFCeXML(
   const dataEmissao = new Date(nfce.data_emissao);
   const dhEmi = formatDateTimeXML(dataEmissao);
   const tpAmb = nfce.ambiente === 'producao' ? '1' : '2';
-  const cUF = UF_CODIGOS[empresa.uf] || '35';
+  const cUF = UF_CODIGOS[empresa.uf] || '43';
   const cRT = getCRT(empresa.regime_tributario);
   
-  // Razão social em homologação deve ser "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
   const xNome = nfce.ambiente === 'homologacao' 
     ? 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL'
     : empresa.razao_social.substring(0, 60);
   
-  let xml = `<?xml version="1.0" encoding="UTF-8"?>`;
-  xml += `<NFe xmlns="http://www.portalfiscal.inf.br/nfe">`;
+  let xml = `<NFe xmlns="http://www.portalfiscal.inf.br/nfe">`;
   xml += `<infNFe versao="4.00" Id="NFe${chaveAcesso}">`;
   
   // Identificação da NFC-e
@@ -613,13 +600,11 @@ function generateNFCeXML(
     xml += `<imposto>`;
     xml += `<ICMS>`;
     if (cRT === '1') {
-      // Simples Nacional
       xml += `<ICMSSN102>`;
       xml += `<orig>0</orig>`;
       xml += `<CSOSN>${item.csosn || '102'}</CSOSN>`;
       xml += `</ICMSSN102>`;
     } else {
-      // Regime Normal
       xml += `<ICMS00>`;
       xml += `<orig>0</orig>`;
       xml += `<CST>${item.cst_icms || '00'}</CST>`;
@@ -698,23 +683,20 @@ function generateNFCeXML(
   xml += `<vTroco>${(nfce.payload_entrada?.troco || 0).toFixed(2)}</vTroco>`;
   xml += `</pag>`;
   
+  // Informações adicionais
+  xml += `<infAdic>`;
+  xml += `<infCpl>NFC-e emitida via API AgilizeERP</infCpl>`;
+  xml += `</infAdic>`;
+  
   xml += `</infNFe>`;
   xml += `</NFe>`;
   
   return xml;
 }
 
-// Generate SOAP envelope
-function generateSOAPEnvelope(xml: string, action: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope" xmlns:nfe="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4">
-  <soap:Header/>
-  <soap:Body>
-    <nfe:${action}>
-      <nfeDadosMsg>${xml}</nfeDadosMsg>
-    </nfe:${action}>
-  </soap:Body>
-</soap:Envelope>`;
+// Generate SOAP envelope for NFC-e authorization (lote síncrono)
+function generateSOAPEnvelope(signedXml: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header><nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4"><cUF>43</cUF><versaoDados>4.00</versaoDados></nfeCabecMsg></soap12:Header><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4"><enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${Date.now()}</idLote><indSinc>1</indSinc>${signedXml}</enviNFe></nfeDadosMsg></soap12:Body></soap12:Envelope>`;
 }
 
 // Parse SEFAZ response
@@ -723,27 +705,51 @@ function parseSefazResponse(responseXml: string): {
   xMotivo: string;
   nProt?: string;
   dhRecbto?: string;
+  digVal?: string;
 } {
-  // Simple XML parsing for response
-  const cStatMatch = responseXml.match(/<cStat>(\d+)<\/cStat>/);
-  const xMotivoMatch = responseXml.match(/<xMotivo>([^<]+)<\/xMotivo>/);
+  // Try to find protocol info in the response (may be in protNFe or retEnviNFe)
+  const cStatMatches = responseXml.match(/<cStat>(\d+)<\/cStat>/g);
+  const xMotivoMatches = responseXml.match(/<xMotivo>([^<]+)<\/xMotivo>/g);
   const nProtMatch = responseXml.match(/<nProt>(\d+)<\/nProt>/);
   const dhRecbtoMatch = responseXml.match(/<dhRecbto>([^<]+)<\/dhRecbto>/);
+  const digValMatch = responseXml.match(/<digVal>([^<]+)<\/digVal>/);
+  
+  // For synchronous processing, the last cStat/xMotivo is the authorization result
+  let cStat = '999';
+  let xMotivo = 'Erro ao processar resposta da SEFAZ';
+  
+  if (cStatMatches && cStatMatches.length > 0) {
+    // Get the last cStat (which is the individual authorization result)
+    const lastMatch = cStatMatches[cStatMatches.length - 1];
+    const val = lastMatch.match(/<cStat>(\d+)<\/cStat>/);
+    if (val) cStat = val[1];
+  }
+  
+  if (xMotivoMatches && xMotivoMatches.length > 0) {
+    const lastMatch = xMotivoMatches[xMotivoMatches.length - 1];
+    const val = lastMatch.match(/<xMotivo>([^<]+)<\/xMotivo>/);
+    if (val) xMotivo = val[1];
+  }
   
   return {
-    cStat: cStatMatch ? cStatMatch[1] : '999',
-    xMotivo: xMotivoMatch ? xMotivoMatch[1] : 'Erro ao processar resposta da SEFAZ',
+    cStat,
+    xMotivo,
     nProt: nProtMatch ? nProtMatch[1] : undefined,
     dhRecbto: dhRecbtoMatch ? dhRecbtoMatch[1] : undefined,
+    digVal: digValMatch ? digValMatch[1] : undefined,
   };
 }
 
-// Send to SEFAZ (with simulation for homologação when certificate not available)
+// ============================================================================
+// MAIN: SEND TO SEFAZ
+// ============================================================================
+
 async function sendToSefaz(
   nfce: NFCeData, 
   empresa: EmpresaData, 
   itens: NFCeItem[],
-  certificado: CertificadoData | null
+  certificado: CertificadoData | null,
+  supabase: any
 ): Promise<{
   success: boolean;
   protocolo?: string;
@@ -760,10 +766,10 @@ async function sendToSefaz(
     empresa.uf,
     new Date(nfce.data_emissao),
     empresa.cnpj,
-    '65', // NFC-e model
+    '65',
     nfce.serie,
     nfce.numero,
-    '1', // Normal emission
+    '1',
     codigoNumerico
   );
   
@@ -779,7 +785,6 @@ async function sendToSefaz(
     };
   }
   
-  // Validate address fields for NFC-e
   if (!empresa.logradouro || !empresa.bairro || !empresa.cep || !empresa.codigo_municipio) {
     return {
       success: false,
@@ -788,141 +793,79 @@ async function sendToSefaz(
     };
   }
   
+  // CERTIFICADO OBRIGATÓRIO para transmissão real
   if (!certificado) {
-    if (nfce.ambiente === 'producao') {
-      return {
-        success: false,
-        codigoRetorno: '280',
-        motivoRetorno: 'Certificado digital não encontrado ou expirado. Obrigatório para produção.',
-      };
-    }
-    console.log('⚠️ Certificado não disponível - usando simulação para homologação');
+    return {
+      success: false,
+      codigoRetorno: '280',
+      motivoRetorno: 'Certificado digital não encontrado ou expirado. Configure o certificado A1 da empresa.',
+    };
+  }
+  
+  // Parse PFX certificate
+  let parsedCert: ParsedCertificate;
+  try {
+    parsedCert = await downloadAndParsePfx(supabase, certificado);
+  } catch (error: any) {
+    return {
+      success: false,
+      codigoRetorno: '281',
+      motivoRetorno: `Erro ao processar certificado digital: ${error.message}`,
+    };
   }
   
   // Generate XML
   const xmlNFCe = generateNFCeXML(nfce, empresa, itens, chaveAcesso, codigoNumerico);
   
-  // Get endpoints for the state
-  const endpoints = getSefazEndpoints(empresa.uf, nfce.ambiente);
-  console.log(`🌐 Endpoint SEFAZ: ${endpoints.autorizacao}`);
+  // Sign XML with certificate
+  let signedXml: string;
+  try {
+    signedXml = signNFCeXml(xmlNFCe, chaveAcesso, parsedCert);
+  } catch (error: any) {
+    return {
+      success: false,
+      chaveAcesso,
+      codigoRetorno: '282',
+      motivoRetorno: `Erro na assinatura digital do XML: ${error.message}`,
+      xmlEnvio: xmlNFCe,
+    };
+  }
   
-  // Generate QR Code URL
-  const dhEmi = formatDateTimeXML(new Date(nfce.data_emissao));
+  // Generate QR Code URL (formato online v2 - NT 2015.002)
   const qrcodeUrl = await generateQRCodeUrl(
     empresa.uf,
     chaveAcesso,
     nfce.ambiente,
     empresa.csc_id,
     empresa.csc_token,
-    nfce.valor_total,
-    dhEmi
   );
   
-  // For homologação without certificate, simulate SEFAZ response
-  if (nfce.ambiente === 'homologacao' && !certificado) {
-    console.log('🔄 Simulando comunicação SEFAZ em homologação...');
-    
-    // Simulate network delay
-    await new Promise(resolve => setTimeout(resolve, 500 + Math.random() * 1000));
-    
-    // 95% success rate in homologação simulation
-    if (Math.random() > 0.05) {
-      const protocolo = `${UF_CODIGOS[empresa.uf]}${Date.now()}${Math.floor(Math.random() * 1000)}`;
-      
-      const xmlRetorno = `<?xml version="1.0" encoding="UTF-8"?>
-<nfeProc versao="4.00" xmlns="http://www.portalfiscal.inf.br/nfe">
-  ${xmlNFCe}
-  <protNFe versao="4.00">
-    <infProt>
-      <tpAmb>2</tpAmb>
-      <verAplic>SVRS-${empresa.uf}</verAplic>
-      <chNFe>${chaveAcesso}</chNFe>
-      <dhRecbto>${new Date().toISOString()}</dhRecbto>
-      <nProt>${protocolo}</nProt>
-      <digVal>SIMULACAO_HOMOLOGACAO</digVal>
-      <cStat>100</cStat>
-      <xMotivo>Autorizado o uso da NF-e</xMotivo>
-    </infProt>
-  </protNFe>
-</nfeProc>`;
-      
-      return {
-        success: true,
-        protocolo,
-        chaveAcesso,
-        qrcodeUrl,
-        codigoRetorno: '100',
-        motivoRetorno: 'Autorizado o uso da NF-e',
-        xmlEnvio: xmlNFCe,
-        xmlRetorno,
-      };
-    } else {
-      // Simulate random rejection
-      const rejectionReasons = [
-        { code: '539', reason: 'Duplicidade de NFC-e' },
-        { code: '233', reason: 'NCM inválido' },
-        { code: '225', reason: 'Data de emissão maior que data atual' },
-        { code: '301', reason: 'Uso denegado: irregularidade fiscal do emitente' },
-      ];
-      const rejection = rejectionReasons[Math.floor(Math.random() * rejectionReasons.length)];
-      
-      return {
-        success: false,
-        chaveAcesso,
-        codigoRetorno: rejection.code,
-        motivoRetorno: rejection.reason,
-        xmlEnvio: xmlNFCe,
-      };
-    }
-  }
+  // Get SEFAZ endpoints
+  const endpoints = getSefazEndpoints(empresa.uf, nfce.ambiente);
+  console.log(`🌐 Endpoint SEFAZ: ${endpoints.autorizacao}`);
   
-  // For production or homologação with certificate, attempt real SEFAZ communication
-  // Note: Full certificate signing requires additional libraries not available in Deno Edge Functions
-  // This implementation prepares everything for when certificate signing is implemented
+  // Generate SOAP envelope with signed XML
+  const soapEnvelope = generateSOAPEnvelope(signedXml);
   
-  if (nfce.ambiente === 'producao') {
-    console.log('⚠️ Produção requer assinatura digital do XML com certificado A1');
-    
-    // TODO: Implement certificate signing with a proper signing service
-    // Options:
-    // 1. Use an external signing service API
-    // 2. Implement certificate parsing and signing in a dedicated microservice
-    // 3. Use a third-party NF-e signing library
-    
-    return {
-      success: false,
-      chaveAcesso,
-      codigoRetorno: '999',
-      motivoRetorno: 'Ambiente de produção requer integração com serviço de assinatura digital. Configure um serviço de assinatura ou use homologação para testes.',
-      xmlEnvio: xmlNFCe,
-    };
-  }
-  
-  // Attempt SOAP call to SEFAZ for homologação with certificate
+  // Send to SEFAZ via mTLS
   try {
-    console.log('📤 Enviando NFC-e para SEFAZ...');
+    console.log('📤 Transmitindo NFC-e para SEFAZ...');
     
-    const soapEnvelope = generateSOAPEnvelope(xmlNFCe, 'nfeAutorizacaoLote');
+    const responseXml = await sendSoapToSefaz(
+      endpoints.autorizacao,
+      soapEnvelope,
+      parsedCert.certPem,
+      parsedCert.keyPem
+    );
     
-    // Note: This will fail without proper TLS client certificate
-    // In production, use a signing service that handles certificate auth
-    const response = await fetch(endpoints.autorizacao, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/soap+xml; charset=utf-8',
-        'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
-      },
-      body: soapEnvelope,
-    });
+    console.log(`📥 Resposta SEFAZ recebida (${responseXml.length} bytes)`);
     
-    if (!response.ok) {
-      throw new Error(`SEFAZ returned status ${response.status}`);
-    }
+    // Parse response
+    const parsed = parseSefazResponse(responseXml);
+    console.log(`   cStat: ${parsed.cStat} | xMotivo: ${parsed.xMotivo}`);
     
-    const responseText = await response.text();
-    const parsed = parseSefazResponse(responseText);
-    
-    if (parsed.cStat === '100' || parsed.cStat === '103' || parsed.cStat === '104') {
+    // Status 100 = Autorizado, 104 = Lote processado
+    if (parsed.cStat === '100') {
       return {
         success: true,
         protocolo: parsed.nProt,
@@ -930,46 +873,53 @@ async function sendToSefaz(
         qrcodeUrl,
         codigoRetorno: parsed.cStat,
         motivoRetorno: parsed.xMotivo,
-        xmlEnvio: xmlNFCe,
-        xmlRetorno: responseText,
+        xmlEnvio: signedXml,
+        xmlRetorno: responseXml,
       };
-    } else {
+    } else if (parsed.cStat === '104') {
+      // Lote processado - check individual status
+      // For synchronous processing with indSinc=1, the result is embedded
+      const innerParsed = parseSefazResponse(responseXml);
+      if (innerParsed.nProt) {
+        return {
+          success: true,
+          protocolo: innerParsed.nProt,
+          chaveAcesso,
+          qrcodeUrl,
+          codigoRetorno: '100',
+          motivoRetorno: innerParsed.xMotivo,
+          xmlEnvio: signedXml,
+          xmlRetorno: responseXml,
+        };
+      }
       return {
         success: false,
         chaveAcesso,
         codigoRetorno: parsed.cStat,
         motivoRetorno: parsed.xMotivo,
-        xmlEnvio: xmlNFCe,
-        xmlRetorno: responseText,
+        xmlEnvio: signedXml,
+        xmlRetorno: responseXml,
+      };
+    } else {
+      // Rejection or error
+      return {
+        success: false,
+        chaveAcesso,
+        codigoRetorno: parsed.cStat,
+        motivoRetorno: parsed.xMotivo,
+        xmlEnvio: signedXml,
+        xmlRetorno: responseXml,
       };
     }
   } catch (error: any) {
-    console.error('❌ Erro na comunicação com SEFAZ:', error.message);
-    
-    // Fallback to simulation in homologação if SEFAZ is unreachable
-    if (nfce.ambiente === 'homologacao') {
-      console.log('🔄 Fallback para simulação devido a erro de comunicação');
-      
-      const protocolo = `${UF_CODIGOS[empresa.uf]}${Date.now()}${Math.floor(Math.random() * 1000)}`;
-      
-      return {
-        success: true,
-        protocolo,
-        chaveAcesso,
-        qrcodeUrl,
-        codigoRetorno: '100',
-        motivoRetorno: 'Autorizado o uso da NF-e (simulação - SEFAZ indisponível)',
-        xmlEnvio: xmlNFCe,
-        xmlRetorno: `<nfeProc><infProt><cStat>100</cStat><xMotivo>Autorizado (simulação)</xMotivo><nProt>${protocolo}</nProt></infProt></nfeProc>`,
-      };
-    }
+    console.error('❌ Erro na transmissão SEFAZ:', error.message);
     
     return {
       success: false,
       chaveAcesso,
       codigoRetorno: '999',
       motivoRetorno: `Erro de comunicação com SEFAZ: ${error.message}`,
-      xmlEnvio: xmlNFCe,
+      xmlEnvio: signedXml,
     };
   }
 }
@@ -1034,28 +984,19 @@ Deno.serve(async (req) => {
 
         if (nfceError || !nfce) {
           console.error(`NFC-e not found: ${item.nfce_id}`);
-          await supabase
-            .from('fila_processamento')
-            .delete()
-            .eq('id', item.id);
+          await supabase.from('fila_processamento').delete().eq('id', item.id);
           continue;
         }
 
         // Skip if already processed
         if (['autorizada', 'cancelada', 'denegada'].includes(nfce.status)) {
           console.log(`NFC-e ${nfce.numero} already processed with status: ${nfce.status}`);
-          await supabase
-            .from('fila_processamento')
-            .delete()
-            .eq('id', item.id);
+          await supabase.from('fila_processamento').delete().eq('id', item.id);
           continue;
         }
 
         // Update status to processing
-        await supabase
-          .from('nfce')
-          .update({ status: 'processando' })
-          .eq('id', item.nfce_id);
+        await supabase.from('nfce').update({ status: 'processando' }).eq('id', item.nfce_id);
 
         // Get empresa data
         const { data: empresa, error: empresaError } = await supabase
@@ -1088,37 +1029,28 @@ Deno.serve(async (req) => {
           .limit(1)
           .maybeSingle();
 
-        // Send to SEFAZ
-        const result = await sendToSefaz(nfce, empresa, itens || [], certificado);
+        // Send to SEFAZ (transmissão real com assinatura digital)
+        const result = await sendToSefaz(nfce, empresa, itens || [], certificado, supabase);
 
         if (result.success) {
           console.log(`✅ NFC-e ${nfce.numero} authorized - Protocol: ${result.protocolo}`);
 
-          // Update NFC-e with authorization data
-          await supabase
-            .from('nfce')
-            .update({
-              status: 'autorizada',
-              chave_acesso: result.chaveAcesso,
-              protocolo: result.protocolo,
-              qrcode_url: result.qrcodeUrl,
-              codigo_retorno: result.codigoRetorno,
-              motivo_retorno: result.motivoRetorno,
-              xml_envio: result.xmlEnvio,
-              xml_retorno: result.xmlRetorno,
-              data_autorizacao: new Date().toISOString(),
-              processado_em: new Date().toISOString(),
-              tentativas: nfce.tentativas + 1,
-            })
-            .eq('id', item.nfce_id);
+          await supabase.from('nfce').update({
+            status: 'autorizada',
+            chave_acesso: result.chaveAcesso,
+            protocolo: result.protocolo,
+            qrcode_url: result.qrcodeUrl,
+            codigo_retorno: result.codigoRetorno,
+            motivo_retorno: result.motivoRetorno,
+            xml_envio: result.xmlEnvio,
+            xml_retorno: result.xmlRetorno,
+            data_autorizacao: new Date().toISOString(),
+            processado_em: new Date().toISOString(),
+            tentativas: nfce.tentativas + 1,
+          }).eq('id', item.nfce_id);
 
-          // Remove from queue
-          await supabase
-            .from('fila_processamento')
-            .delete()
-            .eq('id', item.id);
+          await supabase.from('fila_processamento').delete().eq('id', item.id);
 
-          // Log success
           await supabase.rpc('registrar_log', {
             p_empresa_id: nfce.empresa_id,
             p_nfce_id: nfce.id,
@@ -1133,7 +1065,6 @@ Deno.serve(async (req) => {
             },
           });
 
-          // Send webhook notification
           try {
             await supabase.functions.invoke('send-webhook', {
               body: { nfce_id: nfce.id, evento: 'nfce.autorizada' }
@@ -1149,44 +1080,31 @@ Deno.serve(async (req) => {
           const novasTentativas = item.tentativas + 1;
           const isDenegada = result.codigoRetorno.startsWith('3');
           
-          // Update NFC-e
-          await supabase
-            .from('nfce')
-            .update({
-              status: isDenegada ? 'denegada' : (novasTentativas >= 3 ? 'rejeitada' : 'pendente'),
-              chave_acesso: result.chaveAcesso,
-              codigo_retorno: result.codigoRetorno,
-              motivo_retorno: result.motivoRetorno,
-              erro_processamento: result.motivoRetorno,
-              xml_envio: result.xmlEnvio,
-              xml_retorno: result.xmlRetorno,
-              processado_em: new Date().toISOString(),
-              tentativas: nfce.tentativas + 1,
-            })
-            .eq('id', item.nfce_id);
+          await supabase.from('nfce').update({
+            status: isDenegada ? 'denegada' : (novasTentativas >= 3 ? 'rejeitada' : 'pendente'),
+            chave_acesso: result.chaveAcesso,
+            codigo_retorno: result.codigoRetorno,
+            motivo_retorno: result.motivoRetorno,
+            erro_processamento: result.motivoRetorno,
+            xml_envio: result.xmlEnvio,
+            xml_retorno: result.xmlRetorno,
+            processado_em: new Date().toISOString(),
+            tentativas: nfce.tentativas + 1,
+          }).eq('id', item.nfce_id);
 
           if (isDenegada || novasTentativas >= 3) {
-            // Remove from queue if denied or max attempts reached
-            await supabase
-              .from('fila_processamento')
-              .delete()
-              .eq('id', item.id);
+            await supabase.from('fila_processamento').delete().eq('id', item.id);
           } else {
-            // Schedule retry with exponential backoff
             const nextRetry = new Date();
             nextRetry.setMinutes(nextRetry.getMinutes() + Math.pow(2, novasTentativas) * 5);
             
-            await supabase
-              .from('fila_processamento')
-              .update({
-                tentativas: novasTentativas,
-                proximo_processamento: nextRetry.toISOString(),
-                erro_ultimo: result.motivoRetorno,
-              })
-              .eq('id', item.id);
+            await supabase.from('fila_processamento').update({
+              tentativas: novasTentativas,
+              proximo_processamento: nextRetry.toISOString(),
+              erro_ultimo: result.motivoRetorno,
+            }).eq('id', item.id);
           }
 
-          // Log failure
           await supabase.rpc('registrar_log', {
             p_empresa_id: nfce.empresa_id,
             p_nfce_id: nfce.id,
@@ -1201,7 +1119,6 @@ Deno.serve(async (req) => {
             },
           });
 
-          // Send webhook notification for final rejection or denial
           if (isDenegada || novasTentativas >= 3) {
             try {
               const webhookEvento = isDenegada ? 'nfce.denegada' : 'nfce.rejeitada';
@@ -1220,21 +1137,16 @@ Deno.serve(async (req) => {
       } catch (itemError: any) {
         console.error(`Error processing item ${item.id}:`, itemError);
         
-        // Update queue with error
-        await supabase
-          .from('fila_processamento')
-          .update({
-            tentativas: item.tentativas + 1,
-            erro_ultimo: itemError.message,
-            proximo_processamento: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
-          })
-          .eq('id', item.id);
+        await supabase.from('fila_processamento').update({
+          tentativas: item.tentativas + 1,
+          erro_ultimo: itemError.message,
+          proximo_processamento: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
+        }).eq('id', item.id);
 
-        // Revert NFC-e status to pending
-        await supabase
-          .from('nfce')
-          .update({ status: 'pendente', erro_processamento: itemError.message })
-          .eq('id', item.nfce_id);
+        await supabase.from('nfce').update({ 
+          status: 'pendente', 
+          erro_processamento: itemError.message 
+        }).eq('id', item.nfce_id);
       }
     }
 
@@ -1250,7 +1162,7 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
-    console.error('Worker error:', error);
+    console.error('Fatal error in worker:', error);
     return new Response(
       JSON.stringify({ success: false, error: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
