@@ -452,7 +452,7 @@ async function sendSoapToSefaz(
       method: 'POST',
       headers: {
         'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote"',
-        'Content-Length': Buffer.byteLength(soapBody, 'utf8'),
+        'Content-Length': new TextEncoder().encode(soapBody).length,
       },
       cert: certPem,
       key: keyPem,
