@@ -395,57 +395,39 @@ async function sendSoapToSefaz(
 ): Promise<string> {
   console.log(`📤 Sending SOAP request to: ${url}`);
   
-  // Use node:https for mTLS - SEFAZ uses ICP-Brasil certificates
-  // which are not in the default trust store, so we need custom TLS handling
-  const https = await import('node:https');
-  const { URL } = await import('node:url');
+  // Use Deno.createHttpClient for mTLS with SEFAZ
+  // SEFAZ uses ICP-Brasil certificates not in default trust store
+  const httpClient = (Deno as any).createHttpClient({
+    certChain: certPem,
+    privateKey: keyPem,
+    // Empty caCerts array disables default CA verification
+    // Required for ICP-Brasil PKI used by SEFAZ
+    caCerts: [],
+  });
   
-  return new Promise<string>((resolve, reject) => {
-    const urlObj = new URL(url);
-    
-    const options = {
-      hostname: urlObj.hostname,
-      port: 443,
-      path: urlObj.pathname,
+  try {
+    const response = await fetch(url, {
       method: 'POST',
-      cert: certPem,
-      key: keyPem,
       headers: {
         'Content-Type': 'application/soap+xml; charset=utf-8',
         'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
-        'Content-Length': new TextEncoder().encode(soapBody).length,
       },
-      // SEFAZ uses ICP-Brasil PKI certificates - standard practice in Brazilian fiscal apps
-      rejectUnauthorized: false,
-      timeout: 30000,
-    };
-    
-    const req = https.request(options, (res: any) => {
-      let data = '';
-      res.on('data', (chunk: string) => data += chunk);
-      res.on('end', () => {
-        console.log(`📥 SEFAZ response status: ${res.statusCode}`);
-        if (res.statusCode >= 200 && res.statusCode < 500) {
-          resolve(data);
-        } else {
-          reject(new Error(`SEFAZ retornou status ${res.statusCode}: ${data.substring(0, 500)}`));
-        }
-      });
+      body: soapBody,
+      // @ts-ignore - Deno specific option
+      client: httpClient,
     });
     
-    req.on('error', (err: any) => {
-      console.error('❌ HTTPS request error:', err.message);
-      reject(new Error(`Erro de comunicação com SEFAZ: ${err.message}`));
-    });
+    const responseText = await response.text();
+    console.log(`📥 SEFAZ response status: ${response.status}`);
     
-    req.on('timeout', () => {
-      req.destroy();
-      reject(new Error('Timeout na comunicação com SEFAZ (30s)'));
-    });
+    if (!response.ok && response.status >= 500) {
+      throw new Error(`SEFAZ retornou status ${response.status}: ${responseText.substring(0, 500)}`);
+    }
     
-    req.write(soapBody, 'utf8');
-    req.end();
-  });
+    return responseText;
+  } finally {
+    httpClient.close();
+  }
 }
 
 // ============================================================================
