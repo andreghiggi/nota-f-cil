@@ -252,8 +252,10 @@ Deno.serve(async (req) => {
       }
 
       // Success - update NFC-e with response data
+      const validStatuses = ['pendente', 'processando', 'autorizada', 'rejeitada', 'cancelada', 'denegada', 'contingencia'];
+      const mappedStatus = validStatuses.includes(responseData.status) ? responseData.status : 'processando';
       const updateData: any = {
-        status: responseData.status === 'autorizada' ? 'autorizada' : (responseData.status || 'processando'),
+        status: mappedStatus,
         processado_em: new Date().toISOString(),
       };
 
