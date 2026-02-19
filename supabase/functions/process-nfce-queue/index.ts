@@ -329,9 +329,24 @@ async function downloadAndParsePfx(
     }
   }
   
-  // Build full chain PEM (all certs concatenated)
-  const certPem = chainCerts.map(c => forge.pki.certificateToPem(c)).join('\n');
-  const keyPem = forge.pki.privateKeyToPem(privateKey);
+  // Build full chain PEM (all certs concatenated) - normalize line endings for Deno
+  const certPem = chainCerts.map(c => forge.pki.certificateToPem(c)).join('\n').replace(/\r\n/g, '\n');
+  const keyPemRaw = forge.pki.privateKeyToPem(privateKey).replace(/\r\n/g, '\n');
+  
+  // Convert RSA PRIVATE KEY (PKCS#1) to PRIVATE KEY (PKCS#8) for Deno compatibility
+  const privateKeyInfo = forge.pki.wrapRsaPrivateKey(forge.pki.privateKeyToAsn1(privateKey));
+  const privateKeyInfoDer = forge.asn1.toDer(privateKeyInfo).getBytes();
+  const privateKeyInfoB64 = forge.util.encode64(privateKeyInfoDer);
+  // Format as PEM with 64-char lines
+  const keyPem = '-----BEGIN PRIVATE KEY-----\n' + 
+    privateKeyInfoB64.match(/.{1,64}/g)!.join('\n') + 
+    '\n-----END PRIVATE KEY-----\n';
+  
+  // Debug: log PEM headers to verify format
+  console.log(`   certPem starts with: ${certPem.substring(0, 40)}`);
+  console.log(`   certPem length: ${certPem.length}`);
+  console.log(`   keyPem starts with: ${keyPem.substring(0, 40)}`);
+  console.log(`   keyPem length: ${keyPem.length}`);
   
   console.log('✅ Certificate parsed successfully');
   console.log(`   Subject: ${certificate.subject.getField('CN')?.value}`);
@@ -500,8 +515,8 @@ async function sendSoapToSefaz(
   // Use Deno.createHttpClient for proper mTLS with ICP-Brasil trust
   const client = Deno.createHttpClient({
     caCerts: [ICP_BRASIL_V5, ICP_BRASIL_V10],
-    certChain: certPem,
-    privateKey: keyPem,
+    cert: certPem,
+    key: keyPem,
   });
   
   const response = await fetch(url, {
