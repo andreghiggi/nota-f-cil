@@ -279,22 +279,65 @@ async function downloadAndParsePfx(
   }
   const privateKey = keyBag[0].key as forge.pki.rsa.PrivateKey;
   
-  // Extract certificate
+  // Extract ALL certificates (end-entity + intermediate CAs) for full chain
   const certBags = pfx.getBags({ bagType: forge.pki.oids.certBag });
   const certBag = certBags[forge.pki.oids.certBag];
-  if (!certBag || certBag.length === 0 || !certBag[0].cert) {
+  if (!certBag || certBag.length === 0) {
     throw new Error('Certificado não encontrado no arquivo PFX');
   }
-  const certificate = certBag[0].cert;
   
-  // Convert to PEM
-  const certPem = forge.pki.certificateToPem(certificate);
+  // Find the end-entity certificate (the one matching the private key)
+  let certificate: forge.pki.Certificate | null = null;
+  const allCerts: forge.pki.Certificate[] = [];
+  
+  for (const bag of certBag) {
+    if (bag.cert) {
+      allCerts.push(bag.cert);
+      // The end-entity cert is the one whose public key matches our private key
+      try {
+        const certPublicKeyPem = forge.pki.publicKeyToPem(bag.cert.publicKey);
+        const privPublicKeyPem = forge.pki.publicKeyToPem(forge.pki.rsa.setPublicKey(
+          (privateKey as any).n, (privateKey as any).e
+        ));
+        if (certPublicKeyPem === privPublicKeyPem) {
+          certificate = bag.cert;
+        }
+      } catch {
+        // If comparison fails, try by subject/issuer
+      }
+    }
+  }
+  
+  // Fallback: use first certificate if no match found
+  if (!certificate) {
+    certificate = allCerts[0];
+  }
+  
+  // Build full certificate chain PEM (end-entity first, then intermediaries)
+  // Sort: end-entity cert first, then CAs ordered by chain
+  const chainCerts = [certificate];
+  const remainingCerts = allCerts.filter(c => c !== certificate);
+  
+  // Order remaining certs by chain (each cert's issuer should match next cert's subject)
+  let current = certificate;
+  for (let i = 0; i < remainingCerts.length; i++) {
+    const issuerCN = current.issuer.getField('CN')?.value;
+    const nextCert = remainingCerts.find(c => c.subject.getField('CN')?.value === issuerCN);
+    if (nextCert) {
+      chainCerts.push(nextCert);
+      current = nextCert;
+    }
+  }
+  
+  // Build full chain PEM (all certs concatenated)
+  const certPem = chainCerts.map(c => forge.pki.certificateToPem(c)).join('\n');
   const keyPem = forge.pki.privateKeyToPem(privateKey);
   
   console.log('✅ Certificate parsed successfully');
   console.log(`   Subject: ${certificate.subject.getField('CN')?.value}`);
   console.log(`   Issuer: ${certificate.issuer.getField('CN')?.value}`);
   console.log(`   Valid until: ${certificate.validity.notAfter.toISOString()}`);
+  console.log(`   Chain certificates: ${chainCerts.length} (total in PFX: ${allCerts.length})`);
   
   return { privateKey, certificate, certPem, keyPem };
 }
@@ -488,8 +531,7 @@ jO5PLg5SWjfcOtBG2rz02EIvQAmLcb0kGBtfdj0lW/w=
     const response = await fetch(url, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/soap+xml; charset=utf-8',
-        'SOAPAction': 'http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote',
+        'Content-Type': 'application/soap+xml; charset=utf-8; action="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4/nfeAutorizacaoLote"',
       },
       body: soapBody,
       // @ts-ignore - Deno specific option
@@ -724,8 +766,9 @@ function generateNFCeXML(
 }
 
 // Generate SOAP envelope for NFC-e authorization (lote síncrono)
-function generateSOAPEnvelope(signedXml: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Header><nfeCabecMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4"><cUF>43</cUF><versaoDados>4.00</versaoDados></nfeCabecMsg></soap12:Header><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4"><enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${Date.now()}</idLote><indSinc>1</indSinc>${signedXml}</enviNFe></nfeDadosMsg></soap12:Body></soap12:Envelope>`;
+// NF-e 4.00 (NT 2016/002): nfeCabecMsg was REMOVED from SOAP header
+function generateSOAPEnvelope(signedXml: string, cUF: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body><nfeDadosMsg xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeAutorizacao4"><enviNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"><idLote>${Date.now()}</idLote><indSinc>1</indSinc>${signedXml}</enviNFe></nfeDadosMsg></soap12:Body></soap12:Envelope>`;
 }
 
 // Parse SEFAZ response
@@ -874,7 +917,8 @@ async function sendToSefaz(
   console.log(`🌐 Endpoint SEFAZ: ${endpoints.autorizacao}`);
   
   // Generate SOAP envelope with signed XML
-  const soapEnvelope = generateSOAPEnvelope(signedXml);
+  const cUF = UF_CODIGOS[empresa.uf] || '43';
+  const soapEnvelope = generateSOAPEnvelope(signedXml, cUF);
   
   // Send to SEFAZ via mTLS
   try {
