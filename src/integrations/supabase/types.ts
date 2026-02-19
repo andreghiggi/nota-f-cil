@@ -120,6 +120,7 @@ export type Database = {
       empresas: {
         Row: {
           ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          api_key_fiscal: string | null
           ativo: boolean
           bairro: string | null
           cep: string | null
@@ -147,6 +148,7 @@ export type Database = {
         }
         Insert: {
           ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          api_key_fiscal?: string | null
           ativo?: boolean
           bairro?: string | null
           cep?: string | null
@@ -174,6 +176,7 @@ export type Database = {
         }
         Update: {
           ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          api_key_fiscal?: string | null
           ativo?: boolean
           bairro?: string | null
           cep?: string | null

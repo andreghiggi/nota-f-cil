@@ -142,6 +142,23 @@ export function useCreateEmpresa() {
         .single();
       
       if (error) throw error;
+      
+      // Register company on the external fiscal API
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'register_empresa', empresa_id: data.id }
+        });
+        
+        if (fiscalError) {
+          console.error('Erro ao registrar na API fiscal:', fiscalError);
+          // Don't fail the creation, just warn
+        } else {
+          console.log('✅ Empresa registrada na API fiscal:', fiscalResult);
+        }
+      } catch (err) {
+        console.error('Erro ao conectar com API fiscal:', err);
+      }
+      
       return data as Empresa;
     },
     onSuccess: () => {

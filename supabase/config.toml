@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.send-webhook]
 verify_jwt = false
+
+[functions.fiscal-api]
+verify_jwt = false
