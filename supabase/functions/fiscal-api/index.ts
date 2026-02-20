@@ -260,8 +260,8 @@ Deno.serve(async (req) => {
       const payload = {
         api_key: empresa.api_key_fiscal,
         nota: {
-          numero: nfce.numero,
-          serie: nfce.serie,
+          numero: parseInt(nfce.numero, 10).toString(), // remove leading zeros: '000000008' -> '8'
+          serie: parseInt(nfce.serie, 10).toString(),   // remove leading zeros: '001' -> '1'
           valor_total: nfce.valor_total,
           cliente: clientePayload,
           itens: itensObj,
