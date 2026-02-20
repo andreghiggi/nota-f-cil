@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
 
         certificado: {
           pfx_base64: certificadoBase64 || '',
-          senha: certificado?.senha_hash || '',
+          senha: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
         },
 
         emitente: {
@@ -235,6 +235,28 @@ Deno.serve(async (req) => {
 
       // Build payload for the fiscal API
       const clientePayload = nfce.payload_entrada?.cliente || { nome: 'Consumidor Final', cpf: null };
+      
+      // Build items as object with numeric keys (PHP stdClass compatible) instead of array
+      const itensObj: Record<string, any> = {};
+      (nfce.nfce_itens || []).forEach((item: any, idx: number) => {
+        itensObj[String(idx)] = {
+          descricao: item.descricao,
+          quantidade: item.quantidade,
+          valor_unitario: item.valor_unitario,
+          codigo_produto: item.codigo_produto,
+          ncm: item.ncm,
+          cfop: item.cfop,
+          unidade: item.unidade,
+          cst_icms: item.cst_icms,
+          csosn: item.csosn,
+          aliquota_icms: item.aliquota_icms,
+          cst_pis: item.cst_pis,
+          aliquota_pis: item.aliquota_pis,
+          cst_cofins: item.cst_cofins,
+          aliquota_cofins: item.aliquota_cofins,
+        };
+      });
+
       const payload = {
         api_key: empresa.api_key_fiscal,
         nota: {
@@ -242,22 +264,7 @@ Deno.serve(async (req) => {
           serie: nfce.serie,
           valor_total: nfce.valor_total,
           cliente: clientePayload,
-          itens: (nfce.nfce_itens || []).map((item: any) => ({
-            descricao: item.descricao,
-            quantidade: item.quantidade,
-            valor_unitario: item.valor_unitario,
-            codigo_produto: item.codigo_produto,
-            ncm: item.ncm,
-            cfop: item.cfop,
-            unidade: item.unidade,
-            cst_icms: item.cst_icms,
-            csosn: item.csosn,
-            aliquota_icms: item.aliquota_icms,
-            cst_pis: item.cst_pis,
-            aliquota_pis: item.aliquota_pis,
-            cst_cofins: item.cst_cofins,
-            aliquota_cofins: item.aliquota_cofins,
-          })),
+          itens: itensObj,
         },
       };
 
