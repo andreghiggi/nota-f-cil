@@ -234,41 +234,45 @@ Deno.serve(async (req) => {
         .eq('id', nfce_id);
 
       // Build payload for the fiscal API
+      const clientePayload = nfce.payload_entrada?.cliente || { nome: 'Consumidor Final', cpf: null };
       const payload = {
-        numero: nfce.numero,
-        serie: nfce.serie,
-        valor_total: nfce.valor_total,
-        cliente: nfce.payload_entrada?.cliente || {
-          nome: 'Consumidor Final',
-          cpf: null,
+        api_key: empresa.api_key_fiscal,
+        nota: {
+          numero: nfce.numero,
+          serie: nfce.serie,
+          valor_total: nfce.valor_total,
+          cliente: clientePayload,
+          itens: (nfce.nfce_itens || []).map((item: any) => ({
+            descricao: item.descricao,
+            quantidade: item.quantidade,
+            valor_unitario: item.valor_unitario,
+            codigo_produto: item.codigo_produto,
+            ncm: item.ncm,
+            cfop: item.cfop,
+            unidade: item.unidade,
+            cst_icms: item.cst_icms,
+            csosn: item.csosn,
+            aliquota_icms: item.aliquota_icms,
+            cst_pis: item.cst_pis,
+            aliquota_pis: item.aliquota_pis,
+            cst_cofins: item.cst_cofins,
+            aliquota_cofins: item.aliquota_cofins,
+          })),
         },
-        itens: (nfce.nfce_itens || []).map((item: any) => ({
-          descricao: item.descricao,
-          quantidade: item.quantidade,
-          valor_unitario: item.valor_unitario,
-          codigo_produto: item.codigo_produto,
-          ncm: item.ncm,
-          cfop: item.cfop,
-          unidade: item.unidade,
-          cst_icms: item.cst_icms,
-          csosn: item.csosn,
-          aliquota_icms: item.aliquota_icms,
-          cst_pis: item.cst_pis,
-          aliquota_pis: item.aliquota_pis,
-          cst_cofins: item.cst_cofins,
-          aliquota_cofins: item.aliquota_cofins,
-        })),
       };
 
       console.log(`📡 Emitting NFC-e ${nfce.numero} via fiscal API...`);
       console.log(`   Payload: ${JSON.stringify(payload).substring(0, 200)}...`);
 
-      // Call the fiscal API to emit
-      const response = await fetch(`${FISCAL_API_BASE_URL}/nfce/emitir`, {
+      // Call the fiscal API to emit - send api_key in multiple ways for compatibility
+      const emitUrl = `${FISCAL_API_BASE_URL}/nfce/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
+      console.log(`   Emit URL: ${emitUrl.replace(empresa.api_key_fiscal, '***')}`);
+      const response = await fetch(emitUrl, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${empresa.api_key_fiscal}`,
           'Content-Type': 'application/json',
+          'X-Api-Key': empresa.api_key_fiscal,
+          'Authorization': `Bearer ${empresa.api_key_fiscal}`,
         },
         body: JSON.stringify(payload),
       });
