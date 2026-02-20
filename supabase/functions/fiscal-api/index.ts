@@ -259,6 +259,7 @@ Deno.serve(async (req) => {
 
       const payload = {
         api_key: empresa.api_key_fiscal,
+        ind_sinc: 1, // 1 = síncrono (obrigatório para lote com 1 NFC-e)
         nota: {
           numero: parseInt(nfce.numero, 10).toString(), // remove leading zeros: '000000008' -> '8'
           serie: parseInt(nfce.serie, 10).toString(),   // remove leading zeros: '001' -> '1'
