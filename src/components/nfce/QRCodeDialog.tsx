@@ -1,4 +1,5 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { QRCodeSVG } from "qrcode.react";
 
 interface QRCodeDialogProps {
   open: boolean;
@@ -19,10 +20,9 @@ export function QRCodeDialog({ open, onOpenChange, qrcodeUrl, chaveAcesso, numer
           {qrcodeUrl ? (
             <>
               <div className="bg-white p-4 rounded-lg border">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrcodeUrl)}`}
-                  alt="QR Code NFC-e"
-                  className="w-[200px] h-[200px]"
+                <QRCodeSVG
+                  value={qrcodeUrl}
+                  size={200}
                 />
               </div>
               <p className="text-xs text-muted-foreground text-center break-all max-w-[280px]">

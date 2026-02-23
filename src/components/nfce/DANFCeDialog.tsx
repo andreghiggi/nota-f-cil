@@ -5,6 +5,7 @@ import { useRef } from "react";
 import { Tables } from "@/integrations/supabase/types";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
+import { QRCodeSVG } from "qrcode.react";
 
 type NfceWithEmpresa = Tables<"nfce"> & {
   empresas: Pick<Tables<"empresas">, "razao_social" | "cnpj" | "inscricao_estadual" | "logradouro" | "numero" | "bairro" | "municipio" | "uf" | "cep" | "telefone" | "nome_fantasia"> | null;
@@ -252,10 +253,10 @@ export function DANFCeDialog({ open, onOpenChange, nfceId }: DANFCeDialogProps) 
                 <>
                   <div className="divider" />
                   <div className="center" style={{ margin: "8px 0" }}>
-                    <img
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(nfce.qrcode_url)}`}
-                      alt="QR Code NFC-e"
-                      style={{ width: "150px", height: "150px", margin: "0 auto" }}
+                    <QRCodeSVG
+                      value={nfce.qrcode_url}
+                      size={150}
+                      style={{ margin: "0 auto" }}
                     />
                   </div>
                   <div className="center small">
