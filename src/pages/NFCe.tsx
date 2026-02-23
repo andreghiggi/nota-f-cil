@@ -286,26 +286,26 @@ export default function NFCe() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { setDanfceNfceId(nfce.id); setDanfceOpen(true); }}>
+                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfceNfceId(nfce.id); setDanfceOpen(true); }, 0); }}>
                               <Eye className="h-4 w-4 mr-2" />Visualizar Cupom
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setDanfceNfceId(nfce.id); setDanfceOpen(true); }}>
+                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfceNfceId(nfce.id); setDanfceOpen(true); }, 0); }}>
                               <Printer className="h-4 w-4 mr-2" />Imprimir DANFE
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => { setQrData({ url: nfce.qrcode_url, chave: nfce.chave_acesso, numero: nfce.numero }); setQrOpen(true); }}>
+                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setQrData({ url: nfce.qrcode_url, chave: nfce.chave_acesso, numero: nfce.numero }); setQrOpen(true); }, 0); }}>
                               <QrCode className="h-4 w-4 mr-2" />QR Code
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleDownloadXml(nfce.id, nfce.numero)}>
+                            <DropdownMenuItem onSelect={() => handleDownloadXml(nfce.id, nfce.numero)}>
                               <Download className="h-4 w-4 mr-2" />Download XML
                             </DropdownMenuItem>
                             {(nfce.status === "rejeitada" || nfce.status === "pendente") && (
-                              <DropdownMenuItem onClick={() => handleReprocessar(nfce.id, nfce.numero)}>
+                              <DropdownMenuItem onSelect={() => handleReprocessar(nfce.id, nfce.numero)}>
                                 <RefreshCw className="h-4 w-4 mr-2" />Reprocessar
                               </DropdownMenuItem>
                             )}
                             <DropdownMenuSeparator />
                             {nfce.status === "autorizada" && (
-                              <DropdownMenuItem className="text-destructive" onClick={() => { setCancelNfce({ id: nfce.id, numero: nfce.numero }); setCancelOpen(true); }}>
+                              <DropdownMenuItem className="text-destructive" onSelect={() => { setTimeout(() => { setCancelNfce({ id: nfce.id, numero: nfce.numero }); setCancelOpen(true); }, 0); }}>
                                 <XCircle className="h-4 w-4 mr-2" />Cancelar
                               </DropdownMenuItem>
                             )}
