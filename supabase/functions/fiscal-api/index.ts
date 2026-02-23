@@ -348,6 +348,9 @@ Deno.serve(async (req) => {
       }
 
       // Success - update NFC-e with response data
+      console.log('✅ Full fiscal API response keys:', Object.keys(responseData));
+      console.log('✅ Full fiscal API response:', JSON.stringify(responseData).substring(0, 1000));
+      
       const validStatuses = ['pendente', 'processando', 'autorizada', 'rejeitada', 'cancelada', 'denegada', 'contingencia'];
       const mappedStatus = validStatuses.includes(responseData.status) ? responseData.status : 'processando';
       const updateData: any = {
@@ -355,21 +358,29 @@ Deno.serve(async (req) => {
         processado_em: new Date().toISOString(),
       };
 
-      // Map fiscal API response fields
-      if (responseData.chave_acesso) updateData.chave_acesso = responseData.chave_acesso;
-      if (responseData.protocolo) updateData.protocolo = responseData.protocolo;
-      if (responseData.codigo_retorno) updateData.codigo_retorno = responseData.codigo_retorno;
-      if (responseData.motivo_retorno) updateData.motivo_retorno = responseData.motivo_retorno;
-      if (responseData.xml_retorno) updateData.xml_retorno = responseData.xml_retorno;
-      if (responseData.qrcode_url) updateData.qrcode_url = responseData.qrcode_url;
-      if (responseData.data_autorizacao) updateData.data_autorizacao = responseData.data_autorizacao;
+      // Map fiscal API response fields - support multiple field name variations
+      const chaveAcesso = responseData.chave_acesso || responseData.chave || responseData.chNFe || responseData.chave_nfe || responseData.key;
+      const protocolo = responseData.protocolo || responseData.nProt || responseData.protocol;
+      const codigoRetorno = responseData.codigo_retorno || responseData.cStat || responseData.code;
+      const motivoRetorno = responseData.motivo_retorno || responseData.xMotivo || responseData.motivo || responseData.message;
+      const xmlRetorno = responseData.xml_retorno || responseData.xml || responseData.xmlRetorno;
+      const qrcodeUrl = responseData.qrcode_url || responseData.qrcode || responseData.urlQRCode || responseData.qr_code || responseData.qrCode || responseData.url_qrcode;
+      const dataAutorizacao = responseData.data_autorizacao || responseData.dhRecbto || responseData.data_recebimento;
+
+      if (chaveAcesso) updateData.chave_acesso = chaveAcesso;
+      if (protocolo) updateData.protocolo = protocolo;
+      if (codigoRetorno) updateData.codigo_retorno = codigoRetorno;
+      if (motivoRetorno) updateData.motivo_retorno = motivoRetorno;
+      if (xmlRetorno) updateData.xml_retorno = xmlRetorno;
+      if (qrcodeUrl) updateData.qrcode_url = qrcodeUrl;
+      if (dataAutorizacao) updateData.data_autorizacao = dataAutorizacao;
 
       await supabase
         .from('nfce')
         .update(updateData)
         .eq('id', nfce_id);
 
-      // Log success
+      // Log success with all mapped fields
       await supabase.rpc('registrar_log', {
         p_empresa_id: nfce.empresa_id,
         p_nfce_id: nfce_id,
@@ -377,7 +388,7 @@ Deno.serve(async (req) => {
         p_tipo: 'sucesso',
         p_categoria: 'emissao',
         p_mensagem: `NFC-e ${nfce.numero} ${updateData.status} via API fiscal`,
-        p_detalhes: { protocolo: responseData.protocolo, chave_acesso: responseData.chave_acesso },
+        p_detalhes: { protocolo, chave_acesso: chaveAcesso, qrcode_url: qrcodeUrl, response_keys: Object.keys(responseData) },
       });
 
       // Send webhook notification
