@@ -364,8 +364,34 @@ Deno.serve(async (req) => {
       const codigoRetorno = responseData.codigo_retorno || responseData.cStat || responseData.code;
       const motivoRetorno = responseData.motivo_retorno || responseData.xMotivo || responseData.motivo || responseData.message;
       const xmlRetorno = responseData.xml_retorno || responseData.xml || responseData.xmlRetorno;
-      const qrcodeUrl = responseData.qrcode_url || responseData.qrcode || responseData.urlQRCode || responseData.qr_code || responseData.qrCode || responseData.url_qrcode;
+      let qrcodeUrl = responseData.qrcode_url || responseData.qrcode || responseData.urlQRCode || responseData.qr_code || responseData.qrCode || responseData.url_qrcode;
       const dataAutorizacao = responseData.data_autorizacao || responseData.dhRecbto || responseData.data_recebimento;
+
+      // If no qrcode_url from response, try to extract from XML
+      if (!qrcodeUrl && xmlRetorno) {
+        try {
+          let xmlStr = xmlRetorno;
+          // If XML is base64 encoded, decode it
+          if (!xmlStr.startsWith('<') && !xmlStr.startsWith('<?')) {
+            xmlStr = atob(xmlStr);
+          }
+          // Extract QR Code URL from <qrCode> tag in XML
+          const qrMatch = xmlStr.match(/<qrCode>(.*?)<\/qrCode>/);
+          if (qrMatch && qrMatch[1]) {
+            qrcodeUrl = qrMatch[1];
+            console.log('📱 QR Code extracted from XML:', qrcodeUrl.substring(0, 100));
+          }
+          // Also extract dhRecbto for data_autorizacao if not set
+          if (!dataAutorizacao) {
+            const dhMatch = xmlStr.match(/<dhRecbto>(.*?)<\/dhRecbto>/);
+            if (dhMatch && dhMatch[1]) {
+              updateData.data_autorizacao = dhMatch[1];
+            }
+          }
+        } catch (xmlErr) {
+          console.error('⚠️ Error extracting QR Code from XML:', xmlErr);
+        }
+      }
 
       if (chaveAcesso) updateData.chave_acesso = chaveAcesso;
       if (protocolo) updateData.protocolo = protocolo;
