@@ -206,7 +206,7 @@ Deno.serve(async (req) => {
 
       await supabase.from('nfce_itens').insert(itensToInsert);
 
-      // Add to processing queue
+      // Add to processing queue as fallback
       await supabase.from('fila_processamento').insert({
         nfce_id: nfceData.id,
         prioridade: 5
@@ -224,19 +224,37 @@ Deno.serve(async (req) => {
         p_ip_origem: req.headers.get('x-forwarded-for')
       });
 
+      // Emit synchronously via fiscal-api for instant processing
+      let emitResult: any = null;
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'emit_nfce', nfce_id: nfceData.id }
+        });
+
+        if (!fiscalError && fiscalResult?.success) {
+          emitResult = fiscalResult.data;
+          // Remove from queue since it was processed successfully
+          await supabase.from('fila_processamento').delete().eq('nfce_id', nfceData.id);
+        } else {
+          console.warn('Sync emit failed, queue will retry:', fiscalError?.message || fiscalResult?.error);
+        }
+      } catch (emitErr: any) {
+        console.warn('Sync emit exception, queue will retry:', emitErr.message);
+      }
+
+      // Return the latest state
+      const responseData = emitResult || {
+        id: nfceData.id,
+        numero: nfceData.numero,
+        serie: nfceData.serie,
+        status: nfceData.status,
+        ambiente,
+        valor_total: valorTotal,
+        created_at: nfceData.created_at
+      };
+
       return new Response(
-        JSON.stringify({
-          success: true,
-          data: {
-            id: nfceData.id,
-            numero: nfceData.numero,
-            serie: nfceData.serie,
-            status: nfceData.status,
-            ambiente,
-            valor_total: valorTotal,
-            created_at: nfceData.created_at
-          }
-        }),
+        JSON.stringify({ success: true, data: responseData }),
         { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
