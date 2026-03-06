@@ -438,14 +438,7 @@ Deno.serve(async (req) => {
     // ACTION: emit_nfe - Emit NF-e via fiscal API
     // ========================================================================
     if (action === 'emit_nfe') {
-      const nfe_id = (await req.json().catch(() => ({}))).nfe_id || (await Promise.resolve({ nfe_id: undefined })).nfe_id;
-      // We already parsed the body above, use the parsed nfe_id from the initial parse
-    }
-
-    // Re-check: emit_nfe uses same body parse
-    if (action === 'emit_nfe') {
-      const requestBody = { action, empresa_id, nfce_id };
-      const nfeId = (requestBody as any).nfe_id;
+      const nfeId = nfe_id;
 
       if (!nfeId) {
         return new Response(
