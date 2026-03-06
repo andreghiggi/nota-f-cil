@@ -21,7 +21,9 @@ export interface Empresa {
   regime_tributario: 'simples_nacional' | 'lucro_presumido' | 'lucro_real';
   ambiente: 'homologacao' | 'producao';
   serie_nfce: string;
+  serie_nfe: string;
   numero_nfce_atual: number;
+  numero_nfe_atual: number;
   csc_id: string | null;
   csc_token: string | null;
   ativo: boolean;
@@ -128,6 +130,7 @@ export function useCreateEmpresa() {
       regime_tributario: 'simples_nacional' | 'lucro_presumido' | 'lucro_real';
       ambiente: 'homologacao' | 'producao';
       serie_nfce: string;
+      serie_nfe?: string;
       csc_id?: string | null;
       csc_token?: string | null;
       ativo?: boolean;
@@ -190,6 +193,7 @@ export function useUpdateEmpresa() {
       regime_tributario?: 'simples_nacional' | 'lucro_presumido' | 'lucro_real';
       ambiente?: 'homologacao' | 'producao';
       serie_nfce?: string;
+      serie_nfe?: string;
       csc_id?: string | null;
       csc_token?: string | null;
       ativo?: boolean;
