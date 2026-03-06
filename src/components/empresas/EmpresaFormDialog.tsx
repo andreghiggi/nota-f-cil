@@ -385,8 +385,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-4">
+             <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="dados" className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Dados
@@ -398,6 +398,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                 <TabsTrigger value="fiscal" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
                   Fiscal
+                </TabsTrigger>
+                <TabsTrigger value="nfe" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  NF-e
                 </TabsTrigger>
                 <TabsTrigger value="nfce" className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
