@@ -119,6 +119,7 @@ const empresaSchema = z.object({
   regime_tributario: z.enum(["simples_nacional", "lucro_presumido", "lucro_real"]),
   ambiente: z.enum(["homologacao", "producao"]),
   serie_nfce: z.string().min(1).max(3).default("001"),
+  serie_nfe: z.string().min(1).max(3).default("001"),
   
   // CSC (Código de Segurança do Contribuinte)
   csc_id: z.string().max(10).optional().nullable(),
@@ -187,12 +188,13 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       uf: "SP",
       municipio: "",
       codigo_municipio: "",
-      regime_tributario: "simples_nacional",
-      ambiente: "homologacao",
-      serie_nfce: "001",
-      csc_id: "",
-      csc_token: "",
-      ativo: true,
+        regime_tributario: "simples_nacional",
+        ambiente: "homologacao",
+        serie_nfce: "001",
+        serie_nfe: "001",
+        csc_id: "",
+        csc_token: "",
+        ativo: true,
     },
   });
 
@@ -216,6 +218,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         regime_tributario: empresa.regime_tributario,
         ambiente: empresa.ambiente,
         serie_nfce: empresa.serie_nfce,
+        serie_nfe: (empresa as any).serie_nfe || "001",
         csc_id: empresa.csc_id || "",
         csc_token: empresa.csc_token || "",
         ativo: empresa.ativo,
@@ -239,6 +242,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         regime_tributario: "simples_nacional",
         ambiente: "homologacao",
         serie_nfce: "001",
+        serie_nfe: "001",
         csc_id: "",
         csc_token: "",
         ativo: true,
@@ -340,6 +344,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         regime_tributario: data.regime_tributario,
         ambiente: data.ambiente,
         serie_nfce: data.serie_nfce,
+        serie_nfe: data.serie_nfe,
         csc_id: data.csc_id || null,
         csc_token: data.csc_token || null,
         ativo: data.ativo,
@@ -380,8 +385,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
 
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-4">
+             <Tabs value={activeTab} onValueChange={setActiveTab}>
+              <TabsList className="grid w-full grid-cols-5">
                 <TabsTrigger value="dados" className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Dados
@@ -393,6 +398,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                 <TabsTrigger value="fiscal" className="flex items-center gap-2">
                   <FileText className="h-4 w-4" />
                   Fiscal
+                </TabsTrigger>
+                <TabsTrigger value="nfe" className="flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  NF-e
                 </TabsTrigger>
                 <TabsTrigger value="nfce" className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
@@ -714,6 +723,37 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                     </FormItem>
                   )}
                 />
+              </TabsContent>
+
+              <TabsContent value="nfe" className="space-y-4 mt-4">
+                <FormField
+                  control={form.control}
+                  name="serie_nfe"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Série NF-e *</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="001" 
+                          maxLength={3}
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3).padStart(3, '0'))}
+                        />
+                      </FormControl>
+                      <FormDescription>Série padrão para emissão de NF-e (modelo 55)</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
+                  <h4 className="font-medium text-foreground mb-2">Configurações NF-e</h4>
+                  <p className="text-sm text-muted-foreground">
+                    A NF-e (modelo 55) utiliza o mesmo certificado digital A1 e ambiente (homologação/produção) 
+                    configurados na aba Fiscal. Certifique-se de que o certificado digital está válido e o 
+                    ambiente correto está selecionado antes de emitir NF-e.
+                  </p>
+                </div>
               </TabsContent>
 
               <TabsContent value="nfce" className="space-y-4 mt-4">
