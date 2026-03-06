@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import Empresas from "./pages/Empresas";
 import NFCe from "./pages/NFCe";
+import NFe from "./pages/NFe";
 import Certificados from "./pages/Certificados";
 import Tokens from "./pages/Tokens";
 import Webhooks from "./pages/Webhooks";
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/empresas" element={<ProtectedRoute><Empresas /></ProtectedRoute>} />
+            <Route path="/nfe" element={<ProtectedRoute><NFe /></ProtectedRoute>} />
             <Route path="/nfce" element={<ProtectedRoute><NFCe /></ProtectedRoute>} />
             <Route path="/certificados" element={<ProtectedRoute><Certificados /></ProtectedRoute>} />
             <Route path="/tokens" element={<ProtectedRoute><Tokens /></ProtectedRoute>} />

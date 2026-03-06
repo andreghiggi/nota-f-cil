@@ -138,9 +138,11 @@ export type Database = {
           nome_fantasia: string | null
           numero: string | null
           numero_nfce_atual: number
+          numero_nfe_atual: number
           razao_social: string
           regime_tributario: Database["public"]["Enums"]["regime_tributario"]
           serie_nfce: string
+          serie_nfe: string
           telefone: string | null
           uf: string
           updated_at: string
@@ -166,9 +168,11 @@ export type Database = {
           nome_fantasia?: string | null
           numero?: string | null
           numero_nfce_atual?: number
+          numero_nfe_atual?: number
           razao_social: string
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
           serie_nfce?: string
+          serie_nfe?: string
           telefone?: string | null
           uf: string
           updated_at?: string
@@ -194,9 +198,11 @@ export type Database = {
           nome_fantasia?: string | null
           numero?: string | null
           numero_nfce_atual?: number
+          numero_nfe_atual?: number
           razao_social?: string
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
           serie_nfce?: string
+          serie_nfe?: string
           telefone?: string | null
           uf?: string
           updated_at?: string
@@ -244,6 +250,50 @@ export type Database = {
             columns: ["nfce_id"]
             isOneToOne: true
             referencedRelation: "nfce"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fila_processamento_nfe: {
+        Row: {
+          created_at: string
+          erro_ultimo: string | null
+          id: string
+          max_tentativas: number
+          nfe_id: string
+          prioridade: number
+          proximo_processamento: string
+          tentativas: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          erro_ultimo?: string | null
+          id?: string
+          max_tentativas?: number
+          nfe_id: string
+          prioridade?: number
+          proximo_processamento?: string
+          tentativas?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          erro_ultimo?: string | null
+          id?: string
+          max_tentativas?: number
+          nfe_id?: string
+          prioridade?: number
+          proximo_processamento?: string
+          tentativas?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fila_processamento_nfe_nfe_id_fkey"
+            columns: ["nfe_id"]
+            isOneToOne: true
+            referencedRelation: "nfe"
             referencedColumns: ["id"]
           },
         ]
@@ -559,6 +609,319 @@ export type Database = {
           },
         ]
       }
+      nfe: {
+        Row: {
+          ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          chave_acesso: string | null
+          codigo_retorno: string | null
+          created_at: string
+          data_autorizacao: string | null
+          data_emissao: string
+          dest_bairro: string | null
+          dest_cep: string | null
+          dest_codigo_municipio: string | null
+          dest_complemento: string | null
+          dest_cpf_cnpj: string | null
+          dest_email: string | null
+          dest_ie: string | null
+          dest_logradouro: string | null
+          dest_municipio: string | null
+          dest_nome: string | null
+          dest_numero: string | null
+          dest_telefone: string | null
+          dest_uf: string | null
+          empresa_id: string
+          erro_processamento: string | null
+          external_id: string | null
+          finalidade: string
+          id: string
+          modalidade_frete: string
+          motivo_retorno: string | null
+          natureza_operacao: string
+          numero: string
+          payload_entrada: Json
+          processado_em: string | null
+          protocolo: string | null
+          serie: string
+          status: Database["public"]["Enums"]["nfce_status"]
+          tentativas: number
+          token_api_id: string | null
+          updated_at: string
+          valor_cofins: number | null
+          valor_desconto: number | null
+          valor_frete: number | null
+          valor_icms: number | null
+          valor_ipi: number | null
+          valor_outras_despesas: number | null
+          valor_pis: number | null
+          valor_produtos: number | null
+          valor_seguro: number | null
+          valor_total: number
+          xml_envio: string | null
+          xml_retorno: string | null
+        }
+        Insert: {
+          ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          chave_acesso?: string | null
+          codigo_retorno?: string | null
+          created_at?: string
+          data_autorizacao?: string | null
+          data_emissao?: string
+          dest_bairro?: string | null
+          dest_cep?: string | null
+          dest_codigo_municipio?: string | null
+          dest_complemento?: string | null
+          dest_cpf_cnpj?: string | null
+          dest_email?: string | null
+          dest_ie?: string | null
+          dest_logradouro?: string | null
+          dest_municipio?: string | null
+          dest_nome?: string | null
+          dest_numero?: string | null
+          dest_telefone?: string | null
+          dest_uf?: string | null
+          empresa_id: string
+          erro_processamento?: string | null
+          external_id?: string | null
+          finalidade?: string
+          id?: string
+          modalidade_frete?: string
+          motivo_retorno?: string | null
+          natureza_operacao?: string
+          numero: string
+          payload_entrada: Json
+          processado_em?: string | null
+          protocolo?: string | null
+          serie: string
+          status?: Database["public"]["Enums"]["nfce_status"]
+          tentativas?: number
+          token_api_id?: string | null
+          updated_at?: string
+          valor_cofins?: number | null
+          valor_desconto?: number | null
+          valor_frete?: number | null
+          valor_icms?: number | null
+          valor_ipi?: number | null
+          valor_outras_despesas?: number | null
+          valor_pis?: number | null
+          valor_produtos?: number | null
+          valor_seguro?: number | null
+          valor_total: number
+          xml_envio?: string | null
+          xml_retorno?: string | null
+        }
+        Update: {
+          ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          chave_acesso?: string | null
+          codigo_retorno?: string | null
+          created_at?: string
+          data_autorizacao?: string | null
+          data_emissao?: string
+          dest_bairro?: string | null
+          dest_cep?: string | null
+          dest_codigo_municipio?: string | null
+          dest_complemento?: string | null
+          dest_cpf_cnpj?: string | null
+          dest_email?: string | null
+          dest_ie?: string | null
+          dest_logradouro?: string | null
+          dest_municipio?: string | null
+          dest_nome?: string | null
+          dest_numero?: string | null
+          dest_telefone?: string | null
+          dest_uf?: string | null
+          empresa_id?: string
+          erro_processamento?: string | null
+          external_id?: string | null
+          finalidade?: string
+          id?: string
+          modalidade_frete?: string
+          motivo_retorno?: string | null
+          natureza_operacao?: string
+          numero?: string
+          payload_entrada?: Json
+          processado_em?: string | null
+          protocolo?: string | null
+          serie?: string
+          status?: Database["public"]["Enums"]["nfce_status"]
+          tentativas?: number
+          token_api_id?: string | null
+          updated_at?: string
+          valor_cofins?: number | null
+          valor_desconto?: number | null
+          valor_frete?: number | null
+          valor_icms?: number | null
+          valor_ipi?: number | null
+          valor_outras_despesas?: number | null
+          valor_pis?: number | null
+          valor_produtos?: number | null
+          valor_seguro?: number | null
+          valor_total?: number
+          xml_envio?: string | null
+          xml_retorno?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfe_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfe_token_api_id_fkey"
+            columns: ["token_api_id"]
+            isOneToOne: false
+            referencedRelation: "tokens_api"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfe_eventos: {
+        Row: {
+          codigo_retorno: string | null
+          created_at: string
+          data_evento: string
+          id: string
+          justificativa: string | null
+          motivo_retorno: string | null
+          nfe_id: string
+          protocolo: string | null
+          sequencia: number
+          tipo_evento: string
+          xml_evento: string | null
+          xml_retorno: string | null
+        }
+        Insert: {
+          codigo_retorno?: string | null
+          created_at?: string
+          data_evento?: string
+          id?: string
+          justificativa?: string | null
+          motivo_retorno?: string | null
+          nfe_id: string
+          protocolo?: string | null
+          sequencia?: number
+          tipo_evento: string
+          xml_evento?: string | null
+          xml_retorno?: string | null
+        }
+        Update: {
+          codigo_retorno?: string | null
+          created_at?: string
+          data_evento?: string
+          id?: string
+          justificativa?: string | null
+          motivo_retorno?: string | null
+          nfe_id?: string
+          protocolo?: string | null
+          sequencia?: number
+          tipo_evento?: string
+          xml_evento?: string | null
+          xml_retorno?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfe_eventos_nfe_id_fkey"
+            columns: ["nfe_id"]
+            isOneToOne: false
+            referencedRelation: "nfe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfe_itens: {
+        Row: {
+          aliquota_cofins: number | null
+          aliquota_icms: number | null
+          aliquota_ipi: number | null
+          aliquota_pis: number | null
+          cfop: string
+          codigo_produto: string
+          created_at: string
+          csosn: string | null
+          cst_cofins: string | null
+          cst_icms: string | null
+          cst_ipi: string | null
+          cst_pis: string | null
+          descricao: string
+          id: string
+          ncm: string | null
+          nfe_id: string
+          numero_item: number
+          quantidade: number
+          unidade: string
+          valor_cofins: number | null
+          valor_icms: number | null
+          valor_ipi: number | null
+          valor_pis: number | null
+          valor_total: number
+          valor_unitario: number
+        }
+        Insert: {
+          aliquota_cofins?: number | null
+          aliquota_icms?: number | null
+          aliquota_ipi?: number | null
+          aliquota_pis?: number | null
+          cfop: string
+          codigo_produto: string
+          created_at?: string
+          csosn?: string | null
+          cst_cofins?: string | null
+          cst_icms?: string | null
+          cst_ipi?: string | null
+          cst_pis?: string | null
+          descricao: string
+          id?: string
+          ncm?: string | null
+          nfe_id: string
+          numero_item: number
+          quantidade: number
+          unidade: string
+          valor_cofins?: number | null
+          valor_icms?: number | null
+          valor_ipi?: number | null
+          valor_pis?: number | null
+          valor_total: number
+          valor_unitario: number
+        }
+        Update: {
+          aliquota_cofins?: number | null
+          aliquota_icms?: number | null
+          aliquota_ipi?: number | null
+          aliquota_pis?: number | null
+          cfop?: string
+          codigo_produto?: string
+          created_at?: string
+          csosn?: string | null
+          cst_cofins?: string | null
+          cst_icms?: string | null
+          cst_ipi?: string | null
+          cst_pis?: string | null
+          descricao?: string
+          id?: string
+          ncm?: string | null
+          nfe_id?: string
+          numero_item?: number
+          quantidade?: number
+          unidade?: string
+          valor_cofins?: number | null
+          valor_icms?: number | null
+          valor_ipi?: number | null
+          valor_pis?: number | null
+          valor_total?: number
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfe_itens_nfe_id_fkey"
+            columns: ["nfe_id"]
+            isOneToOne: false
+            referencedRelation: "nfe"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tokens_api: {
         Row: {
           created_at: string
@@ -728,6 +1091,7 @@ export type Database = {
     }
     Functions: {
       gerar_numero_nfce: { Args: { p_empresa_id: string }; Returns: string }
+      gerar_numero_nfe: { Args: { p_empresa_id: string }; Returns: string }
       registrar_log: {
         Args: {
           p_categoria: string

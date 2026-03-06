@@ -20,6 +20,7 @@ import { toast } from "sonner";
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Empresas", href: "/empresas", icon: Building2 },
+  { name: "NF-e", href: "/nfe", icon: FileText },
   { name: "NFC-e", href: "/nfce", icon: Receipt },
   { name: "Certificados", href: "/certificados", icon: ShieldCheck },
   { name: "Tokens API", href: "/tokens", icon: Key },
