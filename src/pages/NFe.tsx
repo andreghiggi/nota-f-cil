@@ -271,6 +271,7 @@ export default function NFe() {
                           )} />
                           {nfe.ambiente === "producao" ? "Produção" : "Homologação"}
                         </span>
+                      </td>
                       <td className="px-5 py-4">
                         <div>
                           <span className={cn("status-badge", statusStyles[nfe.status] || "")}>
