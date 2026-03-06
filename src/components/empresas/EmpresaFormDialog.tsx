@@ -725,6 +725,37 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                 />
               </TabsContent>
 
+              <TabsContent value="nfe" className="space-y-4 mt-4">
+                <FormField
+                  control={form.control}
+                  name="serie_nfe"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Série NF-e *</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="001" 
+                          maxLength={3}
+                          {...field}
+                          onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3).padStart(3, '0'))}
+                        />
+                      </FormControl>
+                      <FormDescription>Série padrão para emissão de NF-e (modelo 55)</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
+                  <h4 className="font-medium text-foreground mb-2">Configurações NF-e</h4>
+                  <p className="text-sm text-muted-foreground">
+                    A NF-e (modelo 55) utiliza o mesmo certificado digital A1 e ambiente (homologação/produção) 
+                    configurados na aba Fiscal. Certifique-se de que o certificado digital está válido e o 
+                    ambiente correto está selecionado antes de emitir NF-e.
+                  </p>
+                </div>
+              </TabsContent>
+
               <TabsContent value="nfce" className="space-y-4 mt-4">
                 <FormField
                   control={form.control}
