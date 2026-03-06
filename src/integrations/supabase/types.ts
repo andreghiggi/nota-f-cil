@@ -922,6 +922,47 @@ export type Database = {
           },
         ]
       }
+      series_fiscais: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          empresa_id: string
+          id: string
+          numero_atual: number
+          serie: string
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          empresa_id: string
+          id?: string
+          numero_atual?: number
+          serie: string
+          tipo: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          numero_atual?: number
+          serie?: string
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "series_fiscais_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tokens_api: {
         Row: {
           created_at: string
@@ -1090,8 +1131,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      gerar_numero_nfce: { Args: { p_empresa_id: string }; Returns: string }
-      gerar_numero_nfe: { Args: { p_empresa_id: string }; Returns: string }
+      gerar_numero_nfce:
+        | { Args: { p_empresa_id: string }; Returns: string }
+        | { Args: { p_empresa_id: string; p_serie?: string }; Returns: string }
+      gerar_numero_nfe:
+        | { Args: { p_empresa_id: string }; Returns: string }
+        | { Args: { p_empresa_id: string; p_serie?: string }; Returns: string }
       registrar_log: {
         Args: {
           p_categoria: string
