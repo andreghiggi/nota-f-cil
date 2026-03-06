@@ -59,10 +59,11 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 
 const permissoesDisponiveis = [
-  { id: "emitir", label: "Emitir NFC-e", description: "Permite criar novas NFC-e" },
-  { id: "consultar", label: "Consultar", description: "Permite consultar status e listar NFC-e" },
-  { id: "cancelar", label: "Cancelar", description: "Permite cancelar NFC-e autorizadas" },
-  { id: "reprocessar", label: "Reprocessar", description: "Permite reprocessar NFC-e rejeitadas" },
+  { id: "emitir_nfce", label: "Emitir NFC-e", description: "Permite criar novas NFC-e" },
+  { id: "emitir_nfe", label: "Emitir NF-e", description: "Permite criar novas NF-e" },
+  { id: "consultar", label: "Consultar", description: "Permite consultar status e listar documentos fiscais" },
+  { id: "cancelar", label: "Cancelar", description: "Permite cancelar NFC-e e NF-e autorizadas" },
+  { id: "reprocessar", label: "Reprocessar", description: "Permite reprocessar documentos rejeitados" },
 ];
 
 const statusConfig = {
@@ -87,7 +88,7 @@ export default function Tokens() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newTokenName, setNewTokenName] = useState("");
   const [selectedEmpresa, setSelectedEmpresa] = useState("");
-  const [selectedPermissoes, setSelectedPermissoes] = useState<string[]>(["emitir", "consultar"]);
+  const [selectedPermissoes, setSelectedPermissoes] = useState<string[]>(["emitir_nfce", "emitir_nfe", "consultar"]);
   const [generatedToken, setGeneratedToken] = useState<string | null>(null);
   const [tokenCopied, setTokenCopied] = useState(false);
   const [deleteTokenId, setDeleteTokenId] = useState<string | null>(null);
@@ -121,7 +122,7 @@ export default function Tokens() {
     setIsCreateOpen(false);
     setNewTokenName("");
     setSelectedEmpresa("");
-    setSelectedPermissoes(["emitir", "consultar"]);
+    setSelectedPermissoes(["emitir_nfce", "emitir_nfe", "consultar"]);
     setGeneratedToken(null);
     setTokenCopied(false);
   };
@@ -210,7 +211,7 @@ export default function Tokens() {
                   <DialogHeader>
                     <DialogTitle>Criar Novo Token API</DialogTitle>
                     <DialogDescription>
-                      Crie um token para permitir que um ERP se conecte à API de emissão de NFC-e.
+                      Crie um token para permitir que um ERP se conecte à API de emissão de NF-e e NFC-e.
                     </DialogDescription>
                   </DialogHeader>
                   
@@ -346,7 +347,7 @@ export default function Tokens() {
             <div>
               <p className="text-sm font-medium text-foreground">Sobre os Tokens de API</p>
               <p className="text-sm text-muted-foreground mt-1">
-                Use estes tokens para autenticar requisições à API de emissão de NFC-e. 
+                Use estes tokens para autenticar requisições à API de emissão de NF-e e NFC-e. 
                 Cada token é vinculado a uma empresa e tem permissões específicas.
                 <Link to="/docs" className="text-primary hover:underline ml-1 inline-flex items-center gap-1">
                   Ver documentação da API
