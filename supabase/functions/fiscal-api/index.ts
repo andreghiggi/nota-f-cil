@@ -17,7 +17,7 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { action, empresa_id, nfce_id } = await req.json();
+    const { action, empresa_id, nfce_id, nfe_id } = await req.json();
 
     // ========================================================================
     // ACTION: register_empresa - Register company on fiscal API
