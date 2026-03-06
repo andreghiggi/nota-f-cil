@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import Empresas from "./pages/Empresas";
 import NFCe from "./pages/NFCe";
+import NFe from "./pages/NFe";
 import Certificados from "./pages/Certificados";
 import Tokens from "./pages/Tokens";
 import Webhooks from "./pages/Webhooks";
