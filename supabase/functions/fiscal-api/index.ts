@@ -434,8 +434,222 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ========================================================================
+    // ACTION: emit_nfe - Emit NF-e via fiscal API
+    // ========================================================================
+    if (action === 'emit_nfe') {
+      const nfe_id = (await req.json().catch(() => ({}))).nfe_id || (await Promise.resolve({ nfe_id: undefined })).nfe_id;
+      // We already parsed the body above, use the parsed nfe_id from the initial parse
+    }
+
+    // Re-check: emit_nfe uses same body parse
+    if (action === 'emit_nfe') {
+      const requestBody = { action, empresa_id, nfce_id };
+      const nfeId = (requestBody as any).nfe_id;
+
+      if (!nfeId) {
+        return new Response(
+          JSON.stringify({ error: 'nfe_id é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get NF-e data with items
+      const { data: nfe, error: nfeError } = await supabase
+        .from('nfe')
+        .select(`*, nfe_itens(*)`)
+        .eq('id', nfeId)
+        .single();
+
+      if (nfeError || !nfe) {
+        return new Response(
+          JSON.stringify({ error: 'NF-e não encontrada', details: nfeError?.message }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get empresa with fiscal API key
+      const { data: empresa, error: empresaError } = await supabase
+        .from('empresas')
+        .select('*')
+        .eq('id', nfe.empresa_id)
+        .single();
+
+      if (empresaError || !empresa) {
+        return new Response(
+          JSON.stringify({ error: 'Empresa não encontrada' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!empresa.api_key_fiscal) {
+        return new Response(
+          JSON.stringify({ error: 'Empresa não registrada na API fiscal. Registre primeiro.' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update status to processing
+      await supabase.from('nfe').update({ status: 'processando' }).eq('id', nfeId);
+
+      // Build items
+      const itensObj: Record<string, any> = {};
+      (nfe.nfe_itens || []).forEach((item: any, idx: number) => {
+        itensObj[String(idx)] = {
+          descricao: item.descricao,
+          quantidade: item.quantidade,
+          valor_unitario: item.valor_unitario,
+          codigo_produto: item.codigo_produto,
+          ncm: item.ncm,
+          cfop: item.cfop,
+          unidade: item.unidade,
+          cst_icms: item.cst_icms,
+          csosn: item.csosn,
+          aliquota_icms: item.aliquota_icms,
+          cst_ipi: item.cst_ipi,
+          aliquota_ipi: item.aliquota_ipi,
+          cst_pis: item.cst_pis,
+          aliquota_pis: item.aliquota_pis,
+          cst_cofins: item.cst_cofins,
+          aliquota_cofins: item.aliquota_cofins,
+        };
+      });
+
+      // Build destinatário
+      const destPayload: any = {};
+      if (nfe.dest_cpf_cnpj) {
+        if (nfe.dest_cpf_cnpj.length > 11) {
+          destPayload.CNPJ = nfe.dest_cpf_cnpj.replace(/\D/g, '');
+        } else {
+          destPayload.CPF = nfe.dest_cpf_cnpj.replace(/\D/g, '');
+        }
+      }
+      if (nfe.dest_nome) destPayload.xNome = nfe.dest_nome;
+      if (nfe.dest_ie) destPayload.IE = nfe.dest_ie;
+      if (nfe.dest_email) destPayload.email = nfe.dest_email;
+      if (nfe.dest_logradouro) {
+        destPayload.ender = {
+          xLgr: nfe.dest_logradouro,
+          nro: nfe.dest_numero || 'SN',
+          xBairro: nfe.dest_bairro || '',
+          cMun: nfe.dest_codigo_municipio || '',
+          xMun: nfe.dest_municipio || '',
+          UF: nfe.dest_uf || '',
+          CEP: (nfe.dest_cep || '').replace(/\D/g, ''),
+        };
+      }
+
+      const payload = {
+        api_key: empresa.api_key_fiscal,
+        ind_sinc: 1,
+        modelo: 55, // NF-e = modelo 55
+        nota: {
+          numero: parseInt(nfe.numero, 10).toString(),
+          serie: parseInt(nfe.serie, 10).toString(),
+          valor_total: nfe.valor_total,
+          natureza_operacao: nfe.natureza_operacao || 'VENDA',
+          finalidade: nfe.finalidade || '1',
+          modalidade_frete: nfe.modalidade_frete || '9',
+          destinatario: destPayload,
+          itens: itensObj,
+        },
+      };
+
+      console.log(`📡 Emitting NF-e ${nfe.numero} via fiscal API...`);
+
+      const emitUrl = `${FISCAL_API_BASE_URL}/nfe/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
+      const response = await fetch(emitUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Api-Key': empresa.api_key_fiscal,
+          'Authorization': `Bearer ${empresa.api_key_fiscal}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const responseText = await response.text();
+      console.log(`📡 Fiscal API NF-e emit response (status ${response.status}):`, responseText.substring(0, 500));
+
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        await supabase.from('nfe').update({
+          status: 'rejeitada',
+          erro_processamento: `API fiscal retornou resposta inválida (status ${response.status})`,
+          motivo_retorno: responseText.substring(0, 500),
+        }).eq('id', nfeId);
+
+        return new Response(
+          JSON.stringify({ error: 'API fiscal retornou resposta inválida', details: responseText.substring(0, 300) }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (!response.ok) {
+        await supabase.from('nfe').update({
+          status: 'rejeitada',
+          erro_processamento: responseData.error || 'Erro na API fiscal',
+          motivo_retorno: JSON.stringify(responseData),
+        }).eq('id', nfeId);
+
+        return new Response(
+          JSON.stringify({ error: 'Erro na emissão fiscal', details: responseData }),
+          { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Success - update NF-e
+      const validStatuses = ['pendente', 'processando', 'autorizada', 'rejeitada', 'cancelada', 'denegada', 'contingencia'];
+      const mappedStatus = validStatuses.includes(responseData.status) ? responseData.status : 'processando';
+      const updateData: any = { status: mappedStatus, processado_em: new Date().toISOString() };
+
+      const chaveAcesso = responseData.chave_acesso || responseData.chave || responseData.chNFe || responseData.key;
+      const protocolo = responseData.protocolo || responseData.nProt;
+      const codigoRetorno = responseData.codigo_retorno || responseData.cStat;
+      const motivoRetorno = responseData.motivo_retorno || responseData.xMotivo;
+      const xmlRetorno = responseData.xml_retorno || responseData.xml;
+      const dataAutorizacao = responseData.data_autorizacao || responseData.dhRecbto;
+
+      if (chaveAcesso) updateData.chave_acesso = chaveAcesso;
+      if (protocolo) updateData.protocolo = protocolo;
+      if (codigoRetorno) updateData.codigo_retorno = codigoRetorno;
+      if (motivoRetorno) updateData.motivo_retorno = motivoRetorno;
+      if (xmlRetorno) updateData.xml_retorno = xmlRetorno;
+      if (dataAutorizacao) updateData.data_autorizacao = dataAutorizacao;
+
+      // Extract data_autorizacao from XML if not present
+      if (!dataAutorizacao && xmlRetorno) {
+        try {
+          let xmlStr = xmlRetorno;
+          if (!xmlStr.startsWith('<')) xmlStr = atob(xmlStr);
+          const dhMatch = xmlStr.match(/<dhRecbto>(.*?)<\/dhRecbto>/);
+          if (dhMatch) updateData.data_autorizacao = dhMatch[1];
+        } catch {}
+      }
+
+      await supabase.from('nfe').update(updateData).eq('id', nfeId);
+
+      // Log success
+      await supabase.rpc('registrar_log', {
+        p_empresa_id: nfe.empresa_id,
+        p_nfce_id: nfeId,
+        p_token_api_id: nfe.token_api_id || empresa.id,
+        p_tipo: 'sucesso',
+        p_categoria: 'emissao',
+        p_mensagem: `NF-e ${nfe.numero} ${updateData.status} via API fiscal`,
+        p_detalhes: { protocolo, chave_acesso: chaveAcesso, tipo: 'nfe' },
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, data: { ...updateData, id: nfeId } }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce' }),
+      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
