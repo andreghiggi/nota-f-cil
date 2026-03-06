@@ -585,6 +585,93 @@ export function useLogsFiscais(filters?: { empresaId?: string; tipo?: string; li
   });
 }
 
+// Series Fiscais hooks
+export interface SerieFiscal {
+  id: string;
+  empresa_id: string;
+  tipo: 'nfe' | 'nfce';
+  serie: string;
+  numero_atual: number;
+  ativo: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export function useSeriesFiscais(empresaId?: string) {
+  return useQuery({
+    queryKey: ['series-fiscais', empresaId],
+    queryFn: async () => {
+      let query = supabase
+        .from('series_fiscais')
+        .select('*')
+        .order('tipo', { ascending: true })
+        .order('serie', { ascending: true });
+      
+      if (empresaId) {
+        query = query.eq('empresa_id', empresaId);
+      }
+      
+      const { data, error } = await query;
+      if (error) throw error;
+      return data as SerieFiscal[];
+    },
+    enabled: !!empresaId
+  });
+}
+
+export function useCreateSerieFiscal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (serie: { empresa_id: string; tipo: 'nfe' | 'nfce'; serie: string; numero_atual?: number }) => {
+      const { data, error } = await supabase
+        .from('series_fiscais')
+        .insert(serie)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as SerieFiscal;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['series-fiscais'] });
+    }
+  });
+}
+
+export function useUpdateSerieFiscal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...data }: { id: string; numero_atual?: number; ativo?: boolean; serie?: string }) => {
+      const { data: result, error } = await supabase
+        .from('series_fiscais')
+        .update(data)
+        .eq('id', id)
+        .select()
+        .single();
+      if (error) throw error;
+      return result as SerieFiscal;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['series-fiscais'] });
+    }
+  });
+}
+
+export function useDeleteSerieFiscal() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('series_fiscais')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['series-fiscais'] });
+    }
+  });
+}
+
 // Dashboard stats
 export function useDashboardStats() {
   return useQuery({

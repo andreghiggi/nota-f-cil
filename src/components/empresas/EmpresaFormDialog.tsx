@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Building2, FileText, Settings, Search, MapPin } from "lucide-react";
+import { SeriesFiscaisManager } from "./SeriesFiscaisManager";
 import { toast } from "sonner";
 import { useCreateEmpresa, useUpdateEmpresa, Empresa } from "@/hooks/useSupabaseData";
 
@@ -726,56 +727,63 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
               </TabsContent>
 
               <TabsContent value="nfe" className="space-y-4 mt-4">
-                <FormField
-                  control={form.control}
-                  name="serie_nfe"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Série NF-e *</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="001" 
-                          maxLength={3}
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3).padStart(3, '0'))}
-                        />
-                      </FormControl>
-                      <FormDescription>Série padrão para emissão de NF-e (modelo 55)</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {isEditing && empresa ? (
+                  <SeriesFiscaisManager empresaId={empresa.id} tipo="nfe" />
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name="serie_nfe"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Série NF-e Inicial *</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="001" 
+                            maxLength={3}
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3).padStart(3, '0'))}
+                          />
+                        </FormControl>
+                        <FormDescription>Série inicial para emissão de NF-e. Após o cadastro, você poderá gerenciar múltiplas séries.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
                   <h4 className="font-medium text-foreground mb-2">Configurações NF-e</h4>
                   <p className="text-sm text-muted-foreground">
                     A NF-e (modelo 55) utiliza o mesmo certificado digital A1 e ambiente (homologação/produção) 
-                    configurados na aba Fiscal. Certifique-se de que o certificado digital está válido e o 
-                    ambiente correto está selecionado antes de emitir NF-e.
+                    configurados na aba Fiscal. {isEditing ? "Gerencie as séries e numeração acima." : "Após o cadastro, edite a empresa para gerenciar múltiplas séries e numeração."}
                   </p>
                 </div>
               </TabsContent>
 
               <TabsContent value="nfce" className="space-y-4 mt-4">
-                <FormField
-                  control={form.control}
-                  name="serie_nfce"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Série NFC-e *</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="001" 
-                          maxLength={3}
-                          {...field}
-                          onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3).padStart(3, '0'))}
-                        />
-                      </FormControl>
-                      <FormDescription>Série padrão para emissão de NFC-e</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                {isEditing && empresa ? (
+                  <SeriesFiscaisManager empresaId={empresa.id} tipo="nfce" />
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name="serie_nfce"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Série NFC-e Inicial *</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="001" 
+                            maxLength={3}
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3).padStart(3, '0'))}
+                          />
+                        </FormControl>
+                        <FormDescription>Série inicial para NFC-e. Após o cadastro, gerencie múltiplas séries.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
                   <h4 className="font-medium text-foreground mb-2">CSC - Código de Segurança do Contribuinte</h4>
