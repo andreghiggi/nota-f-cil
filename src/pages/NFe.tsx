@@ -206,14 +206,15 @@ export default function NFe() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border bg-muted/30">
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">NF-e</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Chave de Acesso</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Destinatário</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Empresa</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Valor</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Status</th>
-                    <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Data/Hora</th>
-                    <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Ações</th>
+                     <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">NF-e</th>
+                     <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Chave de Acesso</th>
+                     <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Destinatário</th>
+                     <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Empresa</th>
+                     <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Valor</th>
+                     <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Ambiente</th>
+                     <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Status</th>
+                     <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Data/Hora</th>
+                     <th className="text-right text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">Ações</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -259,6 +260,17 @@ export default function NFe() {
                           {formatCurrency(nfe.valor_total)}
                         </p>
                       </td>
+                      <td className="px-5 py-4">
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 text-sm",
+                          nfe.ambiente === "producao" ? "text-success" : "text-warning"
+                        )}>
+                          <span className={cn(
+                            "h-2 w-2 rounded-full",
+                            nfe.ambiente === "producao" ? "bg-success" : "bg-warning"
+                          )} />
+                          {nfe.ambiente === "producao" ? "Produção" : "Homologação"}
+                        </span>
                       <td className="px-5 py-4">
                         <div>
                           <span className={cn("status-badge", statusStyles[nfe.status] || "")}>
