@@ -166,7 +166,7 @@ Deno.serve(async (req) => {
           empresa_id,
           token_api_id: token_id,
           numero: numeroData,
-          serie: empresaData?.serie_nfe || '001',
+          serie: serieNfe,
           status: 'pendente',
           ambiente,
           valor_total: valorTotal,
