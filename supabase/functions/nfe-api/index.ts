@@ -124,21 +124,26 @@ Deno.serve(async (req) => {
         );
       }
 
-      const { data: numeroData, error: numeroError } = await supabase
-        .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id });
-
-      if (numeroError) {
-        return new Response(
-          JSON.stringify({ error: 'Failed to generate NF-e number', code: 'INTERNAL_ERROR' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
       const { data: empresaData } = await supabase
         .from('empresas')
         .select('serie_nfe, uf')
         .eq('id', empresa_id)
         .single();
+
+      const serieNfe = empresaData?.serie_nfe || '001';
+
+      const { data: numeroData, error: numeroError } = await supabase
+        .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id, p_serie: serieNfe });
+
+      if (numeroError) {
+        console.error('gerar_numero_nfe error:', JSON.stringify(numeroError));
+        return new Response(
+          JSON.stringify({ error: 'Failed to generate NF-e number', code: 'INTERNAL_ERROR', details: numeroError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // empresaData already fetched above
 
       let valorProdutos = 0, valorIcms = 0, valorIpi = 0, valorPis = 0, valorCofins = 0;
       for (const item of payload.itens) {
@@ -161,7 +166,7 @@ Deno.serve(async (req) => {
           empresa_id,
           token_api_id: token_id,
           numero: numeroData,
-          serie: empresaData?.serie_nfe || '001',
+          serie: serieNfe,
           status: 'pendente',
           ambiente,
           valor_total: valorTotal,
