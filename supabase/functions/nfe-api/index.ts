@@ -143,11 +143,7 @@ Deno.serve(async (req) => {
         );
       }
 
-      const { data: empresaData } = await supabase
-        .from('empresas')
-        .select('serie_nfe, uf')
-        .eq('id', empresa_id)
-        .single();
+      // empresaData already fetched above
 
       let valorProdutos = 0, valorIcms = 0, valorIpi = 0, valorPis = 0, valorCofins = 0;
       for (const item of payload.itens) {
