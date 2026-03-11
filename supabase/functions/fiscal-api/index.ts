@@ -482,6 +482,30 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Get certificate data to send along with emission
+      const { data: certificado } = await supabase
+        .from('certificados_digitais')
+        .select('*')
+        .eq('empresa_id', nfe.empresa_id)
+        .single();
+
+      let certificadoBase64: string | null = null;
+      if (certificado?.arquivo_path) {
+        const { data: fileData, error: fileError } = await supabase.storage
+          .from('certificados')
+          .download(certificado.arquivo_path);
+        if (!fileError && fileData) {
+          const arrayBuffer = await fileData.arrayBuffer();
+          const bytes = new Uint8Array(arrayBuffer);
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) {
+            binary += String.fromCharCode(bytes[i]);
+          }
+          certificadoBase64 = btoa(binary);
+          console.log(`📎 Certificate loaded for NF-e emission (${bytes.length} bytes)`);
+        }
+      }
+
       // Update status to processing
       await supabase.from('nfe').update({ status: 'processando' }).eq('id', nfeId);
 
@@ -532,7 +556,7 @@ Deno.serve(async (req) => {
         };
       }
 
-      const payload = {
+      const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
         modelo: 55, // NF-e = modelo 55
@@ -547,6 +571,14 @@ Deno.serve(async (req) => {
           itens: itensObj,
         },
       };
+
+      // Include certificate in emission payload to avoid PHP-side certificate loading issues
+      if (certificadoBase64) {
+        payload.certificado = {
+          pfx_base64: certificadoBase64,
+          senha: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
+        };
+      }
 
       console.log(`📡 Emitting NF-e ${nfe.numero} via fiscal API (modelo 55, using /nfce/emitir endpoint)...`);
       console.log(`   Payload: ${JSON.stringify(payload).substring(0, 500)}...`);
