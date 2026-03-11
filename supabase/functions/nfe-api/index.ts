@@ -108,7 +108,7 @@ Deno.serve(async (req) => {
 
     // POST /nfe-api - Emit new NF-e
     if (method === 'POST' && pathParts.length === 1 && pathParts[0] === 'nfe-api') {
-      if (!permissoes.includes('emitir')) {
+      if (!permissoes.includes('emitir') && !permissoes.includes('emitir_nfe')) {
         return new Response(
           JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
