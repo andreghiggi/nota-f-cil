@@ -124,12 +124,21 @@ Deno.serve(async (req) => {
         );
       }
 
+      const { data: empresaData } = await supabase
+        .from('empresas')
+        .select('serie_nfe, uf')
+        .eq('id', empresa_id)
+        .single();
+
+      const serieNfe = empresaData?.serie_nfe || '001';
+
       const { data: numeroData, error: numeroError } = await supabase
-        .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id });
+        .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id, p_serie: serieNfe });
 
       if (numeroError) {
+        console.error('gerar_numero_nfe error:', JSON.stringify(numeroError));
         return new Response(
-          JSON.stringify({ error: 'Failed to generate NF-e number', code: 'INTERNAL_ERROR' }),
+          JSON.stringify({ error: 'Failed to generate NF-e number', code: 'INTERNAL_ERROR', details: numeroError.message }),
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
