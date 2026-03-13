@@ -75,10 +75,37 @@ Deno.serve(async (req) => {
         'lucro_real': 3,
       };
 
-      // Build payload in the format expected by the PHP API
+      // Build payload in the format expected by the PHP API (flat structure)
       const registerBody = {
         api_key: apiKeyFiscal,
 
+        // Flat fields expected by PHP
+        razao_social: empresa.razao_social,
+        cnpj: empresa.cnpj,
+        tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
+        siglaUF: empresa.uf,
+        CSC: empresa.csc_token || '',
+        CSCid: empresa.csc_id || '',
+
+        // Certificate - flat
+        certificado_base64: certificadoBase64 || '',
+        certificado_senha: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
+
+        // Emitente
+        IE: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
+        CRT: crtMap[empresa.regime_tributario] || 1,
+        CNAE: empresa.cnae_principal || '',
+        xNome: empresa.razao_social,
+        xFant: empresa.nome_fantasia || empresa.razao_social,
+        xLgr: empresa.logradouro || '',
+        nro: empresa.numero || '',
+        xBairro: empresa.bairro || '',
+        cMun: empresa.codigo_municipio || '',
+        xMun: empresa.municipio,
+        UF: empresa.uf,
+        CEP: (empresa.cep || '').replace(/\D/g, ''),
+
+        // Also send nested structure for backward compatibility
         sped_config: {
           tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
           razaosocial: empresa.razao_social,
@@ -114,8 +141,9 @@ Deno.serve(async (req) => {
       console.log(`📡 Registering empresa ${empresa.cnpj} on fiscal API...`);
       console.log(`   Has certificate: ${!!certificadoBase64}`);
       console.log(`   Has CSC: ${!!empresa.csc_token}`);
-      console.log(`   Ambiente: ${registerBody.sped_config.tpAmb} (${empresa.ambiente})`);
-      console.log(`   CRT: ${registerBody.emitente.CRT}`);
+      console.log(`   Ambiente: ${registerBody.tpAmb} (${empresa.ambiente})`);
+      console.log(`   CRT: ${registerBody.CRT}`);
+      console.log(`   cMun: ${registerBody.cMun}`);
       console.log(`   Full payload: ${JSON.stringify(registerBody).substring(0, 1000)}`);
       
       const response = await fetch(`${FISCAL_API_BASE_URL}/empresa/cadastrar`, {
