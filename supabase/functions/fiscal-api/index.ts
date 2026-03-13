@@ -571,6 +571,12 @@ Deno.serve(async (req) => {
           destinatario: destPayload,
           itens: itensObj,
         },
+        // Include emitente data to ensure PHP uses correct municipality code
+        emitente: {
+          cMun: empresa.codigo_municipio || '',
+          xMun: empresa.municipio || '',
+          UF: empresa.uf || '',
+        },
       };
 
       // Include certificate in emission payload to avoid PHP-side certificate loading issues
