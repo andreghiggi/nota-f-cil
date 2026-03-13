@@ -81,29 +81,28 @@ Deno.serve(async (req) => {
 
         // Flat fields expected by PHP
         razao_social: empresa.razao_social,
+        nome_fantasia: empresa.nome_fantasia || empresa.razao_social,
         cnpj: empresa.cnpj,
         tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
         siglaUF: empresa.uf,
         CSC: empresa.csc_token || '',
         CSCid: empresa.csc_id || '',
 
-        // Certificate - flat
+        // Certificate - flat (PHP expects senha_certificado)
         certificado_base64: certificadoBase64 || '',
-        certificado_senha: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
+        senha_certificado: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
 
-        // Emitente
-        IE: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
-        CRT: crtMap[empresa.regime_tributario] || 1,
-        CNAE: empresa.cnae_principal || '',
-        xNome: empresa.razao_social,
-        xFant: empresa.nome_fantasia || empresa.razao_social,
-        xLgr: empresa.logradouro || '',
-        nro: empresa.numero || '',
-        xBairro: empresa.bairro || '',
-        cMun: empresa.codigo_municipio || '',
-        xMun: empresa.municipio,
-        UF: empresa.uf,
-        CEP: (empresa.cep || '').replace(/\D/g, ''),
+        // Emitente - lowercase field names as PHP expects
+        ie: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
+        crt: crtMap[empresa.regime_tributario] || 1,
+        cnae: empresa.cnae_principal || '',
+        logradouro: empresa.logradouro || '',
+        numero: empresa.numero || '',
+        bairro: empresa.bairro || '',
+        codigo_municipio: empresa.codigo_municipio || '',
+        municipio: empresa.municipio,
+        uf: empresa.uf,
+        cep: (empresa.cep || '').replace(/\D/g, ''),
 
         // Also send nested structure for backward compatibility
         sped_config: {
@@ -140,10 +139,7 @@ Deno.serve(async (req) => {
 
       console.log(`📡 Registering empresa ${empresa.cnpj} on fiscal API...`);
       console.log(`   Has certificate: ${!!certificadoBase64}`);
-      console.log(`   Has CSC: ${!!empresa.csc_token}`);
-      console.log(`   Ambiente: ${registerBody.tpAmb} (${empresa.ambiente})`);
-      console.log(`   CRT: ${registerBody.CRT}`);
-      console.log(`   cMun: ${registerBody.cMun}`);
+      console.log(`   codigo_municipio: ${registerBody.codigo_municipio}`);
       console.log(`   Full payload: ${JSON.stringify(registerBody).substring(0, 1000)}`);
       
       const response = await fetch(`${FISCAL_API_BASE_URL}/empresa/cadastrar`, {
