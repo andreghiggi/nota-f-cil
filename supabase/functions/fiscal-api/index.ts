@@ -99,6 +99,8 @@ Deno.serve(async (req) => {
         logradouro: empresa.logradouro || '',
         numero: empresa.numero || '',
         bairro: empresa.bairro || '',
+        cMun: empresa.codigo_municipio || '',
+        xMun: empresa.municipio,
         codigo_municipio: empresa.codigo_municipio || '',
         municipio: empresa.municipio,
         uf: empresa.uf,
