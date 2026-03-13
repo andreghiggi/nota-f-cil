@@ -10,261 +10,250 @@ export const danfePrintStyles = `
     background: #fff;
   }
 
-  .danfe {
-    border: 2px solid #000;
+  .danfe-page {
     width: 100%;
   }
 
-  /* Row layout */
-  .danfe-row {
-    display: flex;
-    border-bottom: 1px solid #000;
-  }
-  .danfe-row:last-child {
-    border-bottom: none;
+  table {
+    width: 100%;
+    border-collapse: collapse;
   }
 
-  /* Cell */
-  .danfe-cell {
-    border-right: 1px solid #000;
-    padding: 2px 4px;
-    min-height: 20px;
-    position: relative;
-  }
-  .danfe-cell:last-child {
-    border-right: none;
+  table td, table th {
+    border: 1px solid #000;
+    vertical-align: top;
+    padding: 0;
   }
 
-  .danfe-cell-label {
+  table.no-top td {
+    border-top: none;
+  }
+
+  .nf-label {
+    display: block;
     font-size: 5.5pt;
     color: #333;
+    padding: 1px 3px 0 3px;
+    line-height: 1.1;
     text-transform: uppercase;
-    line-height: 1;
-    margin-bottom: 1px;
   }
 
-  .danfe-cell-value {
+  .nf-info {
+    display: block;
     font-size: 8pt;
-    font-weight: normal;
+    padding: 0 3px 2px 3px;
     line-height: 1.2;
-    word-break: break-word;
   }
 
-  .danfe-cell-value-lg {
+  .nf-info-lg {
+    display: block;
     font-size: 10pt;
     font-weight: bold;
+    padding: 0 3px 2px 3px;
+    line-height: 1.2;
   }
 
-  /* Header area */
-  .danfe-header {
-    display: flex;
-    border-bottom: 2px solid #000;
-  }
-
-  .danfe-header-emitente {
-    width: 40%;
-    border-right: 1px solid #000;
-    padding: 4px 6px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .danfe-header-emitente-nome {
-    font-size: 11pt;
-    font-weight: bold;
-    text-align: center;
-    margin-bottom: 2px;
-  }
-
-  .danfe-header-emitente-fantasia {
+  .nf-info-right {
+    display: block;
     font-size: 8pt;
-    text-align: center;
-    margin-bottom: 2px;
+    padding: 0 3px 2px 3px;
+    line-height: 1.2;
+    text-align: right;
   }
 
-  .danfe-header-emitente-endereco {
-    font-size: 7pt;
+  /* Black side labels */
+  .black-label {
+    background: #000;
+    color: #fff;
     text-align: center;
-    line-height: 1.3;
+    font-size: 6pt;
+    font-weight: bold;
+    width: 7mm !important;
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    letter-spacing: 0.5px;
+    padding: 2px !important;
+    line-height: 1;
   }
 
-  .danfe-header-danfe {
-    width: 22%;
-    border-right: 1px solid #000;
-    padding: 4px;
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .danfe-header-danfe-title {
+  /* Header */
+  .danfe-title {
     font-size: 14pt;
     font-weight: bold;
     letter-spacing: 2px;
+    text-align: center;
+    margin: 2px 0;
   }
 
-  .danfe-header-danfe-desc {
-    font-size: 6pt;
-    margin: 2px 0;
+  .danfe-subtitle {
+    font-size: 6.5pt;
+    text-align: center;
     line-height: 1.2;
+    margin: 1px 0;
   }
 
-  .danfe-header-danfe-entrada {
-    font-size: 8pt;
-    margin: 2px 0;
+  .danfe-es {
+    text-align: center;
+    margin: 4px 0 2px 0;
+    font-size: 7.5pt;
   }
 
-  .danfe-header-danfe-entrada-box {
+  .danfe-es .box-number {
     display: inline-block;
     border: 1px solid #000;
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     text-align: center;
     font-weight: bold;
-    font-size: 10pt;
-    line-height: 14px;
-    margin-left: 4px;
+    font-size: 11pt;
+    line-height: 16px;
+    vertical-align: middle;
+    margin-right: 4px;
   }
 
-  .danfe-header-danfe-numero {
+  .danfe-es .legenda {
+    display: inline-block;
+    font-size: 6.5pt;
+    text-align: left;
+    vertical-align: middle;
+    line-height: 1.3;
+  }
+
+  .danfe-num {
+    text-align: center;
     font-size: 10pt;
     font-weight: bold;
-    margin-top: 2px;
+    margin: 2px 0;
   }
 
-  .danfe-header-chave {
-    width: 38%;
-    padding: 4px 6px;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-  }
-
-  .danfe-header-chave-barcode {
+  .danfe-serie-page {
     text-align: center;
+    font-size: 8pt;
+    margin: 1px 0;
+  }
+
+  .company-name {
+    font-size: 10pt;
+    font-weight: bold;
+    text-align: center;
+    padding: 2px 4px;
+  }
+
+  .company-info {
     font-size: 7pt;
-    font-family: 'Libre Barcode 128', 'IDAutomationHC39M', monospace;
-    font-size: 28pt;
-    letter-spacing: 0;
-    margin-bottom: 2px;
-    line-height: 1;
+    text-align: center;
+    line-height: 1.3;
+    padding: 0 4px 2px 4px;
   }
 
-  .danfe-header-chave-label {
+  .chave-box {
+    padding: 4px;
+  }
+
+  .chave-barcode {
+    text-align: center;
+    height: 10mm;
+    overflow: hidden;
+    margin-bottom: 2px;
+    font-family: 'Libre Barcode 128', monospace;
+    font-size: 30pt;
+    line-height: 10mm;
+  }
+
+  .chave-label {
     font-size: 5.5pt;
     text-align: center;
+    text-transform: uppercase;
     margin-bottom: 1px;
   }
 
-  .danfe-header-chave-value {
-    font-size: 7pt;
+  .chave-value {
+    font-size: 7.5pt;
     text-align: center;
-    font-family: monospace;
+    font-family: 'Courier New', monospace;
     word-break: break-all;
-    letter-spacing: 0.5px;
+    letter-spacing: 1px;
+    padding: 1px 2px;
   }
 
-  .danfe-header-chave-consulta {
+  .chave-consulta {
     font-size: 6pt;
     text-align: center;
     margin-top: 4px;
     line-height: 1.2;
+    padding: 2px;
+    border-top: 1px solid #000;
   }
 
-  /* Section titles */
-  .danfe-section-title {
-    background: #e8e8e8;
-    font-size: 6.5pt;
-    font-weight: bold;
-    padding: 1px 4px;
-    text-transform: uppercase;
-    border-bottom: 1px solid #000;
-    text-align: center;
+  /* Recibo */
+  .recibo-area {
+    margin-bottom: 2px;
+  }
+
+  .hr-dashed {
+    border: none;
+    border-top: 1px dashed #000;
+    margin: 3px 0;
   }
 
   /* Products table */
-  .danfe-products {
-    width: 100%;
-    border-collapse: collapse;
-  }
-  .danfe-products th {
+  .products-header td {
     background: #e8e8e8;
-    font-size: 5.5pt;
+    font-size: 5pt;
     font-weight: bold;
-    padding: 1px 2px;
-    border: 1px solid #000;
-    border-top: none;
     text-align: center;
+    padding: 1px 1px !important;
     text-transform: uppercase;
+    border: 1px solid #000;
   }
-  .danfe-products td {
-    font-size: 7pt;
-    padding: 1px 2px;
+
+  .products-body td {
+    font-size: 6.5pt;
+    padding: 1px 2px !important;
     border-left: 1px solid #000;
     border-right: 1px solid #000;
-    border-bottom: 1px solid #ccc;
-    vertical-align: top;
+    border-bottom: 1px solid #ddd;
   }
-  .danfe-products td.right {
+
+  .products-body td.right {
     text-align: right;
   }
-  .danfe-products td.center {
+
+  .products-body td.center {
     text-align: center;
   }
 
-  /* Totals grid */
-  .danfe-totals-grid {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-  }
-  .danfe-totals-grid .danfe-cell {
-    border-bottom: none;
-  }
-
-  /* Transport */
-  .danfe-transport-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
-  }
-
-  /* Flex helpers */
-  .flex-2 { flex: 2; }
-  .flex-3 { flex: 3; }
-  .flex-4 { flex: 4; }
-  .flex-5 { flex: 5; }
-  .flex-1 { flex: 1; }
-  .text-right { text-align: right; }
-  .text-center { text-align: center; }
-  .bold { font-weight: bold; }
-
-  /* Homologação banner */
-  .danfe-homolog {
+  /* Homologação */
+  .homolog-banner {
     background: #fff3cd;
     border: 2px solid #856404;
     text-align: center;
     font-weight: bold;
     font-size: 9pt;
     padding: 3px;
-    margin-bottom: 0;
+    margin-bottom: 2px;
   }
 
-  /* Status footer */
-  .danfe-status {
+  /* Info adicional */
+  .info-adicional {
+    min-height: 20mm;
+    padding: 0;
+  }
+
+  .info-adicional td {
+    vertical-align: top;
+  }
+
+  /* Status */
+  .status-footer {
     text-align: center;
     font-weight: bold;
     font-size: 9pt;
-    padding: 4px;
+    padding: 3px;
+    border: 2px solid #000;
     border-top: 2px solid #000;
-  }
-
-  .danfe-info-complementar {
-    min-height: 40px;
-    padding: 3px 4px;
-    font-size: 6.5pt;
-    line-height: 1.3;
+    margin-top: -1px;
   }
 
   @media print {
