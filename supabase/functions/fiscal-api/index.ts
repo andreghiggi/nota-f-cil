@@ -604,6 +604,11 @@ Deno.serve(async (req) => {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
         modelo: 55, // NF-e = modelo 55
+        // Emitente data flat for PHP to override registered values
+        cMun: empresa.codigo_municipio || '',
+        xMun: empresa.municipio || '',
+        codigo_municipio: empresa.codigo_municipio || '',
+        municipio: empresa.municipio || '',
         nota: {
           numero: parseInt(nfe.numero, 10).toString(),
           serie: parseInt(nfe.serie, 10).toString(),
@@ -614,11 +619,12 @@ Deno.serve(async (req) => {
           destinatario: destPayload,
           itens: itensObj,
         },
-        // Include emitente data to ensure PHP uses correct municipality code
+        // Include emitente data nested as well
         emitente: {
           cMun: empresa.codigo_municipio || '',
           xMun: empresa.municipio || '',
           UF: empresa.uf || '',
+          IE: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
         },
       };
 
