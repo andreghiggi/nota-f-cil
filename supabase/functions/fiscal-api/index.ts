@@ -75,10 +75,38 @@ Deno.serve(async (req) => {
         'lucro_real': 3,
       };
 
-      // Build payload in the format expected by the PHP API
+      // Build payload in the format expected by the PHP API (flat structure)
       const registerBody = {
         api_key: apiKeyFiscal,
 
+        // Flat fields expected by PHP
+        razao_social: empresa.razao_social,
+        nome_fantasia: empresa.nome_fantasia || empresa.razao_social,
+        cnpj: empresa.cnpj,
+        tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
+        siglaUF: empresa.uf,
+        CSC: empresa.csc_token || '',
+        CSCid: empresa.csc_id || '',
+
+        // Certificate - flat (PHP expects senha_certificado)
+        certificado_base64: certificadoBase64 || '',
+        senha_certificado: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
+
+        // Emitente - lowercase field names as PHP expects
+        ie: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
+        crt: crtMap[empresa.regime_tributario] || 1,
+        cnae: empresa.cnae_principal || '',
+        logradouro: empresa.logradouro || '',
+        numero: empresa.numero || '',
+        bairro: empresa.bairro || '',
+        cMun: empresa.codigo_municipio || '',
+        xMun: empresa.municipio,
+        codigo_municipio: empresa.codigo_municipio || '',
+        municipio: empresa.municipio,
+        uf: empresa.uf,
+        cep: (empresa.cep || '').replace(/\D/g, ''),
+
+        // Also send nested structure for backward compatibility
         sped_config: {
           tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
           razaosocial: empresa.razao_social,
@@ -113,26 +141,41 @@ Deno.serve(async (req) => {
 
       console.log(`📡 Registering empresa ${empresa.cnpj} on fiscal API...`);
       console.log(`   Has certificate: ${!!certificadoBase64}`);
-      console.log(`   Has CSC: ${!!empresa.csc_token}`);
-      console.log(`   Ambiente: ${registerBody.sped_config.tpAmb} (${empresa.ambiente})`);
-      console.log(`   CRT: ${registerBody.emitente.CRT}`);
+      console.log(`   codigo_municipio: ${registerBody.codigo_municipio}`);
       console.log(`   Full payload: ${JSON.stringify(registerBody).substring(0, 1000)}`);
       
-      const response = await fetch(`${FISCAL_API_BASE_URL}/empresa/cadastrar`, {
+      const registerUrl = `${FISCAL_API_BASE_URL}/empresa/cadastrar`;
+      console.log(`   Register URL: ${registerUrl}`);
+      
+      let response = await fetch(registerUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(registerBody),
       });
       
-      const responseText = await response.text();
+      let responseText = await response.text();
       console.log(`   Response status: ${response.status}`);
-      console.log(`   Response body: ${responseText}`);
+      console.log(`   Response body: ${responseText.substring(0, 500)}`);
+
+      // If duplicate entry, try to update instead
+      if (responseText.includes('Duplicate entry') || responseText.includes('1062')) {
+        console.log(`   ⚠️ Empresa already exists, trying /empresa/atualizar...`);
+        const updateResponse = await fetch(`${FISCAL_API_BASE_URL}/empresa/atualizar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(registerBody),
+        });
+        responseText = await updateResponse.text();
+        response = updateResponse;
+        console.log(`   Update response status: ${response.status}`);
+        console.log(`   Update response body: ${responseText.substring(0, 500)}`);
+      }
 
       let responseData: any;
       const isHtml = responseText.trim().startsWith('<') || responseText.includes('Fatal error') || responseText.includes('Warning:');
       
       if (isHtml) {
-        console.error(`❌ PHP Fatal Error detected in response:`, responseText.substring(0, 800));
+        console.error(`❌ PHP Error detected in response:`, responseText.substring(0, 800));
         return new Response(
           JSON.stringify({ 
             error: 'Erro fatal na API fiscal (PHP)', 
@@ -561,6 +604,11 @@ Deno.serve(async (req) => {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
         modelo: 55, // NF-e = modelo 55
+        // Emitente data flat for PHP to override registered values
+        cMun: empresa.codigo_municipio || '',
+        xMun: empresa.municipio || '',
+        codigo_municipio: empresa.codigo_municipio || '',
+        municipio: empresa.municipio || '',
         nota: {
           numero: parseInt(nfe.numero, 10).toString(),
           serie: parseInt(nfe.serie, 10).toString(),
@@ -570,6 +618,13 @@ Deno.serve(async (req) => {
           modalidade_frete: nfe.modalidade_frete || '9',
           destinatario: destPayload,
           itens: itensObj,
+        },
+        // Include emitente data nested as well
+        emitente: {
+          cMun: empresa.codigo_municipio || '',
+          xMun: empresa.municipio || '',
+          UF: empresa.uf || '',
+          IE: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
         },
       };
 

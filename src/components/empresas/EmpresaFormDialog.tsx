@@ -294,7 +294,28 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       form.setValue("cep", data.cep ? formatCEP(data.cep) : "");
       form.setValue("uf", data.uf || "SP");
       form.setValue("municipio", data.municipio || "");
-      form.setValue("codigo_municipio", data.codigo_municipio?.toString().padStart(7, '0') || "");
+      
+      // BrasilAPI retorna codigo_municipio SIAFI (Receita Federal), não IBGE
+      // Precisamos converter para IBGE buscando pelo nome do município + UF
+      let codigoIBGE = "";
+      if (data.uf && data.municipio) {
+        try {
+          const ibgeResponse = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${data.uf}/municipios`);
+          if (ibgeResponse.ok) {
+            const municipios = await ibgeResponse.json();
+            const found = municipios.find((m: any) => 
+              m.nome.toUpperCase() === data.municipio.toUpperCase()
+            );
+            if (found) {
+              codigoIBGE = found.id.toString();
+            }
+          }
+        } catch (e) {
+          console.warn("Erro ao buscar código IBGE do município:", e);
+        }
+      }
+      // Fallback: usar o codigo_municipio da BrasilAPI (SIAFI) se não encontrar IBGE
+      form.setValue("codigo_municipio", codigoIBGE || data.codigo_municipio?.toString() || "");
       
       // Telefone
       if (data.ddd_telefone_1) {
