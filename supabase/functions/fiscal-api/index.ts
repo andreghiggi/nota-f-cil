@@ -516,6 +516,7 @@ Deno.serve(async (req) => {
           descricao: item.descricao,
           quantidade: item.quantidade,
           valor_unitario: item.valor_unitario,
+          valor_total: item.valor_total || (item.quantidade * item.valor_unitario),
           codigo_produto: item.codigo_produto,
           ncm: item.ncm,
           cfop: item.cfop,
