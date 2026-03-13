@@ -144,21 +144,38 @@ Deno.serve(async (req) => {
       console.log(`   codigo_municipio: ${registerBody.codigo_municipio}`);
       console.log(`   Full payload: ${JSON.stringify(registerBody).substring(0, 1000)}`);
       
-      const response = await fetch(`${FISCAL_API_BASE_URL}/empresa/cadastrar`, {
+      const registerUrl = `${FISCAL_API_BASE_URL}/empresa/cadastrar`;
+      console.log(`   Register URL: ${registerUrl}`);
+      
+      let response = await fetch(registerUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(registerBody),
       });
       
-      const responseText = await response.text();
+      let responseText = await response.text();
       console.log(`   Response status: ${response.status}`);
-      console.log(`   Response body: ${responseText}`);
+      console.log(`   Response body: ${responseText.substring(0, 500)}`);
+
+      // If duplicate entry, try to update instead
+      if (responseText.includes('Duplicate entry') || responseText.includes('1062')) {
+        console.log(`   ⚠️ Empresa already exists, trying /empresa/atualizar...`);
+        const updateResponse = await fetch(`${FISCAL_API_BASE_URL}/empresa/atualizar`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(registerBody),
+        });
+        responseText = await updateResponse.text();
+        response = updateResponse;
+        console.log(`   Update response status: ${response.status}`);
+        console.log(`   Update response body: ${responseText.substring(0, 500)}`);
+      }
 
       let responseData: any;
       const isHtml = responseText.trim().startsWith('<') || responseText.includes('Fatal error') || responseText.includes('Warning:');
       
       if (isHtml) {
-        console.error(`❌ PHP Fatal Error detected in response:`, responseText.substring(0, 800));
+        console.error(`❌ PHP Error detected in response:`, responseText.substring(0, 800));
         return new Response(
           JSON.stringify({ 
             error: 'Erro fatal na API fiscal (PHP)', 
