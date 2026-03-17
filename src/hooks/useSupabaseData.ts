@@ -4,9 +4,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 export interface Empresa {
   id: string;
   user_id: string;
+  tipo_pessoa: 'PF' | 'PJ';
   razao_social: string;
   nome_fantasia: string | null;
-  cnpj: string;
+  cnpj: string | null;
+  cpf: string | null;
   inscricao_estadual: string | null;
   telefone: string | null;
   cnae_principal: string | null;
