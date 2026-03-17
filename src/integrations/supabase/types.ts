@@ -125,9 +125,10 @@ export type Database = {
           bairro: string | null
           cep: string | null
           cnae_principal: string | null
-          cnpj: string
+          cnpj: string | null
           codigo_municipio: string | null
           complemento: string | null
+          cpf: string | null
           created_at: string
           csc_id: string | null
           csc_token: string | null
@@ -144,6 +145,7 @@ export type Database = {
           serie_nfce: string
           serie_nfe: string
           telefone: string | null
+          tipo_pessoa: string
           uf: string
           updated_at: string
           user_id: string
@@ -155,9 +157,10 @@ export type Database = {
           bairro?: string | null
           cep?: string | null
           cnae_principal?: string | null
-          cnpj: string
+          cnpj?: string | null
           codigo_municipio?: string | null
           complemento?: string | null
+          cpf?: string | null
           created_at?: string
           csc_id?: string | null
           csc_token?: string | null
@@ -174,6 +177,7 @@ export type Database = {
           serie_nfce?: string
           serie_nfe?: string
           telefone?: string | null
+          tipo_pessoa?: string
           uf: string
           updated_at?: string
           user_id: string
@@ -185,9 +189,10 @@ export type Database = {
           bairro?: string | null
           cep?: string | null
           cnae_principal?: string | null
-          cnpj?: string
+          cnpj?: string | null
           codigo_municipio?: string | null
           complemento?: string | null
+          cpf?: string | null
           created_at?: string
           csc_id?: string | null
           csc_token?: string | null
@@ -204,6 +209,7 @@ export type Database = {
           serie_nfce?: string
           serie_nfe?: string
           telefone?: string | null
+          tipo_pessoa?: string
           uf?: string
           updated_at?: string
           user_id?: string

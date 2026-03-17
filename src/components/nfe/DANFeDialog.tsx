@@ -22,7 +22,7 @@ export function DANFeDialog({ open, onOpenChange, nfeId }: DANFeDialogProps) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("nfe")
-        .select("*, empresas(razao_social, cnpj, inscricao_estadual, logradouro, numero, bairro, municipio, uf, cep, telefone, nome_fantasia)")
+        .select("*, empresas(razao_social, cnpj, cpf, tipo_pessoa, inscricao_estadual, logradouro, numero, bairro, municipio, uf, cep, telefone, nome_fantasia)")
         .eq("id", nfeId!)
         .single();
       if (error) throw error;

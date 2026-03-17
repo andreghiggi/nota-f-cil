@@ -75,18 +75,24 @@ Deno.serve(async (req) => {
         'lucro_real': 3,
       };
 
+      const isPF = empresa.tipo_pessoa === 'PF';
+      const docIdentificador = isPF ? (empresa.cpf || '') : (empresa.cnpj || '');
+
       // Build payload in the format expected by the PHP API (flat structure)
-      const registerBody = {
+      const registerBody: any = {
         api_key: apiKeyFiscal,
 
         // Flat fields expected by PHP
         razao_social: empresa.razao_social,
         nome_fantasia: empresa.nome_fantasia || empresa.razao_social,
-        cnpj: empresa.cnpj,
         tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
         siglaUF: empresa.uf,
         CSC: empresa.csc_token || '',
         CSCid: empresa.csc_id || '',
+
+        // Document - send appropriate field based on tipo_pessoa
+        cnpj: isPF ? '' : (empresa.cnpj || ''),
+        cpf: isPF ? (empresa.cpf || '') : '',
 
         // Certificate - flat (PHP expects senha_certificado)
         certificado_base64: certificadoBase64 || '',
@@ -110,7 +116,8 @@ Deno.serve(async (req) => {
         sped_config: {
           tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
           razaosocial: empresa.razao_social,
-          cnpj: empresa.cnpj,
+          cnpj: isPF ? '' : (empresa.cnpj || ''),
+          cpf: isPF ? (empresa.cpf || '') : '',
           siglaUF: empresa.uf,
           CSC: empresa.csc_token || '',
           CSCid: empresa.csc_id || '',
@@ -127,6 +134,7 @@ Deno.serve(async (req) => {
           CNAE: empresa.cnae_principal || '',
           xNome: empresa.razao_social,
           xFant: empresa.nome_fantasia || empresa.razao_social,
+          ...(isPF ? { CPF: (empresa.cpf || '').replace(/\D/g, '') } : { CNPJ: (empresa.cnpj || '').replace(/\D/g, '') }),
           ender: {
             xLgr: empresa.logradouro || '',
             nro: empresa.numero || '',
@@ -139,7 +147,7 @@ Deno.serve(async (req) => {
         },
       };
 
-      console.log(`📡 Registering empresa ${empresa.cnpj} on fiscal API...`);
+      console.log(`📡 Registering ${isPF ? 'PF (produtor rural)' : 'PJ'} ${docIdentificador} on fiscal API...`);
       console.log(`   Has certificate: ${!!certificadoBase64}`);
       console.log(`   codigo_municipio: ${registerBody.codigo_municipio}`);
       console.log(`   Full payload: ${JSON.stringify(registerBody).substring(0, 1000)}`);
@@ -213,7 +221,7 @@ Deno.serve(async (req) => {
         }
       }
 
-      console.log(`✅ Empresa ${empresa.cnpj} registered successfully on fiscal API`);
+      console.log(`✅ ${isPF ? 'Produtor rural' : 'Empresa'} ${docIdentificador} registered successfully on fiscal API`);
 
       return new Response(
         JSON.stringify({ success: true, data: responseData }),
@@ -302,10 +310,10 @@ Deno.serve(async (req) => {
 
       const payload = {
         api_key: empresa.api_key_fiscal,
-        ind_sinc: 1, // 1 = síncrono (obrigatório para lote com 1 NFC-e)
+        ind_sinc: 1,
         nota: {
-          numero: parseInt(nfce.numero, 10).toString(), // remove leading zeros: '000000008' -> '8'
-          serie: parseInt(nfce.serie, 10).toString(),   // remove leading zeros: '001' -> '1'
+          numero: parseInt(nfce.numero, 10).toString(),
+          serie: parseInt(nfce.serie, 10).toString(),
           valor_total: nfce.valor_total,
           cliente: clientePayload,
           itens: itensObj,
@@ -315,7 +323,6 @@ Deno.serve(async (req) => {
       console.log(`📡 Emitting NFC-e ${nfce.numero} via fiscal API...`);
       console.log(`   Payload: ${JSON.stringify(payload).substring(0, 200)}...`);
 
-      // Call the fiscal API to emit - send api_key in multiple ways for compatibility
       const emitUrl = `${FISCAL_API_BASE_URL}/nfce/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
       console.log(`   Emit URL: ${emitUrl.replace(empresa.api_key_fiscal, '***')}`);
       const response = await fetch(emitUrl, {
@@ -336,7 +343,6 @@ Deno.serve(async (req) => {
         responseData = JSON.parse(responseText);
       } catch {
         console.error('❌ Fiscal API returned non-JSON response:', responseText.substring(0, 300));
-        // Update NFC-e with error instead of crashing
         await supabase
           .from('nfce')
           .update({
@@ -363,7 +369,6 @@ Deno.serve(async (req) => {
       }
 
       if (!response.ok) {
-        // Update NFC-e with error
         await supabase
           .from('nfce')
           .update({
@@ -373,7 +378,6 @@ Deno.serve(async (req) => {
           })
           .eq('id', nfce_id);
 
-        // Log error
         await supabase.rpc('registrar_log', {
           p_empresa_id: nfce.empresa_id,
           p_nfce_id: nfce_id,
@@ -401,7 +405,6 @@ Deno.serve(async (req) => {
         processado_em: new Date().toISOString(),
       };
 
-      // Map fiscal API response fields - support multiple field name variations
       const chaveAcesso = responseData.chave_acesso || responseData.chave || responseData.chNFe || responseData.chave_nfe || responseData.key;
       const protocolo = responseData.protocolo || responseData.nProt || responseData.protocol;
       const codigoRetorno = responseData.codigo_retorno || responseData.cStat || responseData.code;
@@ -410,21 +413,17 @@ Deno.serve(async (req) => {
       let qrcodeUrl = responseData.qrcode_url || responseData.qrcode || responseData.urlQRCode || responseData.qr_code || responseData.qrCode || responseData.url_qrcode;
       const dataAutorizacao = responseData.data_autorizacao || responseData.dhRecbto || responseData.data_recebimento;
 
-      // If no qrcode_url from response, try to extract from XML
       if (!qrcodeUrl && xmlRetorno) {
         try {
           let xmlStr = xmlRetorno;
-          // If XML is base64 encoded, decode it
           if (!xmlStr.startsWith('<') && !xmlStr.startsWith('<?')) {
             xmlStr = atob(xmlStr);
           }
-          // Extract QR Code URL from <qrCode> tag in XML
           const qrMatch = xmlStr.match(/<qrCode>(.*?)<\/qrCode>/);
           if (qrMatch && qrMatch[1]) {
             qrcodeUrl = qrMatch[1];
             console.log('📱 QR Code extracted from XML:', qrcodeUrl.substring(0, 100));
           }
-          // Also extract dhRecbto for data_autorizacao if not set
           if (!dataAutorizacao) {
             const dhMatch = xmlStr.match(/<dhRecbto>(.*?)<\/dhRecbto>/);
             if (dhMatch && dhMatch[1]) {
@@ -449,7 +448,6 @@ Deno.serve(async (req) => {
         .update(updateData)
         .eq('id', nfce_id);
 
-      // Log success with all mapped fields
       await supabase.rpc('registrar_log', {
         p_empresa_id: nfce.empresa_id,
         p_nfce_id: nfce_id,
@@ -460,7 +458,6 @@ Deno.serve(async (req) => {
         p_detalhes: { protocolo, chave_acesso: chaveAcesso, qrcode_url: qrcodeUrl, response_keys: Object.keys(responseData) },
       });
 
-      // Send webhook notification
       try {
         const evento = updateData.status === 'autorizada' ? 'nfce.autorizada' : 
                        updateData.status === 'rejeitada' ? 'nfce.rejeitada' : 'nfce.processando';
@@ -552,6 +549,8 @@ Deno.serve(async (req) => {
       // Update status to processing
       await supabase.from('nfe').update({ status: 'processando' }).eq('id', nfeId);
 
+      const isPF = empresa.tipo_pessoa === 'PF';
+
       // Build items
       const itensObj: Record<string, any> = {};
       (nfe.nfe_itens || []).forEach((item: any, idx: number) => {
@@ -625,6 +624,11 @@ Deno.serve(async (req) => {
           xMun: empresa.municipio || '',
           UF: empresa.uf || '',
           IE: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
+          // Send CPF or CNPJ based on tipo_pessoa
+          ...(isPF
+            ? { CPF: (empresa.cpf || '').replace(/\D/g, '') }
+            : { CNPJ: (empresa.cnpj || '').replace(/\D/g, '') }
+          ),
         },
       };
 
@@ -636,7 +640,7 @@ Deno.serve(async (req) => {
         };
       }
 
-      console.log(`📡 Emitting NF-e ${nfe.numero} via fiscal API (modelo 55, using /nfce/emitir endpoint)...`);
+      console.log(`📡 Emitting NF-e ${nfe.numero} via fiscal API (modelo 55, ${isPF ? 'PF/produtor rural' : 'PJ'})...`);
       console.log(`   Payload: ${JSON.stringify(payload).substring(0, 500)}...`);
 
       // NF-e uses the same /nfce/emitir endpoint as NFC-e, differentiated by modelo: 55 in payload

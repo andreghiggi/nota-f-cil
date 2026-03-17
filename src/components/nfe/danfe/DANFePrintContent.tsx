@@ -125,8 +125,8 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
               <span className="nf-info">&nbsp;</span>
             </td>
             <td>
-              <span className="nf-label">CNPJ</span>
-              <span className="nf-info">{emp.cnpj ? formatCNPJ(emp.cnpj) : ""}</span>
+              <span className="nf-label">CNPJ/CPF</span>
+              <span className="nf-info">{formatCPFCNPJ(emp.cnpj || emp.cpf || "")}</span>
             </td>
           </tr>
         </tbody>

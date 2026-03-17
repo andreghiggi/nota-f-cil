@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, FileText, Settings, Search, MapPin } from "lucide-react";
+import { Loader2, Building2, FileText, Settings, Search, MapPin, User, Building } from "lucide-react";
 import { SeriesFiscaisManager } from "./SeriesFiscaisManager";
 import { toast } from "sonner";
 import { useCreateEmpresa, useUpdateEmpresa, Empresa } from "@/hooks/useSupabaseData";
@@ -38,11 +38,8 @@ import { useCreateEmpresa, useUpdateEmpresa, Empresa } from "@/hooks/useSupabase
 const validateCNPJ = (cnpj: string) => {
   const cleanCNPJ = cnpj.replace(/\D/g, '');
   if (cleanCNPJ.length !== 14) return false;
-  
-  // Check for known invalid patterns
   if (/^(\d)\1+$/.test(cleanCNPJ)) return false;
   
-  // Validation algorithm
   let size = cleanCNPJ.length - 2;
   let numbers = cleanCNPJ.substring(0, size);
   const digits = cleanCNPJ.substring(size);
@@ -71,6 +68,25 @@ const validateCNPJ = (cnpj: string) => {
   return result === parseInt(digits.charAt(1));
 };
 
+// CPF validation
+const validateCPF = (cpf: string) => {
+  const cleanCPF = cpf.replace(/\D/g, '');
+  if (cleanCPF.length !== 11) return false;
+  if (/^(\d)\1+$/.test(cleanCPF)) return false;
+
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(cleanCPF.charAt(i)) * (10 - i);
+  let rest = (sum * 10) % 11;
+  if (rest === 10) rest = 0;
+  if (rest !== parseInt(cleanCPF.charAt(9))) return false;
+
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(cleanCPF.charAt(i)) * (11 - i);
+  rest = (sum * 10) % 11;
+  if (rest === 10) rest = 0;
+  return rest === parseInt(cleanCPF.charAt(10));
+};
+
 const formatCNPJ = (value: string) => {
   const numbers = value.replace(/\D/g, '').slice(0, 14);
   return numbers
@@ -78,6 +94,14 @@ const formatCNPJ = (value: string) => {
     .replace(/(\d{3})(\d)/, '$1.$2')
     .replace(/(\d{3})(\d)/, '$1/$2')
     .replace(/(\d{4})(\d)/, '$1-$2');
+};
+
+const formatCPF = (value: string) => {
+  const numbers = value.replace(/\D/g, '').slice(0, 11);
+  return numbers
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1.$2')
+    .replace(/(\d{3})(\d)/, '$1-$2');
 };
 
 const formatCEP = (value: string) => {
@@ -98,10 +122,14 @@ const formatPhone = (value: string) => {
 };
 
 const empresaSchema = z.object({
+  // Tipo de pessoa
+  tipo_pessoa: z.enum(["PF", "PJ"]).default("PJ"),
+  
   // Dados básicos
-  razao_social: z.string().min(3, "Razão social deve ter no mínimo 3 caracteres").max(150),
+  razao_social: z.string().min(3, "Razão social / Nome deve ter no mínimo 3 caracteres").max(150),
   nome_fantasia: z.string().max(100).optional().nullable(),
-  cnpj: z.string().refine(val => validateCNPJ(val), "CNPJ inválido"),
+  cnpj: z.string().optional().nullable(),
+  cpf: z.string().optional().nullable(),
   inscricao_estadual: z.string().max(20).optional().nullable(),
   telefone: z.string().max(20).optional().nullable(),
   cnae_principal: z.string().max(10).optional().nullable(),
@@ -128,6 +156,19 @@ const empresaSchema = z.object({
   
   // Status
   ativo: z.boolean().default(true),
+}).superRefine((data, ctx) => {
+  if (data.tipo_pessoa === "PJ") {
+    if (!data.cnpj || !validateCNPJ(data.cnpj)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "CNPJ inválido", path: ["cnpj"] });
+    }
+  } else {
+    if (!data.cpf || !validateCPF(data.cpf)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "CPF inválido", path: ["cpf"] });
+    }
+    if (!data.inscricao_estadual) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "IE é obrigatória para produtor rural", path: ["inscricao_estadual"] });
+    }
+  }
 });
 
 type EmpresaFormData = z.infer<typeof empresaSchema>;
@@ -145,7 +186,6 @@ const UFs = [
   "RS", "RO", "RR", "SC", "SP", "SE", "TO"
 ];
 
-// Interface para resposta da BrasilAPI
 interface CNPJData {
   razao_social: string;
   nome_fantasia: string | null;
@@ -175,9 +215,11 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
   const form = useForm<EmpresaFormData>({
     resolver: zodResolver(empresaSchema),
     defaultValues: {
+      tipo_pessoa: "PJ",
       razao_social: "",
       nome_fantasia: "",
       cnpj: "",
+      cpf: "",
       inscricao_estadual: "",
       telefone: "",
       cnae_principal: "",
@@ -189,22 +231,26 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       uf: "SP",
       municipio: "",
       codigo_municipio: "",
-        regime_tributario: "simples_nacional",
-        ambiente: "homologacao",
-        serie_nfce: "001",
-        serie_nfe: "001",
-        csc_id: "",
-        csc_token: "",
-        ativo: true,
+      regime_tributario: "simples_nacional",
+      ambiente: "homologacao",
+      serie_nfce: "001",
+      serie_nfe: "001",
+      csc_id: "",
+      csc_token: "",
+      ativo: true,
     },
   });
+
+  const tipoPessoa = form.watch("tipo_pessoa");
 
   useEffect(() => {
     if (empresa) {
       form.reset({
+        tipo_pessoa: (empresa as any).tipo_pessoa || "PJ",
         razao_social: empresa.razao_social,
         nome_fantasia: empresa.nome_fantasia || "",
-        cnpj: formatCNPJ(empresa.cnpj),
+        cnpj: empresa.cnpj ? formatCNPJ(empresa.cnpj) : "",
+        cpf: (empresa as any).cpf ? formatCPF((empresa as any).cpf) : "",
         inscricao_estadual: empresa.inscricao_estadual || "",
         telefone: (empresa as any).telefone || "",
         cnae_principal: (empresa as any).cnae_principal || "",
@@ -226,9 +272,11 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       });
     } else {
       form.reset({
+        tipo_pessoa: "PJ",
         razao_social: "",
         nome_fantasia: "",
         cnpj: "",
+        cpf: "",
         inscricao_estadual: "",
         telefone: "",
         cnae_principal: "",
@@ -253,14 +301,14 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
 
   const searchCNPJ = async () => {
     const cnpj = form.getValues("cnpj");
-    const cleanCNPJ = cnpj.replace(/\D/g, '');
+    const cleanCNPJ = (cnpj || "").replace(/\D/g, '');
     
     if (cleanCNPJ.length !== 14) {
       toast.error("CNPJ inválido. Digite os 14 dígitos.");
       return;
     }
 
-    if (!validateCNPJ(cnpj)) {
+    if (!validateCNPJ(cnpj || "")) {
       toast.error("CNPJ inválido. Verifique os dígitos.");
       return;
     }
@@ -279,11 +327,9 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       
       const data: CNPJData = await response.json();
       
-      // Preencher formulário com dados retornados
       form.setValue("razao_social", data.razao_social || "");
       form.setValue("nome_fantasia", data.nome_fantasia || "");
       
-      // Endereço
       const logradouro = data.descricao_tipo_de_logradouro 
         ? `${data.descricao_tipo_de_logradouro} ${data.logradouro}` 
         : data.logradouro;
@@ -295,8 +341,6 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       form.setValue("uf", data.uf || "SP");
       form.setValue("municipio", data.municipio || "");
       
-      // BrasilAPI retorna codigo_municipio SIAFI (Receita Federal), não IBGE
-      // Precisamos converter para IBGE buscando pelo nome do município + UF
       let codigoIBGE = "";
       if (data.uf && data.municipio) {
         try {
@@ -314,15 +358,12 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
           console.warn("Erro ao buscar código IBGE do município:", e);
         }
       }
-      // Fallback: usar o codigo_municipio da BrasilAPI (SIAFI) se não encontrar IBGE
       form.setValue("codigo_municipio", codigoIBGE || data.codigo_municipio?.toString() || "");
       
-      // Telefone
       if (data.ddd_telefone_1) {
         form.setValue("telefone", formatPhone(data.ddd_telefone_1.replace(/\D/g, '')));
       }
       
-      // CNAE
       if (data.cnae_fiscal) {
         form.setValue("cnae_principal", data.cnae_fiscal.toString());
       }
@@ -344,14 +385,17 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
 
   const onSubmit = async (data: EmpresaFormData) => {
     try {
-      const cleanCNPJ = data.cnpj.replace(/\D/g, '');
+      const cleanCNPJ = data.tipo_pessoa === "PJ" ? (data.cnpj || "").replace(/\D/g, '') : null;
+      const cleanCPF = data.tipo_pessoa === "PF" ? (data.cpf || "").replace(/\D/g, '') : null;
       const cleanCEP = data.cep?.replace(/\D/g, '') || null;
       const cleanPhone = data.telefone?.replace(/\D/g, '') || null;
       
-      const empresaData = {
+      const empresaData: any = {
+        tipo_pessoa: data.tipo_pessoa,
         razao_social: data.razao_social,
         nome_fantasia: data.nome_fantasia || null,
         cnpj: cleanCNPJ,
+        cpf: cleanCPF,
         inscricao_estadual: data.inscricao_estadual || null,
         telefone: cleanPhone,
         cnae_principal: data.cnae_principal || null,
@@ -400,7 +444,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
           <DialogDescription>
             {isEditing 
               ? "Atualize os dados da empresa cadastrada" 
-              : "Digite o CNPJ e clique em buscar para preencher automaticamente os dados."
+              : "Selecione o tipo de pessoa e preencha os dados."
             }
           </DialogDescription>
         </DialogHeader>
@@ -433,55 +477,124 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
 
               <TabsContent value="dados" className="space-y-4 mt-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* CNPJ com botão de busca */}
+                  {/* Tipo de Pessoa */}
                   <div className="col-span-2">
                     <FormField
                       control={form.control}
-                      name="cnpj"
+                      name="tipo_pessoa"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>CNPJ *</FormLabel>
+                          <FormLabel>Tipo de Pessoa *</FormLabel>
                           <div className="flex gap-2">
-                            <FormControl>
-                              <Input 
-                                placeholder="00.000.000/0000-00" 
-                                {...field}
-                                onChange={(e) => field.onChange(formatCNPJ(e.target.value))}
-                                className="flex-1"
-                              />
-                            </FormControl>
-                            <Button 
-                              type="button" 
-                              variant="secondary"
-                              onClick={searchCNPJ}
-                              disabled={isSearchingCNPJ}
-                              className="shrink-0"
+                            <Button
+                              type="button"
+                              variant={field.value === "PJ" ? "default" : "outline"}
+                              className="flex-1"
+                              onClick={() => field.onChange("PJ")}
                             >
-                              {isSearchingCNPJ ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
-                              ) : (
-                                <Search className="h-4 w-4" />
-                              )}
-                              <span className="ml-2 hidden sm:inline">Buscar</span>
+                              <Building className="h-4 w-4 mr-2" />
+                              Pessoa Jurídica (CNPJ)
+                            </Button>
+                            <Button
+                              type="button"
+                              variant={field.value === "PF" ? "default" : "outline"}
+                              className="flex-1"
+                              onClick={() => field.onChange("PF")}
+                            >
+                              <User className="h-4 w-4 mr-2" />
+                              Pessoa Física (CPF)
                             </Button>
                           </div>
                           <FormDescription>
-                            Digite o CNPJ e clique em buscar para preencher automaticamente
+                            {field.value === "PF" 
+                              ? "Para produtor rural pessoa física com Inscrição Estadual" 
+                              : "Para empresas com CNPJ"
+                            }
                           </FormDescription>
-                          <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
+
+                  {/* CNPJ (PJ) */}
+                  {tipoPessoa === "PJ" && (
+                    <div className="col-span-2">
+                      <FormField
+                        control={form.control}
+                        name="cnpj"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>CNPJ *</FormLabel>
+                            <div className="flex gap-2">
+                              <FormControl>
+                                <Input 
+                                  placeholder="00.000.000/0000-00" 
+                                  {...field}
+                                  value={field.value || ""}
+                                  onChange={(e) => field.onChange(formatCNPJ(e.target.value))}
+                                  className="flex-1"
+                                />
+                              </FormControl>
+                              <Button 
+                                type="button" 
+                                variant="secondary"
+                                onClick={searchCNPJ}
+                                disabled={isSearchingCNPJ}
+                                className="shrink-0"
+                              >
+                                {isSearchingCNPJ ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Search className="h-4 w-4" />
+                                )}
+                                <span className="ml-2 hidden sm:inline">Buscar</span>
+                              </Button>
+                            </div>
+                            <FormDescription>
+                              Digite o CNPJ e clique em buscar para preencher automaticamente
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
+
+                  {/* CPF (PF - Produtor Rural) */}
+                  {tipoPessoa === "PF" && (
+                    <div className="col-span-2">
+                      <FormField
+                        control={form.control}
+                        name="cpf"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>CPF *</FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="000.000.000-00" 
+                                {...field}
+                                value={field.value || ""}
+                                onChange={(e) => field.onChange(formatCPF(e.target.value))}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              CPF do produtor rural
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
 
                   <FormField
                     control={form.control}
                     name="razao_social"
                     render={({ field }) => (
                       <FormItem className="col-span-2">
-                        <FormLabel>Razão Social *</FormLabel>
+                        <FormLabel>{tipoPessoa === "PF" ? "Nome Completo *" : "Razão Social *"}</FormLabel>
                         <FormControl>
-                          <Input placeholder="Razão social da empresa" {...field} />
+                          <Input placeholder={tipoPessoa === "PF" ? "Nome completo do produtor" : "Razão social da empresa"} {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -493,9 +606,9 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                     name="nome_fantasia"
                     render={({ field }) => (
                       <FormItem className="col-span-2">
-                        <FormLabel>Nome Fantasia</FormLabel>
+                        <FormLabel>{tipoPessoa === "PF" ? "Nome da Propriedade" : "Nome Fantasia"}</FormLabel>
                         <FormControl>
-                          <Input placeholder="Nome fantasia" {...field} value={field.value || ""} />
+                          <Input placeholder={tipoPessoa === "PF" ? "Nome da propriedade rural (opcional)" : "Nome fantasia"} {...field} value={field.value || ""} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -507,10 +620,15 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                     name="inscricao_estadual"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Inscrição Estadual</FormLabel>
+                        <FormLabel>
+                          Inscrição Estadual {tipoPessoa === "PF" && <span className="text-destructive">*</span>}
+                        </FormLabel>
                         <FormControl>
                           <Input placeholder="Inscrição estadual" {...field} value={field.value || ""} />
                         </FormControl>
+                        {tipoPessoa === "PF" && (
+                          <FormDescription>Obrigatória para produtor rural</FormDescription>
+                        )}
                         <FormMessage />
                       </FormItem>
                     )}
@@ -543,7 +661,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                         <FormLabel>CNAE Principal</FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder="0000000" 
+                            placeholder={tipoPessoa === "PF" ? "0111301 (Cultivo de arroz)" : "0000000"}
                             {...field} 
                             value={field.value || ""}
                             onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 7))}
@@ -608,7 +726,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                       <FormItem className="col-span-2">
                         <FormLabel>Logradouro</FormLabel>
                         <FormControl>
-                          <Input placeholder="Rua, Avenida, etc." {...field} value={field.value || ""} />
+                          <Input placeholder="Rua, Avenida, Estrada, etc." {...field} value={field.value || ""} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -622,7 +740,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                       <FormItem>
                         <FormLabel>Número</FormLabel>
                         <FormControl>
-                          <Input placeholder="123" {...field} value={field.value || ""} />
+                          <Input placeholder="123 ou SN" {...field} value={field.value || ""} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -636,7 +754,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                       <FormItem>
                         <FormLabel>Complemento</FormLabel>
                         <FormControl>
-                          <Input placeholder="Sala, Andar, etc." {...field} value={field.value || ""} />
+                          <Input placeholder="Sala, Andar, Lote, etc." {...field} value={field.value || ""} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -714,7 +832,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                         </SelectContent>
                       </Select>
                       <FormDescription>
-                        O CRT (Código de Regime Tributário) será definido automaticamente
+                        {tipoPessoa === "PF" 
+                          ? "Produtor rural geralmente utiliza Simples Nacional ou regime normal"
+                          : "O CRT (Código de Regime Tributário) será definido automaticamente"
+                        }
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -745,6 +866,19 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                     </FormItem>
                   )}
                 />
+
+                {tipoPessoa === "PF" && (
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Produtor Rural - Pessoa Física
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      O produtor rural pessoa física emite NF-e utilizando CPF e Inscrição Estadual como identificadores.
+                      Certifique-se de que o certificado digital A1 esteja vinculado ao CPF do produtor.
+                    </p>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="nfe" className="space-y-4 mt-4">
@@ -782,71 +916,83 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
               </TabsContent>
 
               <TabsContent value="nfce" className="space-y-4 mt-4">
-                {isEditing && empresa ? (
-                  <SeriesFiscaisManager empresaId={empresa.id} tipo="nfce" />
-                ) : (
-                  <FormField
-                    control={form.control}
-                    name="serie_nfce"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Série NFC-e Inicial *</FormLabel>
-                        <FormControl>
-                          <Input 
-                            placeholder="001" 
-                            maxLength={3}
-                            {...field}
-                            onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3).padStart(3, '0'))}
-                          />
-                        </FormControl>
-                        <FormDescription>Série inicial para NFC-e. Após o cadastro, gerencie múltiplas séries.</FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                )}
-
-                <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
-                  <h4 className="font-medium text-foreground mb-2">CSC - Código de Segurança do Contribuinte</h4>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    O CSC é obrigatório para emissão de NFC-e. Obtenha junto à SEFAZ do seu estado.
-                  </p>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <FormField
-                      control={form.control}
-                      name="csc_id"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>ID do CSC</FormLabel>
-                          <FormControl>
-                            <Input placeholder="000001" {...field} value={field.value || ""} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={form.control}
-                      name="csc_token"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Token CSC</FormLabel>
-                          <FormControl>
-                            <Input 
-                              placeholder="Token fornecido pela SEFAZ" 
-                              type="password"
-                              {...field} 
-                              value={field.value || ""} 
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                {tipoPessoa === "PF" ? (
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+                    <h4 className="font-medium text-foreground mb-2">NFC-e não aplicável</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Produtor rural pessoa física geralmente não emite NFC-e. 
+                      Utilize a aba NF-e para configurar a emissão de notas fiscais.
+                    </p>
                   </div>
-                </div>
+                ) : (
+                  <>
+                    {isEditing && empresa ? (
+                      <SeriesFiscaisManager empresaId={empresa.id} tipo="nfce" />
+                    ) : (
+                      <FormField
+                        control={form.control}
+                        name="serie_nfce"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Série NFC-e Inicial *</FormLabel>
+                            <FormControl>
+                              <Input 
+                                placeholder="001" 
+                                maxLength={3}
+                                {...field}
+                                onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3).padStart(3, '0'))}
+                              />
+                            </FormControl>
+                            <FormDescription>Série inicial para NFC-e. Após o cadastro, gerencie múltiplas séries.</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    )}
+
+                    <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
+                      <h4 className="font-medium text-foreground mb-2">CSC - Código de Segurança do Contribuinte</h4>
+                      <p className="text-sm text-muted-foreground mb-4">
+                        O CSC é obrigatório para emissão de NFC-e. Obtenha junto à SEFAZ do seu estado.
+                      </p>
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={form.control}
+                          name="csc_id"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>ID do CSC</FormLabel>
+                              <FormControl>
+                                <Input placeholder="000001" {...field} value={field.value || ""} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+
+                        <FormField
+                          control={form.control}
+                          name="csc_token"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Token CSC</FormLabel>
+                              <FormControl>
+                                <Input 
+                                  placeholder="Token fornecido pela SEFAZ" 
+                                  type="password"
+                                  {...field} 
+                                  value={field.value || ""} 
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
               </TabsContent>
             </Tabs>
 
