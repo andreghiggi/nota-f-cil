@@ -88,6 +88,28 @@ export function CertificadoUploadDialog({ open, onOpenChange, onSuccess }: Certi
     }
   };
 
+  const fileToBase64 = (inputFile: File) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result;
+        if (typeof result !== "string") {
+          reject(new Error("Falha ao ler o arquivo do certificado"));
+          return;
+        }
+
+        const base64 = result.split(",")[1];
+        if (!base64) {
+          reject(new Error("Falha ao converter certificado para Base64"));
+          return;
+        }
+
+        resolve(base64);
+      };
+      reader.onerror = () => reject(new Error("Não foi possível ler o arquivo do certificado"));
+      reader.readAsDataURL(inputFile);
+    });
+
   const validateCertificate = async () => {
     if (!file || !senha) {
       toast.error("Selecione um arquivo e informe a senha");
@@ -98,15 +120,7 @@ export function CertificadoUploadDialog({ open, onOpenChange, onSuccess }: Certi
     setValidationResult(null);
 
     try {
-      // Read file as base64 (chunk-safe for large files)
-      const arrayBuffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
-      let binary = '';
-      const chunkSize = 8192;
-      for (let i = 0; i < bytes.length; i += chunkSize) {
-        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-      }
-      const base64 = btoa(binary);
+      const base64 = await fileToBase64(file);
 
       // Call edge function to validate certificate
       const { data, error } = await supabase.functions.invoke('validate-certificate', {
