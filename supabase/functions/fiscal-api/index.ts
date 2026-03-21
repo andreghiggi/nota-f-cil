@@ -116,8 +116,8 @@ Deno.serve(async (req) => {
         sped_config: {
           tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
           razaosocial: empresa.razao_social,
-          cnpj: isPF ? '' : (empresa.cnpj || ''),
-          cpf: isPF ? (empresa.cpf || '') : '',
+          cnpj: isPF ? (empresa.cpf || '').replace(/\D/g, '') : (empresa.cnpj || '').replace(/\D/g, ''),
+          cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
           siglaUF: empresa.uf,
           CSC: empresa.csc_token || '',
           CSCid: empresa.csc_id || '',
