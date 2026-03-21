@@ -165,6 +165,13 @@ Deno.serve(async (req) => {
       console.log(`   Response status: ${response.status}`);
       console.log(`   Response body: ${responseText.substring(0, 500)}`);
 
+      // Capture api_key from first successful registration
+      let phpApiKey: string | null = null;
+      try {
+        const parsed = JSON.parse(responseText);
+        if (parsed.api_key) phpApiKey = parsed.api_key;
+      } catch {}
+
       // If duplicate entry, try to update instead
       if (responseText.includes('Duplicate entry') || responseText.includes('1062')) {
         console.log(`   ⚠️ Empresa already exists, trying /empresa/atualizar...`);
@@ -177,6 +184,11 @@ Deno.serve(async (req) => {
         response = updateResponse;
         console.log(`   Update response status: ${response.status}`);
         console.log(`   Update response body: ${responseText.substring(0, 500)}`);
+        // Try to get api_key from update response too
+        try {
+          const parsed = JSON.parse(responseText);
+          if (parsed.api_key) phpApiKey = parsed.api_key;
+        } catch {}
       }
 
       let responseData: any;
