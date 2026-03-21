@@ -90,8 +90,8 @@ Deno.serve(async (req) => {
         CSC: empresa.csc_token || '',
         CSCid: empresa.csc_id || '',
 
-        // Document - for PF, send CPF in cnpj field too (PHP API uses cnpj as primary key)
-        cnpj: isPF ? (empresa.cpf || '').replace(/\D/g, '') : (empresa.cnpj || '').replace(/\D/g, ''),
+        // Document - for PF, do NOT put CPF in cnpj field (XML validation requires 14 digits for CNPJ)
+        cnpj: isPF ? '' : (empresa.cnpj || '').replace(/\D/g, ''),
         cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
 
         // Certificate - flat (PHP expects senha_certificado)
@@ -116,7 +116,7 @@ Deno.serve(async (req) => {
         sped_config: {
           tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
           razaosocial: empresa.razao_social,
-          cnpj: isPF ? (empresa.cpf || '').replace(/\D/g, '') : (empresa.cnpj || '').replace(/\D/g, ''),
+          cnpj: isPF ? '' : (empresa.cnpj || '').replace(/\D/g, ''),
           cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
           siglaUF: empresa.uf,
           CSC: empresa.csc_token || '',
@@ -165,6 +165,13 @@ Deno.serve(async (req) => {
       console.log(`   Response status: ${response.status}`);
       console.log(`   Response body: ${responseText.substring(0, 500)}`);
 
+      // Capture api_key from first successful registration
+      let phpApiKey: string | null = null;
+      try {
+        const parsed = JSON.parse(responseText);
+        if (parsed.api_key) phpApiKey = parsed.api_key;
+      } catch {}
+
       // If duplicate entry, try to update instead
       if (responseText.includes('Duplicate entry') || responseText.includes('1062')) {
         console.log(`   ⚠️ Empresa already exists, trying /empresa/atualizar...`);
@@ -177,6 +184,11 @@ Deno.serve(async (req) => {
         response = updateResponse;
         console.log(`   Update response status: ${response.status}`);
         console.log(`   Update response body: ${responseText.substring(0, 500)}`);
+        // Try to get api_key from update response too
+        try {
+          const parsed = JSON.parse(responseText);
+          if (parsed.api_key) phpApiKey = parsed.api_key;
+        } catch {}
       }
 
       let responseData: any;
@@ -206,11 +218,14 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Store the fiscal API key in our database if new
-      if (!empresa.api_key_fiscal) {
+      // Use the api_key returned by PHP if available, otherwise use our generated one
+      const finalApiKey = responseData?.api_key || apiKeyFiscal;
+
+      // Store the fiscal API key in our database
+      if (!empresa.api_key_fiscal || empresa.api_key_fiscal !== finalApiKey) {
         const { error: updateError } = await supabase
           .from('empresas')
-          .update({ api_key_fiscal: apiKeyFiscal })
+          .update({ api_key_fiscal: finalApiKey })
           .eq('id', empresa_id);
 
         if (updateError) {
@@ -642,6 +657,8 @@ Deno.serve(async (req) => {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
         modelo: 55, // NF-e = modelo 55
+        // Explicitly tell PHP whether emitente is PF or PJ
+        tipo_pessoa: isPF ? 'PF' : 'PJ',
         // Emitente data flat for PHP to override registered values
         cMun: empresa.codigo_municipio || '',
         xMun: empresa.municipio || '',
@@ -670,6 +687,15 @@ Deno.serve(async (req) => {
           ),
         },
       };
+
+      // For PF emitters, send cpf at root level and do NOT send cnpj
+      // This tells the PHP API to use <CPF> tag instead of <CNPJ> in XML
+      if (isPF) {
+        payload.cpf = (empresa.cpf || '').replace(/\D/g, '');
+        // Do NOT set payload.cnpj - omitting it forces PHP to use CPF
+      } else {
+        payload.cnpj = (empresa.cnpj || '').replace(/\D/g, '');
+      }
 
       // Include certificate in emission payload to avoid PHP-side certificate loading issues
       if (certificadoBase64) {
