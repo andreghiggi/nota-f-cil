@@ -69,7 +69,7 @@ export default function Empresas() {
     const docSearch = searchTerm.replace(/\D/g, '');
     return (
       emp.razao_social.toLowerCase().includes(searchLower) ||
-      emp.nome_fantasia?.toLowerCase().includes(searchLower) ||
+      (emp.nome_fantasia ?? "").toLowerCase().includes(searchLower) ||
       (emp.cnpj && emp.cnpj.includes(docSearch)) ||
       (emp.cpf && emp.cpf.includes(docSearch))
     );
