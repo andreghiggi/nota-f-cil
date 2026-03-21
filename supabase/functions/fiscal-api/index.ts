@@ -90,9 +90,9 @@ Deno.serve(async (req) => {
         CSC: empresa.csc_token || '',
         CSCid: empresa.csc_id || '',
 
-        // Document - send appropriate field based on tipo_pessoa
-        cnpj: isPF ? '' : (empresa.cnpj || ''),
-        cpf: isPF ? (empresa.cpf || '') : '',
+        // Document - for PF, send CPF in cnpj field too (PHP API uses cnpj as primary key)
+        cnpj: isPF ? (empresa.cpf || '').replace(/\D/g, '') : (empresa.cnpj || '').replace(/\D/g, ''),
+        cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
 
         // Certificate - flat (PHP expects senha_certificado)
         certificado_base64: certificadoBase64 || '',
