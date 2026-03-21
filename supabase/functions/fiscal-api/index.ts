@@ -516,10 +516,49 @@ Deno.serve(async (req) => {
       }
 
       if (!empresa.api_key_fiscal) {
-        return new Response(
-          JSON.stringify({ error: 'Empresa não registrada na API fiscal. Registre primeiro.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        // Auto-register empresa on fiscal API before emitting
+        console.log(`📡 Auto-registering empresa ${empresa.razao_social} before NF-e emission...`);
+        const registerResponse = await fetch(req.url.replace(/\/fiscal-api.*/, '/fiscal-api'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.get('Authorization') || '' },
+          body: JSON.stringify({ action: 'register_empresa', empresa_id: nfe.empresa_id }),
+        });
+        // Ignore register errors, just try - refetch empresa to get new api_key
+        const { data: updatedEmpresa } = await supabase
+          .from('empresas')
+          .select('api_key_fiscal')
+          .eq('id', nfe.empresa_id)
+          .single();
+        
+        if (!updatedEmpresa?.api_key_fiscal) {
+          // Fallback: self-invoke register_empresa action
+          const selfUrl = `${supabaseUrl}/functions/v1/fiscal-api`;
+          const regResp = await fetch(selfUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
+            body: JSON.stringify({ action: 'register_empresa', empresa_id: nfe.empresa_id }),
+          });
+          await regResp.text(); // consume body
+          
+          // Re-fetch empresa
+          const { data: refetchedEmpresa } = await supabase
+            .from('empresas')
+            .select('*')
+            .eq('id', nfe.empresa_id)
+            .single();
+          
+          if (!refetchedEmpresa?.api_key_fiscal) {
+            return new Response(
+              JSON.stringify({ error: 'Empresa não registrada na API fiscal. Registre primeiro.' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          
+          // Use refetched empresa for the rest
+          Object.assign(empresa, refetchedEmpresa);
+        } else {
+          empresa.api_key_fiscal = updatedEmpresa.api_key_fiscal;
+        }
       }
 
       // Get certificate data to send along with emission
