@@ -206,11 +206,14 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Store the fiscal API key in our database if new
-      if (!empresa.api_key_fiscal) {
+      // Use the api_key returned by PHP if available, otherwise use our generated one
+      const finalApiKey = responseData?.api_key || apiKeyFiscal;
+
+      // Store the fiscal API key in our database
+      if (!empresa.api_key_fiscal || empresa.api_key_fiscal !== finalApiKey) {
         const { error: updateError } = await supabase
           .from('empresas')
-          .update({ api_key_fiscal: apiKeyFiscal })
+          .update({ api_key_fiscal: finalApiKey })
           .eq('id', empresa_id);
 
         if (updateError) {
