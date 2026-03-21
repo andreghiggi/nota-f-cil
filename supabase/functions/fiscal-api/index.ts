@@ -657,6 +657,11 @@ Deno.serve(async (req) => {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
         modelo: 55, // NF-e = modelo 55
+        // Explicitly tell PHP whether emitente is PF or PJ
+        tipo_pessoa: isPF ? 'PF' : 'PJ',
+        // Emitente document - flat fields for PHP
+        cnpj: isPF ? '' : (empresa.cnpj || '').replace(/\D/g, ''),
+        cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
         // Emitente data flat for PHP to override registered values
         cMun: empresa.codigo_municipio || '',
         xMun: empresa.municipio || '',
