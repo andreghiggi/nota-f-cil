@@ -66,10 +66,12 @@ export default function Empresas() {
 
   const filteredEmpresas = empresas?.filter(emp => {
     const searchLower = searchTerm.toLowerCase();
+    const docSearch = searchTerm.replace(/\D/g, '');
     return (
       emp.razao_social.toLowerCase().includes(searchLower) ||
       emp.nome_fantasia?.toLowerCase().includes(searchLower) ||
-      emp.cnpj.includes(searchTerm.replace(/\D/g, ''))
+      (emp.cnpj && emp.cnpj.includes(docSearch)) ||
+      (emp.cpf && emp.cpf.includes(docSearch))
     );
   });
 
@@ -90,7 +92,18 @@ export default function Empresas() {
   };
 
   const formatCNPJ = (cnpj: string) => {
+    if (!cnpj) return '';
     return cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+  };
+
+  const formatCPF = (cpf: string) => {
+    if (!cpf) return '';
+    return cpf.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+  };
+
+  const formatDocumento = (empresa: Empresa) => {
+    if (empresa.tipo_pessoa === 'PF') return formatCPF(empresa.cpf || '');
+    return formatCNPJ(empresa.cnpj || '');
   };
 
   const handleEdit = (empresa: Empresa) => {
@@ -127,7 +140,7 @@ export default function Empresas() {
           <div className="relative w-full sm:w-80">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Buscar por razão social, CNPJ..."
+              placeholder="Buscar por nome, CNPJ ou CPF..."
               className="pl-9 input-focus-ring"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -218,7 +231,7 @@ export default function Empresas() {
                       Empresa
                     </th>
                     <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">
-                      CNPJ
+                      CNPJ/CPF
                     </th>
                     <th className="text-left text-xs font-medium text-muted-foreground uppercase tracking-wider px-5 py-3">
                       Regime
@@ -259,8 +272,10 @@ export default function Empresas() {
                         </td>
                         <td className="px-5 py-4">
                           <div>
-                            <p className="text-sm font-mono text-foreground">{formatCNPJ(empresa.cnpj)}</p>
-                            <p className="text-xs text-muted-foreground">{empresa.uf}</p>
+                            <p className="text-sm font-mono text-foreground">{formatDocumento(empresa)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {empresa.tipo_pessoa === 'PF' ? 'Pessoa Física' : empresa.uf}
+                            </p>
                           </div>
                         </td>
                         <td className="px-5 py-4">
