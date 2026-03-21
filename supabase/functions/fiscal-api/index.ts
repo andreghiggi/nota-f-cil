@@ -90,8 +90,8 @@ Deno.serve(async (req) => {
         CSC: empresa.csc_token || '',
         CSCid: empresa.csc_id || '',
 
-        // Document - for PF, send CPF in cnpj field too (PHP API uses cnpj as primary key)
-        cnpj: isPF ? (empresa.cpf || '').replace(/\D/g, '') : (empresa.cnpj || '').replace(/\D/g, ''),
+        // Document - for PF, do NOT put CPF in cnpj field (XML validation requires 14 digits for CNPJ)
+        cnpj: isPF ? '' : (empresa.cnpj || '').replace(/\D/g, ''),
         cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
 
         // Certificate - flat (PHP expects senha_certificado)
