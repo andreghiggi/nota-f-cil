@@ -659,9 +659,6 @@ Deno.serve(async (req) => {
         modelo: 55, // NF-e = modelo 55
         // Explicitly tell PHP whether emitente is PF or PJ
         tipo_pessoa: isPF ? 'PF' : 'PJ',
-        // Emitente document - flat fields for PHP
-        cnpj: isPF ? '' : (empresa.cnpj || '').replace(/\D/g, ''),
-        cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
         // Emitente data flat for PHP to override registered values
         cMun: empresa.codigo_municipio || '',
         xMun: empresa.municipio || '',
@@ -690,6 +687,15 @@ Deno.serve(async (req) => {
           ),
         },
       };
+
+      // For PF emitters, send cpf at root level and do NOT send cnpj
+      // This tells the PHP API to use <CPF> tag instead of <CNPJ> in XML
+      if (isPF) {
+        payload.cpf = (empresa.cpf || '').replace(/\D/g, '');
+        // Do NOT set payload.cnpj - omitting it forces PHP to use CPF
+      } else {
+        payload.cnpj = (empresa.cnpj || '').replace(/\D/g, '');
+      }
 
       // Include certificate in emission payload to avoid PHP-side certificate loading issues
       if (certificadoBase64) {
