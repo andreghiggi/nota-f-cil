@@ -383,12 +383,19 @@ export function CertificadoUploadDialog({ open, onOpenChange, onSuccess }: Certi
               {validationResult.cnpj && selectedEmpresa && empresas && (
                 (() => {
                   const empresa = empresas.find(e => e.id === selectedEmpresa);
-                  const cnpjMatch = empresa?.cnpj.replace(/\D/g, '') === validationResult.cnpj?.replace(/\D/g, '');
-                  if (!cnpjMatch) {
+                  const empresaDocumento = (empresa?.cnpj ?? empresa?.cpf ?? '').replace(/\D/g, '');
+                  const certificadoDocumento = (validationResult.cnpj ?? '').replace(/\D/g, '');
+
+                  if (!empresaDocumento || !certificadoDocumento || validationResult.cnpj === 'Não identificado') {
+                    return null;
+                  }
+
+                  const documentoMatch = empresaDocumento === certificadoDocumento;
+                  if (!documentoMatch) {
                     return (
                       <p className="text-xs text-warning flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
-                        O CNPJ do certificado não corresponde à empresa selecionada
+                        O documento do certificado não corresponde à empresa selecionada
                       </p>
                     );
                   }
