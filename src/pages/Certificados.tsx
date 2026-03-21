@@ -80,12 +80,15 @@ export default function Certificados() {
   const queryClient = useQueryClient();
 
   const filteredCertificados = certificados?.filter(cert => {
+    if (!searchTerm) return true;
     const searchLower = searchTerm.toLowerCase();
-    const empresa = cert.empresas as { nome_fantasia: string | null; cnpj: string } | null;
+    const empresa = cert.empresas as { nome_fantasia: string | null; cnpj: string | null; cpf: string | null; razao_social: string } | null;
     return (
-      empresa?.nome_fantasia?.toLowerCase().includes(searchLower) ||
-      empresa?.cnpj.includes(searchTerm) ||
-      cert.cnpj_certificado?.includes(searchTerm)
+      (empresa?.nome_fantasia ?? '').toLowerCase().includes(searchLower) ||
+      (empresa?.razao_social ?? '').toLowerCase().includes(searchLower) ||
+      (empresa?.cnpj ?? '').includes(searchTerm) ||
+      (empresa?.cpf ?? '').includes(searchTerm) ||
+      (cert.cnpj_certificado ?? '').includes(searchTerm)
     );
   });
 
