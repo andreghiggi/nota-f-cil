@@ -90,9 +90,9 @@ Deno.serve(async (req) => {
         CSC: empresa.csc_token || '',
         CSCid: empresa.csc_id || '',
 
-        // Document - send appropriate field based on tipo_pessoa
-        cnpj: isPF ? '' : (empresa.cnpj || ''),
-        cpf: isPF ? (empresa.cpf || '') : '',
+        // Document - for PF, send CPF in cnpj field too (PHP API uses cnpj as primary key)
+        cnpj: isPF ? (empresa.cpf || '').replace(/\D/g, '') : (empresa.cnpj || '').replace(/\D/g, ''),
+        cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
 
         // Certificate - flat (PHP expects senha_certificado)
         certificado_base64: certificadoBase64 || '',
@@ -116,8 +116,8 @@ Deno.serve(async (req) => {
         sped_config: {
           tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
           razaosocial: empresa.razao_social,
-          cnpj: isPF ? '' : (empresa.cnpj || ''),
-          cpf: isPF ? (empresa.cpf || '') : '',
+          cnpj: isPF ? (empresa.cpf || '').replace(/\D/g, '') : (empresa.cnpj || '').replace(/\D/g, ''),
+          cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
           siglaUF: empresa.uf,
           CSC: empresa.csc_token || '',
           CSCid: empresa.csc_id || '',
@@ -516,10 +516,49 @@ Deno.serve(async (req) => {
       }
 
       if (!empresa.api_key_fiscal) {
-        return new Response(
-          JSON.stringify({ error: 'Empresa não registrada na API fiscal. Registre primeiro.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        // Auto-register empresa on fiscal API before emitting
+        console.log(`📡 Auto-registering empresa ${empresa.razao_social} before NF-e emission...`);
+        const registerResponse = await fetch(req.url.replace(/\/fiscal-api.*/, '/fiscal-api'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.get('Authorization') || '' },
+          body: JSON.stringify({ action: 'register_empresa', empresa_id: nfe.empresa_id }),
+        });
+        // Ignore register errors, just try - refetch empresa to get new api_key
+        const { data: updatedEmpresa } = await supabase
+          .from('empresas')
+          .select('api_key_fiscal')
+          .eq('id', nfe.empresa_id)
+          .single();
+        
+        if (!updatedEmpresa?.api_key_fiscal) {
+          // Fallback: self-invoke register_empresa action
+          const selfUrl = `${supabaseUrl}/functions/v1/fiscal-api`;
+          const regResp = await fetch(selfUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
+            body: JSON.stringify({ action: 'register_empresa', empresa_id: nfe.empresa_id }),
+          });
+          await regResp.text(); // consume body
+          
+          // Re-fetch empresa
+          const { data: refetchedEmpresa } = await supabase
+            .from('empresas')
+            .select('*')
+            .eq('id', nfe.empresa_id)
+            .single();
+          
+          if (!refetchedEmpresa?.api_key_fiscal) {
+            return new Response(
+              JSON.stringify({ error: 'Empresa não registrada na API fiscal. Registre primeiro.' }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          
+          // Use refetched empresa for the rest
+          Object.assign(empresa, refetchedEmpresa);
+        } else {
+          empresa.api_key_fiscal = updatedEmpresa.api_key_fiscal;
+        }
       }
 
       // Get certificate data to send along with emission
