@@ -711,8 +711,8 @@ Deno.serve(async (req) => {
       console.log(`📡 Emitting NF-e ${nfe.numero} via fiscal API (modelo 55, ${isPF ? 'PF/produtor rural' : 'PJ'})...`);
       console.log(`   Payload: ${JSON.stringify(payload).substring(0, 500)}...`);
 
-      // NF-e uses the same /nfce/emitir endpoint as NFC-e, differentiated by modelo: 55 in payload
-      const emitUrl = `${FISCAL_API_BASE_URL}/nfce/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
+      // NF-e uses the dedicated /nfe/emitir endpoint so PHP sets modelo=55 correctly
+      const emitUrl = `${FISCAL_API_BASE_URL}/nfe/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
       const response = await fetch(emitUrl, {
         method: 'POST',
         headers: {
