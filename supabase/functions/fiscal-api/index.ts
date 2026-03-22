@@ -90,8 +90,8 @@ Deno.serve(async (req) => {
         CSC: empresa.csc_token || '',
         CSCid: empresa.csc_id || '',
 
-        // Document - for PF, do NOT put CPF in cnpj field (XML validation requires 14 digits for CNPJ)
-        cnpj: isPF ? '' : (empresa.cnpj || '').replace(/\D/g, ''),
+        // Document - for PF, pad CPF to 14 digits in cnpj field so PHP builds access key correctly
+        cnpj: isPF ? (empresa.cpf || '').replace(/\D/g, '').padStart(14, '0') : (empresa.cnpj || '').replace(/\D/g, ''),
         cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
 
         // Certificate - flat (PHP expects senha_certificado)
@@ -688,11 +688,14 @@ Deno.serve(async (req) => {
         },
       };
 
-      // For PF emitters, send cpf at root level and do NOT send cnpj
-      // This tells the PHP API to use <CPF> tag instead of <CNPJ> in XML
+      // For PF emitters, pad CPF to 14 digits and send as cnpj so PHP builds the access key correctly
+      // The access key requires a 14-digit document field; 11-digit CPF causes invalid check digit
       if (isPF) {
-        payload.cpf = (empresa.cpf || '').replace(/\D/g, '');
-        // Do NOT set payload.cnpj - omitting it forces PHP to use CPF
+        const cpfClean = (empresa.cpf || '').replace(/\D/g, '');
+        const cpfPadded = cpfClean.padStart(14, '0'); // 000 + 11-digit CPF = 14 digits
+        payload.cnpj = cpfPadded;
+        payload.cpf = cpfClean; // Also send original CPF for XML tag
+        payload.tipo_pessoa = 'PF'; // Ensure PHP knows to use <CPF> tag in XML
       } else {
         payload.cnpj = (empresa.cnpj || '').replace(/\D/g, '');
       }
