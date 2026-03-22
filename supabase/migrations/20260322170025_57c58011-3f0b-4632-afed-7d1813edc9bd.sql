@@ -1,0 +1,1 @@
+UPDATE nfe SET ambiente = 'producao', status = 'pendente', tentativas = 0, erro_processamento = NULL, motivo_retorno = NULL WHERE id = '47e98725-c8ad-478c-a080-31438b320594';
