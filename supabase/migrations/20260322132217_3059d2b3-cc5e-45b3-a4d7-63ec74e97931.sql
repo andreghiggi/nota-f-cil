@@ -1,0 +1,1 @@
+UPDATE public.empresas SET api_key_fiscal = NULL WHERE id = '1258f634-23b0-411e-804e-233efbf4c208';
