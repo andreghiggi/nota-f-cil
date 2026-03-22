@@ -1,0 +1,1 @@
+UPDATE empresas SET ambiente = 'homologacao' WHERE id = '1258f634-23b0-411e-804e-233efbf4c208'; UPDATE nfe SET ambiente = 'homologacao', status = 'rejeitada' WHERE id = '47e98725-c8ad-478c-a080-31438b320594';
