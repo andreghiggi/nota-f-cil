@@ -629,28 +629,28 @@ Deno.serve(async (req) => {
         };
       });
 
-      // Build destinatário
-      const destPayload: any = {};
+      // Build destinatário - PHP expects "cliente" with fields: nome, cpf, cnpj, ie, email, indIEDest, logradouro, numero, bairro, cMun, xMun, uf, cep
+      const clientePayload: any = {};
       if (nfe.dest_cpf_cnpj) {
-        if (nfe.dest_cpf_cnpj.length > 11) {
-          destPayload.CNPJ = nfe.dest_cpf_cnpj.replace(/\D/g, '');
+        const doc = nfe.dest_cpf_cnpj.replace(/\D/g, '');
+        if (doc.length > 11) {
+          clientePayload.cnpj = doc;
         } else {
-          destPayload.CPF = nfe.dest_cpf_cnpj.replace(/\D/g, '');
+          clientePayload.cpf = doc;
         }
       }
-      if (nfe.dest_nome) destPayload.xNome = nfe.dest_nome;
-      if (nfe.dest_ie) destPayload.IE = nfe.dest_ie;
-      if (nfe.dest_email) destPayload.email = nfe.dest_email;
+      if (nfe.dest_nome) clientePayload.nome = nfe.dest_nome;
+      if (nfe.dest_ie) clientePayload.ie = nfe.dest_ie;
+      if (nfe.dest_email) clientePayload.email = nfe.dest_email;
+      clientePayload.indIEDest = nfe.dest_ie ? 1 : 9;
       if (nfe.dest_logradouro) {
-        destPayload.ender = {
-          xLgr: nfe.dest_logradouro,
-          nro: nfe.dest_numero || 'SN',
-          xBairro: nfe.dest_bairro || '',
-          cMun: nfe.dest_codigo_municipio || '',
-          xMun: nfe.dest_municipio || '',
-          UF: nfe.dest_uf || '',
-          CEP: (nfe.dest_cep || '').replace(/\D/g, ''),
-        };
+        clientePayload.logradouro = nfe.dest_logradouro;
+        clientePayload.numero = nfe.dest_numero || 'SN';
+        clientePayload.bairro = nfe.dest_bairro || '';
+        clientePayload.cMun = nfe.dest_codigo_municipio || '';
+        clientePayload.xMun = nfe.dest_municipio || '';
+        clientePayload.uf = nfe.dest_uf || '';
+        clientePayload.cep = (nfe.dest_cep || '').replace(/\D/g, '');
       }
 
       const payload: any = {
@@ -671,7 +671,7 @@ Deno.serve(async (req) => {
           natureza_operacao: nfe.natureza_operacao || 'VENDA',
           finalidade: nfe.finalidade || '1',
           modalidade_frete: nfe.modalidade_frete || '9',
-          destinatario: destPayload,
+          cliente: clientePayload,
           itens: itensObj,
         },
         // Include emitente data nested as well
