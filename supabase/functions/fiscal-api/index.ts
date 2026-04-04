@@ -882,8 +882,243 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ========================================================================
+    // ACTION: cancel_nfce - Cancel NFC-e via fiscal API
+    // ========================================================================
+    if (action === 'cancel_nfce') {
+      if (!nfce_id) {
+        return new Response(
+          JSON.stringify({ error: 'nfce_id é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: nfce } = await supabase
+        .from('nfce')
+        .select('*, nfce_eventos(*)')
+        .eq('id', nfce_id)
+        .single();
+
+      if (!nfce) {
+        return new Response(
+          JSON.stringify({ error: 'NFC-e não encontrada' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: empresa } = await supabase
+        .from('empresas')
+        .select('*')
+        .eq('id', nfce.empresa_id)
+        .single();
+
+      if (!empresa?.api_key_fiscal) {
+        return new Response(
+          JSON.stringify({ error: 'Empresa não registrada na API fiscal' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get the latest cancellation event
+      const cancelEvento = (nfce.nfce_eventos || [])
+        .filter((e: any) => e.tipo_evento === 'cancelamento')
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+      const justificativa = cancelEvento?.justificativa || 'Cancelamento solicitado pelo emitente';
+
+      // Get certificate
+      const { data: certificado } = await supabase
+        .from('certificados_digitais')
+        .select('*')
+        .eq('empresa_id', nfce.empresa_id)
+        .single();
+
+      let certificadoBase64: string | null = null;
+      if (certificado?.arquivo_path) {
+        const { data: fileData } = await supabase.storage.from('certificados').download(certificado.arquivo_path);
+        if (fileData) {
+          const bytes = new Uint8Array(await fileData.arrayBuffer());
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+          certificadoBase64 = btoa(binary);
+        }
+      }
+
+      const cancelPayload: any = {
+        api_key: empresa.api_key_fiscal,
+        chave: nfce.chave_acesso,
+        protocolo: nfce.protocolo,
+        justificativa,
+      };
+
+      if (certificadoBase64) {
+        cancelPayload.certificado = {
+          pfx_base64: certificadoBase64,
+          senha: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
+        };
+      }
+
+      console.log(`📡 Cancelling NFC-e ${nfce.numero} via fiscal API...`);
+      const cancelUrl = `${FISCAL_API_BASE_URL}/nfce/cancelar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
+      const response = await fetch(cancelUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cancelPayload),
+      });
+
+      const responseText = await response.text();
+      console.log(`📡 Cancel response (${response.status}):`, responseText.substring(0, 500));
+
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { raw: responseText };
+      }
+
+      if (response.ok && (responseData.sucesso || responseData.success || responseData.status === 'cancelada')) {
+        await supabase.from('nfce').update({ status: 'cancelada' }).eq('id', nfce_id);
+
+        if (cancelEvento) {
+          await supabase.from('nfce_eventos').update({
+            protocolo: responseData.protocolo || responseData.nProt || null,
+            codigo_retorno: responseData.cStat || responseData.codigo_retorno || '135',
+            motivo_retorno: responseData.xMotivo || responseData.motivo || 'Evento registrado e vinculado a NF-e',
+            xml_retorno: responseData.xml_retorno || responseData.xml || null,
+          }).eq('id', cancelEvento.id);
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, data: { id: nfce_id, status: 'cancelada', ...responseData } }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ error: 'Erro ao cancelar NFC-e na SEFAZ', details: responseData }),
+        { status: response.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========================================================================
+    // ACTION: cancel_nfe - Cancel NF-e via fiscal API
+    // ========================================================================
+    if (action === 'cancel_nfe') {
+      const nfeId = nfe_id;
+      if (!nfeId) {
+        return new Response(
+          JSON.stringify({ error: 'nfe_id é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: nfe } = await supabase
+        .from('nfe')
+        .select('*, nfe_eventos(*)')
+        .eq('id', nfeId)
+        .single();
+
+      if (!nfe) {
+        return new Response(
+          JSON.stringify({ error: 'NF-e não encontrada' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: empresa } = await supabase
+        .from('empresas')
+        .select('*')
+        .eq('id', nfe.empresa_id)
+        .single();
+
+      if (!empresa?.api_key_fiscal) {
+        return new Response(
+          JSON.stringify({ error: 'Empresa não registrada na API fiscal' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const cancelEvento = (nfe.nfe_eventos || [])
+        .filter((e: any) => e.tipo_evento === 'cancelamento')
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+      const justificativa = cancelEvento?.justificativa || 'Cancelamento solicitado pelo emitente';
+
+      const { data: certificado } = await supabase
+        .from('certificados_digitais')
+        .select('*')
+        .eq('empresa_id', nfe.empresa_id)
+        .single();
+
+      let certificadoBase64: string | null = null;
+      if (certificado?.arquivo_path) {
+        const { data: fileData } = await supabase.storage.from('certificados').download(certificado.arquivo_path);
+        if (fileData) {
+          const bytes = new Uint8Array(await fileData.arrayBuffer());
+          let binary = '';
+          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+          certificadoBase64 = btoa(binary);
+        }
+      }
+
+      const cancelPayload: any = {
+        api_key: empresa.api_key_fiscal,
+        chave: nfe.chave_acesso,
+        protocolo: nfe.protocolo,
+        justificativa,
+      };
+
+      if (certificadoBase64) {
+        cancelPayload.certificado = {
+          pfx_base64: certificadoBase64,
+          senha: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
+        };
+      }
+
+      console.log(`📡 Cancelling NF-e ${nfe.numero} via fiscal API...`);
+      const cancelUrl = `${FISCAL_API_BASE_URL}/nfe/cancelar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
+      const response = await fetch(cancelUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cancelPayload),
+      });
+
+      const responseText = await response.text();
+      console.log(`📡 NF-e Cancel response (${response.status}):`, responseText.substring(0, 500));
+
+      let responseData: any;
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        responseData = { raw: responseText };
+      }
+
+      if (response.ok && (responseData.sucesso || responseData.success || responseData.status === 'cancelada')) {
+        await supabase.from('nfe').update({ status: 'cancelada' }).eq('id', nfeId);
+
+        if (cancelEvento) {
+          await supabase.from('nfe_eventos').update({
+            protocolo: responseData.protocolo || responseData.nProt || null,
+            codigo_retorno: responseData.cStat || responseData.codigo_retorno || '135',
+            motivo_retorno: responseData.xMotivo || responseData.motivo || 'Evento registrado e vinculado a NF-e',
+            xml_retorno: responseData.xml_retorno || responseData.xml || null,
+          }).eq('id', cancelEvento.id);
+        }
+
+        return new Response(
+          JSON.stringify({ success: true, data: { id: nfeId, status: 'cancelada', ...responseData } }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ error: 'Erro ao cancelar NF-e na SEFAZ', details: responseData }),
+        { status: response.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe' }),
+      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
