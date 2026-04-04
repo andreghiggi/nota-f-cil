@@ -682,25 +682,44 @@ export function useDashboardStats() {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      const [empresasRes, nfceHojeRes, nfceStatusRes] = await Promise.all([
+      const [empresasRes, nfceHojeRes, nfeHojeRes, certRes] = await Promise.all([
         supabase.from('empresas').select('id', { count: 'exact' }).eq('ativo', true),
         supabase.from('nfce').select('id, valor_total, status').gte('created_at', today.toISOString()),
-        supabase.from('nfce').select('status')
+        supabase.from('nfe').select('id, valor_total, status').gte('created_at', today.toISOString()),
+        supabase.from('certificados_digitais').select('status'),
       ]);
       
       const nfceHoje = nfceHojeRes.data || [];
+      const nfeHoje = nfeHojeRes.data || [];
+      const certs = certRes.data || [];
       const totalEmpresas = empresasRes.count || 0;
+      
       const totalNfceHoje = nfceHoje.length;
-      const autorizadasHoje = nfceHoje.filter(n => n.status === 'autorizada').length;
-      const rejeitadasHoje = nfceHoje.filter(n => n.status === 'rejeitada').length;
-      const taxaAutorizacao = totalNfceHoje > 0 ? (autorizadasHoje / totalNfceHoje) * 100 : 0;
+      const autorizadasNfceHoje = nfceHoje.filter(n => n.status === 'autorizada').length;
+      const rejeitadasNfceHoje = nfceHoje.filter(n => n.status === 'rejeitada').length;
+      
+      const totalNfeHoje = nfeHoje.length;
+      const autorizadasNfeHoje = nfeHoje.filter(n => n.status === 'autorizada').length;
+      const rejeitadasNfeHoje = nfeHoje.filter(n => n.status === 'rejeitada').length;
+      
+      const totalDocHoje = totalNfceHoje + totalNfeHoje;
+      const autorizadasHoje = autorizadasNfceHoje + autorizadasNfeHoje;
+      const rejeitadasHoje = rejeitadasNfceHoje + rejeitadasNfeHoje;
+      const taxaAutorizacao = totalDocHoje > 0 ? (autorizadasHoje / totalDocHoje) * 100 : 0;
+
+      const certsExpirando = certs.filter(c => c.status === 'expirando').length;
+      const certsExpirados = certs.filter(c => c.status === 'expirado').length;
       
       return {
         totalEmpresas,
         totalNfceHoje,
+        totalNfeHoje,
+        totalDocHoje,
         autorizadasHoje,
         rejeitadasHoje,
-        taxaAutorizacao: taxaAutorizacao.toFixed(1)
+        taxaAutorizacao: taxaAutorizacao.toFixed(1),
+        certsExpirando,
+        certsExpirados,
       };
     }
   });
