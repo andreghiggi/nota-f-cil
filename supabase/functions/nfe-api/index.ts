@@ -178,7 +178,8 @@ Deno.serve(async (req) => {
         .eq('id', empresa_id)
         .single();
 
-      const serieNfe = empresaData?.serie_nfe || '001';
+      // Use serie from payload if provided, otherwise use empresa default
+      const serieNfe = payload.serie || empresaData?.serie_nfe || '001';
 
       const { data: numeroData, error: numeroError } = await supabase
         .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id, p_serie: serieNfe });
