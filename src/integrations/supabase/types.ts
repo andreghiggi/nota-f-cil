@@ -618,9 +618,11 @@ export type Database = {
       nfe: {
         Row: {
           ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          c_mun_fg_ibs: string | null
           chave_acesso: string | null
           codigo_retorno: string | null
           created_at: string
+          d_prev_entrega: string | null
           data_autorizacao: string | null
           data_emissao: string
           dest_bairro: string | null
@@ -641,10 +643,12 @@ export type Database = {
           external_id: string | null
           finalidade: string
           id: string
+          ind_intermed: number | null
           modalidade_frete: string
           motivo_retorno: string | null
           natureza_operacao: string
           numero: string
+          p_redutor_gov: number | null
           payload_entrada: Json
           processado_em: string | null
           protocolo: string | null
@@ -652,12 +656,28 @@ export type Database = {
           status: Database["public"]["Enums"]["nfce_status"]
           tentativas: number
           token_api_id: string | null
+          tp_ente_gov: number | null
+          tp_nf_credito: string | null
+          tp_nf_debito: string | null
+          tp_oper_gov: number | null
           updated_at: string
+          valor_cbs_mono_total: number | null
+          valor_cbs_total: number | null
           valor_cofins: number | null
           valor_desconto: number | null
+          valor_dev_trib_cbs_total: number | null
+          valor_dev_trib_ibs_mun_total: number | null
+          valor_dev_trib_ibs_uf_total: number | null
+          valor_dif_cbs_total: number | null
+          valor_dif_ibs_mun_total: number | null
+          valor_dif_ibs_uf_total: number | null
           valor_frete: number | null
+          valor_ibs_mono_total: number | null
+          valor_ibs_mun_total: number | null
+          valor_ibs_uf_total: number | null
           valor_icms: number | null
           valor_ipi: number | null
+          valor_is_total: number | null
           valor_outras_despesas: number | null
           valor_pis: number | null
           valor_produtos: number | null
@@ -668,9 +688,11 @@ export type Database = {
         }
         Insert: {
           ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          c_mun_fg_ibs?: string | null
           chave_acesso?: string | null
           codigo_retorno?: string | null
           created_at?: string
+          d_prev_entrega?: string | null
           data_autorizacao?: string | null
           data_emissao?: string
           dest_bairro?: string | null
@@ -691,10 +713,12 @@ export type Database = {
           external_id?: string | null
           finalidade?: string
           id?: string
+          ind_intermed?: number | null
           modalidade_frete?: string
           motivo_retorno?: string | null
           natureza_operacao?: string
           numero: string
+          p_redutor_gov?: number | null
           payload_entrada: Json
           processado_em?: string | null
           protocolo?: string | null
@@ -702,12 +726,28 @@ export type Database = {
           status?: Database["public"]["Enums"]["nfce_status"]
           tentativas?: number
           token_api_id?: string | null
+          tp_ente_gov?: number | null
+          tp_nf_credito?: string | null
+          tp_nf_debito?: string | null
+          tp_oper_gov?: number | null
           updated_at?: string
+          valor_cbs_mono_total?: number | null
+          valor_cbs_total?: number | null
           valor_cofins?: number | null
           valor_desconto?: number | null
+          valor_dev_trib_cbs_total?: number | null
+          valor_dev_trib_ibs_mun_total?: number | null
+          valor_dev_trib_ibs_uf_total?: number | null
+          valor_dif_cbs_total?: number | null
+          valor_dif_ibs_mun_total?: number | null
+          valor_dif_ibs_uf_total?: number | null
           valor_frete?: number | null
+          valor_ibs_mono_total?: number | null
+          valor_ibs_mun_total?: number | null
+          valor_ibs_uf_total?: number | null
           valor_icms?: number | null
           valor_ipi?: number | null
+          valor_is_total?: number | null
           valor_outras_despesas?: number | null
           valor_pis?: number | null
           valor_produtos?: number | null
@@ -718,9 +758,11 @@ export type Database = {
         }
         Update: {
           ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          c_mun_fg_ibs?: string | null
           chave_acesso?: string | null
           codigo_retorno?: string | null
           created_at?: string
+          d_prev_entrega?: string | null
           data_autorizacao?: string | null
           data_emissao?: string
           dest_bairro?: string | null
@@ -741,10 +783,12 @@ export type Database = {
           external_id?: string | null
           finalidade?: string
           id?: string
+          ind_intermed?: number | null
           modalidade_frete?: string
           motivo_retorno?: string | null
           natureza_operacao?: string
           numero?: string
+          p_redutor_gov?: number | null
           payload_entrada?: Json
           processado_em?: string | null
           protocolo?: string | null
@@ -752,12 +796,28 @@ export type Database = {
           status?: Database["public"]["Enums"]["nfce_status"]
           tentativas?: number
           token_api_id?: string | null
+          tp_ente_gov?: number | null
+          tp_nf_credito?: string | null
+          tp_nf_debito?: string | null
+          tp_oper_gov?: number | null
           updated_at?: string
+          valor_cbs_mono_total?: number | null
+          valor_cbs_total?: number | null
           valor_cofins?: number | null
           valor_desconto?: number | null
+          valor_dev_trib_cbs_total?: number | null
+          valor_dev_trib_ibs_mun_total?: number | null
+          valor_dev_trib_ibs_uf_total?: number | null
+          valor_dif_cbs_total?: number | null
+          valor_dif_ibs_mun_total?: number | null
+          valor_dif_ibs_uf_total?: number | null
           valor_frete?: number | null
+          valor_ibs_mono_total?: number | null
+          valor_ibs_mun_total?: number | null
+          valor_ibs_uf_total?: number | null
           valor_icms?: number | null
           valor_ipi?: number | null
+          valor_is_total?: number | null
           valor_outras_despesas?: number | null
           valor_pis?: number | null
           valor_produtos?: number | null
@@ -838,85 +898,169 @@ export type Database = {
       }
       nfe_itens: {
         Row: {
+          aliquota_cbs: number | null
           aliquota_cofins: number | null
+          aliquota_ibs_mun: number | null
+          aliquota_ibs_uf: number | null
           aliquota_icms: number | null
           aliquota_ipi: number | null
+          aliquota_is: number | null
           aliquota_pis: number | null
+          c_class_trib: string | null
+          c_class_trib_is: string | null
           cfop: string
           codigo_produto: string
           created_at: string
           csosn: string | null
           cst_cofins: string | null
+          cst_ibs_cbs: string | null
           cst_icms: string | null
           cst_ipi: string | null
+          cst_is: string | null
           cst_pis: string | null
           descricao: string
           id: string
+          ind_bem_movel_usado: number | null
+          ind_doacao: number | null
           ncm: string | null
           nfe_id: string
           numero_item: number
+          p_aliq_efet_cbs: number | null
+          p_aliq_efet_ibs_mun: number | null
+          p_aliq_efet_ibs_uf: number | null
+          p_red_aliq_cbs: number | null
+          p_red_aliq_ibs_mun: number | null
+          p_red_aliq_ibs_uf: number | null
           quantidade: number
           unidade: string
+          valor_cbs: number | null
           valor_cofins: number | null
+          valor_dev_trib_cbs: number | null
+          valor_dev_trib_ibs_mun: number | null
+          valor_dev_trib_ibs_uf: number | null
+          valor_dif_cbs: number | null
+          valor_dif_ibs_mun: number | null
+          valor_dif_ibs_uf: number | null
+          valor_ibs_mun: number | null
+          valor_ibs_uf: number | null
           valor_icms: number | null
           valor_ipi: number | null
+          valor_is: number | null
           valor_pis: number | null
           valor_total: number
           valor_unitario: number
+          vbc_ibs_cbs: number | null
+          vbc_is: number | null
         }
         Insert: {
+          aliquota_cbs?: number | null
           aliquota_cofins?: number | null
+          aliquota_ibs_mun?: number | null
+          aliquota_ibs_uf?: number | null
           aliquota_icms?: number | null
           aliquota_ipi?: number | null
+          aliquota_is?: number | null
           aliquota_pis?: number | null
+          c_class_trib?: string | null
+          c_class_trib_is?: string | null
           cfop: string
           codigo_produto: string
           created_at?: string
           csosn?: string | null
           cst_cofins?: string | null
+          cst_ibs_cbs?: string | null
           cst_icms?: string | null
           cst_ipi?: string | null
+          cst_is?: string | null
           cst_pis?: string | null
           descricao: string
           id?: string
+          ind_bem_movel_usado?: number | null
+          ind_doacao?: number | null
           ncm?: string | null
           nfe_id: string
           numero_item: number
+          p_aliq_efet_cbs?: number | null
+          p_aliq_efet_ibs_mun?: number | null
+          p_aliq_efet_ibs_uf?: number | null
+          p_red_aliq_cbs?: number | null
+          p_red_aliq_ibs_mun?: number | null
+          p_red_aliq_ibs_uf?: number | null
           quantidade: number
           unidade: string
+          valor_cbs?: number | null
           valor_cofins?: number | null
+          valor_dev_trib_cbs?: number | null
+          valor_dev_trib_ibs_mun?: number | null
+          valor_dev_trib_ibs_uf?: number | null
+          valor_dif_cbs?: number | null
+          valor_dif_ibs_mun?: number | null
+          valor_dif_ibs_uf?: number | null
+          valor_ibs_mun?: number | null
+          valor_ibs_uf?: number | null
           valor_icms?: number | null
           valor_ipi?: number | null
+          valor_is?: number | null
           valor_pis?: number | null
           valor_total: number
           valor_unitario: number
+          vbc_ibs_cbs?: number | null
+          vbc_is?: number | null
         }
         Update: {
+          aliquota_cbs?: number | null
           aliquota_cofins?: number | null
+          aliquota_ibs_mun?: number | null
+          aliquota_ibs_uf?: number | null
           aliquota_icms?: number | null
           aliquota_ipi?: number | null
+          aliquota_is?: number | null
           aliquota_pis?: number | null
+          c_class_trib?: string | null
+          c_class_trib_is?: string | null
           cfop?: string
           codigo_produto?: string
           created_at?: string
           csosn?: string | null
           cst_cofins?: string | null
+          cst_ibs_cbs?: string | null
           cst_icms?: string | null
           cst_ipi?: string | null
+          cst_is?: string | null
           cst_pis?: string | null
           descricao?: string
           id?: string
+          ind_bem_movel_usado?: number | null
+          ind_doacao?: number | null
           ncm?: string | null
           nfe_id?: string
           numero_item?: number
+          p_aliq_efet_cbs?: number | null
+          p_aliq_efet_ibs_mun?: number | null
+          p_aliq_efet_ibs_uf?: number | null
+          p_red_aliq_cbs?: number | null
+          p_red_aliq_ibs_mun?: number | null
+          p_red_aliq_ibs_uf?: number | null
           quantidade?: number
           unidade?: string
+          valor_cbs?: number | null
           valor_cofins?: number | null
+          valor_dev_trib_cbs?: number | null
+          valor_dev_trib_ibs_mun?: number | null
+          valor_dev_trib_ibs_uf?: number | null
+          valor_dif_cbs?: number | null
+          valor_dif_ibs_mun?: number | null
+          valor_dif_ibs_uf?: number | null
+          valor_ibs_mun?: number | null
+          valor_ibs_uf?: number | null
           valor_icms?: number | null
           valor_ipi?: number | null
+          valor_is?: number | null
           valor_pis?: number | null
           valor_total?: number
           valor_unitario?: number
+          vbc_ibs_cbs?: number | null
+          vbc_is?: number | null
         }
         Relationships: [
           {

@@ -11,6 +11,16 @@ interface NFePayload {
   natureza_operacao?: string;
   finalidade?: string;
   modalidade_frete?: string;
+  // Reforma Tributária - Grupo B
+  d_prev_entrega?: string;
+  c_mun_fg_ibs?: string;
+  tp_nf_debito?: string;
+  tp_nf_credito?: string;
+  ind_intermed?: number;
+  // Compra Governamental
+  tp_ente_gov?: number;
+  tp_oper_gov?: number;
+  p_redutor_gov?: number;
   destinatario?: {
     cpf_cnpj?: string;
     nome?: string;
@@ -43,6 +53,32 @@ interface NFePayload {
     aliquota_pis?: number;
     cst_cofins?: string;
     aliquota_cofins?: number;
+    // Reforma Tributária - IBS/CBS (Grupo UB)
+    cst_ibs_cbs?: string;
+    c_class_trib?: string;
+    vbc_ibs_cbs?: number;
+    aliquota_ibs_uf?: number;
+    aliquota_ibs_mun?: number;
+    aliquota_cbs?: number;
+    p_red_aliq_ibs_uf?: number;
+    p_aliq_efet_ibs_uf?: number;
+    p_red_aliq_ibs_mun?: number;
+    p_aliq_efet_ibs_mun?: number;
+    p_red_aliq_cbs?: number;
+    p_aliq_efet_cbs?: number;
+    valor_dif_ibs_uf?: number;
+    valor_dif_ibs_mun?: number;
+    valor_dif_cbs?: number;
+    valor_dev_trib_ibs_uf?: number;
+    valor_dev_trib_ibs_mun?: number;
+    valor_dev_trib_cbs?: number;
+    ind_doacao?: number;
+    ind_bem_movel_usado?: number;
+    // Imposto Seletivo
+    cst_is?: string;
+    c_class_trib_is?: string;
+    vbc_is?: number;
+    aliquota_is?: number;
   }[];
   valor_desconto?: number;
   valor_frete?: number;
@@ -146,6 +182,10 @@ Deno.serve(async (req) => {
       // empresaData already fetched above
 
       let valorProdutos = 0, valorIcms = 0, valorIpi = 0, valorPis = 0, valorCofins = 0;
+      let valorIbsUfTotal = 0, valorIbsMunTotal = 0, valorCbsTotal = 0, valorIsTotal = 0;
+      let valorDifIbsUfTotal = 0, valorDifIbsMunTotal = 0, valorDifCbsTotal = 0;
+      let valorDevTribIbsUfTotal = 0, valorDevTribIbsMunTotal = 0, valorDevTribCbsTotal = 0;
+
       for (const item of payload.itens) {
         const valorItem = item.quantidade * item.valor_unitario;
         valorProdutos += valorItem;
@@ -153,6 +193,21 @@ Deno.serve(async (req) => {
         valorIpi += valorItem * (item.aliquota_ipi || 0) / 100;
         valorPis += valorItem * (item.aliquota_pis || 0) / 100;
         valorCofins += valorItem * (item.aliquota_cofins || 0) / 100;
+        // IBS/CBS/IS
+        const vbcIbsCbs = item.vbc_ibs_cbs ?? valorItem;
+        const aliqIbsUf = item.p_aliq_efet_ibs_uf || item.aliquota_ibs_uf || 0;
+        const aliqIbsMun = item.p_aliq_efet_ibs_mun || item.aliquota_ibs_mun || 0;
+        const aliqCbs = item.p_aliq_efet_cbs || item.aliquota_cbs || 0;
+        valorIbsUfTotal += vbcIbsCbs * aliqIbsUf / 100;
+        valorIbsMunTotal += vbcIbsCbs * aliqIbsMun / 100;
+        valorCbsTotal += vbcIbsCbs * aliqCbs / 100;
+        valorDifIbsUfTotal += item.valor_dif_ibs_uf || 0;
+        valorDifIbsMunTotal += item.valor_dif_ibs_mun || 0;
+        valorDifCbsTotal += item.valor_dif_cbs || 0;
+        valorDevTribIbsUfTotal += item.valor_dev_trib_ibs_uf || 0;
+        valorDevTribIbsMunTotal += item.valor_dev_trib_ibs_mun || 0;
+        valorDevTribCbsTotal += item.valor_dev_trib_cbs || 0;
+        valorIsTotal += (item.vbc_is || 0) * (item.aliquota_is || 0) / 100;
       }
 
       const valorTotal = valorProdutos - (payload.valor_desconto || 0) + (payload.valor_frete || 0)
@@ -197,6 +252,25 @@ Deno.serve(async (req) => {
           dest_uf: dest.uf,
           dest_cep: dest.cep,
           dest_telefone: dest.telefone,
+          // Reforma Tributária
+          d_prev_entrega: payload.d_prev_entrega || null,
+          c_mun_fg_ibs: payload.c_mun_fg_ibs || null,
+          tp_nf_debito: payload.tp_nf_debito || null,
+          tp_nf_credito: payload.tp_nf_credito || null,
+          ind_intermed: payload.ind_intermed ?? null,
+          tp_ente_gov: payload.tp_ente_gov ?? null,
+          tp_oper_gov: payload.tp_oper_gov ?? null,
+          p_redutor_gov: payload.p_redutor_gov || 0,
+          valor_ibs_uf_total: valorIbsUfTotal,
+          valor_ibs_mun_total: valorIbsMunTotal,
+          valor_cbs_total: valorCbsTotal,
+          valor_is_total: valorIsTotal,
+          valor_dif_ibs_uf_total: valorDifIbsUfTotal,
+          valor_dif_ibs_mun_total: valorDifIbsMunTotal,
+          valor_dif_cbs_total: valorDifCbsTotal,
+          valor_dev_trib_ibs_uf_total: valorDevTribIbsUfTotal,
+          valor_dev_trib_ibs_mun_total: valorDevTribIbsMunTotal,
+          valor_dev_trib_cbs_total: valorDevTribCbsTotal,
         })
         .select('id, numero, serie, status, created_at')
         .single();
@@ -208,32 +282,69 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Insert items
-      const itensToInsert = payload.itens.map((item, index) => ({
-        nfe_id: nfeData.id,
-        numero_item: index + 1,
-        codigo_produto: item.codigo,
-        descricao: item.descricao,
-        ncm: item.ncm,
-        cfop: item.cfop,
-        unidade: item.unidade,
-        quantidade: item.quantidade,
-        valor_unitario: item.valor_unitario,
-        valor_total: item.quantidade * item.valor_unitario,
-        cst_icms: item.cst_icms,
-        csosn: item.csosn,
-        aliquota_icms: item.aliquota_icms || 0,
-        valor_icms: (item.quantidade * item.valor_unitario) * (item.aliquota_icms || 0) / 100,
-        cst_ipi: item.cst_ipi,
-        aliquota_ipi: item.aliquota_ipi || 0,
-        valor_ipi: (item.quantidade * item.valor_unitario) * (item.aliquota_ipi || 0) / 100,
-        cst_pis: item.cst_pis,
-        aliquota_pis: item.aliquota_pis || 0,
-        valor_pis: (item.quantidade * item.valor_unitario) * (item.aliquota_pis || 0) / 100,
-        cst_cofins: item.cst_cofins,
-        aliquota_cofins: item.aliquota_cofins || 0,
-        valor_cofins: (item.quantidade * item.valor_unitario) * (item.aliquota_cofins || 0) / 100,
-      }));
+      // Insert items with IBS/CBS/IS fields
+      const itensToInsert = payload.itens.map((item, index) => {
+        const valorItem = item.quantidade * item.valor_unitario;
+        const vbcIbsCbs = item.vbc_ibs_cbs ?? valorItem;
+        const aliqIbsUf = item.p_aliq_efet_ibs_uf || item.aliquota_ibs_uf || 0;
+        const aliqIbsMun = item.p_aliq_efet_ibs_mun || item.aliquota_ibs_mun || 0;
+        const aliqCbs = item.p_aliq_efet_cbs || item.aliquota_cbs || 0;
+        return {
+          nfe_id: nfeData.id,
+          numero_item: index + 1,
+          codigo_produto: item.codigo,
+          descricao: item.descricao,
+          ncm: item.ncm,
+          cfop: item.cfop,
+          unidade: item.unidade,
+          quantidade: item.quantidade,
+          valor_unitario: item.valor_unitario,
+          valor_total: valorItem,
+          cst_icms: item.cst_icms,
+          csosn: item.csosn,
+          aliquota_icms: item.aliquota_icms || 0,
+          valor_icms: valorItem * (item.aliquota_icms || 0) / 100,
+          cst_ipi: item.cst_ipi,
+          aliquota_ipi: item.aliquota_ipi || 0,
+          valor_ipi: valorItem * (item.aliquota_ipi || 0) / 100,
+          cst_pis: item.cst_pis,
+          aliquota_pis: item.aliquota_pis || 0,
+          valor_pis: valorItem * (item.aliquota_pis || 0) / 100,
+          cst_cofins: item.cst_cofins,
+          aliquota_cofins: item.aliquota_cofins || 0,
+          valor_cofins: valorItem * (item.aliquota_cofins || 0) / 100,
+          // IBS/CBS
+          cst_ibs_cbs: item.cst_ibs_cbs || null,
+          c_class_trib: item.c_class_trib || null,
+          vbc_ibs_cbs: vbcIbsCbs,
+          aliquota_ibs_uf: item.aliquota_ibs_uf || 0,
+          valor_ibs_uf: vbcIbsCbs * aliqIbsUf / 100,
+          p_red_aliq_ibs_uf: item.p_red_aliq_ibs_uf || 0,
+          p_aliq_efet_ibs_uf: aliqIbsUf,
+          valor_dif_ibs_uf: item.valor_dif_ibs_uf || 0,
+          valor_dev_trib_ibs_uf: item.valor_dev_trib_ibs_uf || 0,
+          aliquota_ibs_mun: item.aliquota_ibs_mun || 0,
+          valor_ibs_mun: vbcIbsCbs * aliqIbsMun / 100,
+          p_red_aliq_ibs_mun: item.p_red_aliq_ibs_mun || 0,
+          p_aliq_efet_ibs_mun: aliqIbsMun,
+          valor_dif_ibs_mun: item.valor_dif_ibs_mun || 0,
+          valor_dev_trib_ibs_mun: item.valor_dev_trib_ibs_mun || 0,
+          aliquota_cbs: item.aliquota_cbs || 0,
+          valor_cbs: vbcIbsCbs * aliqCbs / 100,
+          p_red_aliq_cbs: item.p_red_aliq_cbs || 0,
+          p_aliq_efet_cbs: aliqCbs,
+          valor_dif_cbs: item.valor_dif_cbs || 0,
+          valor_dev_trib_cbs: item.valor_dev_trib_cbs || 0,
+          ind_doacao: item.ind_doacao ?? null,
+          ind_bem_movel_usado: item.ind_bem_movel_usado ?? null,
+          // Imposto Seletivo
+          cst_is: item.cst_is || null,
+          c_class_trib_is: item.c_class_trib_is || null,
+          vbc_is: item.vbc_is || 0,
+          aliquota_is: item.aliquota_is || 0,
+          valor_is: (item.vbc_is || 0) * (item.aliquota_is || 0) / 100,
+        };
+      });
 
       await supabase.from('nfe_itens').insert(itensToInsert);
 
