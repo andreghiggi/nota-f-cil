@@ -876,6 +876,19 @@ Deno.serve(async (req) => {
         p_detalhes: { protocolo, chave_acesso: chaveAcesso, tipo: 'nfe' },
       });
 
+      // Send webhook notification for NF-e
+      try {
+        const nfeEvento = updateData.status === 'autorizada' ? 'nfe.autorizada' : 
+                         updateData.status === 'rejeitada' ? 'nfe.rejeitada' : null;
+        if (nfeEvento) {
+          await supabase.functions.invoke('send-webhook', {
+            body: { nfe_id: nfeId, evento: nfeEvento }
+          });
+        }
+      } catch (whErr: any) {
+        console.error('Webhook NF-e dispatch error (non-fatal):', whErr.message);
+      }
+
       return new Response(
         JSON.stringify({ success: true, data: { ...updateData, id: nfeId } }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

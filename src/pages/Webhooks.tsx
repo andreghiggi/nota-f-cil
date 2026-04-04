@@ -48,10 +48,13 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 
 const eventLabels: Record<string, string> = {
-  "nfce.autorizada": "Autorizada",
-  "nfce.rejeitada": "Rejeitada",
-  "nfce.cancelada": "Cancelada",
-  "nfce.denegada": "Denegada",
+  "nfce.autorizada": "NFC-e Autorizada",
+  "nfce.rejeitada": "NFC-e Rejeitada",
+  "nfce.cancelada": "NFC-e Cancelada",
+  "nfce.denegada": "NFC-e Denegada",
+  "nfe.autorizada": "NF-e Autorizada",
+  "nfe.rejeitada": "NF-e Rejeitada",
+  "nfe.cancelada": "NF-e Cancelada",
 };
 
 export default function Webhooks() {
