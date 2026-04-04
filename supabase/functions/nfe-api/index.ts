@@ -590,6 +590,16 @@ Deno.serve(async (req) => {
         p_ip_origem: req.headers.get('x-forwarded-for')
       });
 
+      // Send webhook notification for NF-e cancellation
+      try {
+        await supabase.functions.invoke('send-webhook', {
+          body: { nfe_id: nfeId, evento: 'nfe.cancelada' }
+        });
+      } catch (whErr: any) {
+        console.error('Webhook NF-e cancel dispatch error (non-fatal):', whErr.message);
+      }
+
+
       return new Response(
         JSON.stringify({ success: true, data: { id: nfeId, evento_id: eventoData?.id, status: 'cancelada' } }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
