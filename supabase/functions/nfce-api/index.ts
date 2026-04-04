@@ -114,9 +114,18 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Get next number
+      // Get empresa info first (needed for serie)
+      const { data: empresaData } = await supabase
+        .from('empresas')
+        .select('serie_nfce, uf')
+        .eq('id', empresa_id)
+        .single();
+
+      const serieNfce = empresaData?.serie_nfce || '001';
+
+      // Get next number using serie
       const { data: numeroData, error: numeroError } = await supabase
-        .rpc('gerar_numero_nfce', { p_empresa_id: empresa_id });
+        .rpc('gerar_numero_nfce', { p_empresa_id: empresa_id, p_serie: serieNfce });
       
       if (numeroError) {
         console.error('Error generating number:', numeroError);
