@@ -11,6 +11,16 @@ interface NFePayload {
   natureza_operacao?: string;
   finalidade?: string;
   modalidade_frete?: string;
+  // Reforma Tributária - Grupo B
+  d_prev_entrega?: string;
+  c_mun_fg_ibs?: string;
+  tp_nf_debito?: string;
+  tp_nf_credito?: string;
+  ind_intermed?: number;
+  // Compra Governamental
+  tp_ente_gov?: number;
+  tp_oper_gov?: number;
+  p_redutor_gov?: number;
   destinatario?: {
     cpf_cnpj?: string;
     nome?: string;
@@ -43,6 +53,32 @@ interface NFePayload {
     aliquota_pis?: number;
     cst_cofins?: string;
     aliquota_cofins?: number;
+    // Reforma Tributária - IBS/CBS (Grupo UB)
+    cst_ibs_cbs?: string;
+    c_class_trib?: string;
+    vbc_ibs_cbs?: number;
+    aliquota_ibs_uf?: number;
+    aliquota_ibs_mun?: number;
+    aliquota_cbs?: number;
+    p_red_aliq_ibs_uf?: number;
+    p_aliq_efet_ibs_uf?: number;
+    p_red_aliq_ibs_mun?: number;
+    p_aliq_efet_ibs_mun?: number;
+    p_red_aliq_cbs?: number;
+    p_aliq_efet_cbs?: number;
+    valor_dif_ibs_uf?: number;
+    valor_dif_ibs_mun?: number;
+    valor_dif_cbs?: number;
+    valor_dev_trib_ibs_uf?: number;
+    valor_dev_trib_ibs_mun?: number;
+    valor_dev_trib_cbs?: number;
+    ind_doacao?: number;
+    ind_bem_movel_usado?: number;
+    // Imposto Seletivo
+    cst_is?: string;
+    c_class_trib_is?: string;
+    vbc_is?: number;
+    aliquota_is?: number;
   }[];
   valor_desconto?: number;
   valor_frete?: number;
