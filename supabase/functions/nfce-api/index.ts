@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
     
     // POST /nfce - Emit new NFC-e
     if (method === 'POST' && pathParts.length === 1 && pathParts[0] === 'nfce-api') {
-      if (!permissoes.includes('emitir')) {
+      if (!permissoes.includes('emitir') && !permissoes.includes('emitir_nfce')) {
         return new Response(
           JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -114,9 +114,18 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Get next number
+      // Get empresa info first (needed for serie)
+      const { data: empresaData } = await supabase
+        .from('empresas')
+        .select('serie_nfce, uf')
+        .eq('id', empresa_id)
+        .single();
+
+      const serieNfce = empresaData?.serie_nfce || '001';
+
+      // Get next number using serie
       const { data: numeroData, error: numeroError } = await supabase
-        .rpc('gerar_numero_nfce', { p_empresa_id: empresa_id });
+        .rpc('gerar_numero_nfce', { p_empresa_id: empresa_id, p_serie: serieNfce });
       
       if (numeroError) {
         console.error('Error generating number:', numeroError);
@@ -125,13 +134,6 @@ Deno.serve(async (req) => {
           { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-
-      // Get empresa info
-      const { data: empresaData } = await supabase
-        .from('empresas')
-        .select('serie_nfce, uf')
-        .eq('id', empresa_id)
-        .single();
 
       // Calculate totals
       let valorProdutos = 0;
@@ -156,7 +158,7 @@ Deno.serve(async (req) => {
           empresa_id,
           token_api_id: token_id,
           numero: numeroData,
-          serie: empresaData?.serie_nfce || '001',
+          serie: serieNfce,
           status: 'pendente',
           ambiente,
           valor_total: valorTotal,
@@ -419,7 +421,41 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Update NFC-e status (in production, this would go to SEFAZ first)
+      // Cancel via fiscal API (SEFAZ)
+      let cancelResult: any = null;
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'cancel_nfce', nfce_id: nfceId }
+        });
+
+        if (!fiscalError && fiscalResult?.success) {
+          cancelResult = fiscalResult.data;
+        } else {
+          console.warn('Fiscal cancel failed:', fiscalError?.message || fiscalResult?.error);
+          // If SEFAZ cancel fails, revert status
+          await supabase.from('nfce').update({ status: 'autorizada' }).eq('id', nfceId);
+          
+          return new Response(
+            JSON.stringify({ 
+              error: 'Erro ao cancelar na SEFAZ', 
+              code: 'SEFAZ_ERROR',
+              details: fiscalResult?.error || fiscalError?.message 
+            }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } catch (cancelErr: any) {
+        console.error('Cancel exception:', cancelErr.message);
+        // Revert status on exception
+        await supabase.from('nfce').update({ status: 'autorizada' }).eq('id', nfceId);
+        
+        return new Response(
+          JSON.stringify({ error: 'Erro interno ao cancelar', code: 'INTERNAL_ERROR' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update NFC-e status to cancelled
       await supabase
         .from('nfce')
         .update({ status: 'cancelada' })

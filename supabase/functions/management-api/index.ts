@@ -26,6 +26,16 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // Health check
+  if (req.method === 'GET') {
+    const url = new URL(req.url);
+    const pathParts = url.pathname.split('/').filter(Boolean);
+    const route = pathParts.slice(1).join('/');
+    if (!route || route === 'health') {
+      return jsonResponse({ status: 'ok', service: 'management-api', timestamp: new Date().toISOString() });
+    }
+  }
+
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);

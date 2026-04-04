@@ -549,6 +549,34 @@ Deno.serve(async (req) => {
         .select('id')
         .single();
 
+      // Cancel via fiscal API (SEFAZ)
+      let cancelResult: any = null;
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'cancel_nfe', nfe_id: nfeId }
+        });
+
+        if (!fiscalError && fiscalResult?.success) {
+          cancelResult = fiscalResult.data;
+        } else {
+          console.warn('Fiscal NF-e cancel failed:', fiscalError?.message || fiscalResult?.error);
+          return new Response(
+            JSON.stringify({ 
+              error: 'Erro ao cancelar na SEFAZ', 
+              code: 'SEFAZ_ERROR',
+              details: fiscalResult?.error || fiscalError?.message 
+            }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } catch (cancelErr: any) {
+        console.error('NF-e Cancel exception:', cancelErr.message);
+        return new Response(
+          JSON.stringify({ error: 'Erro interno ao cancelar', code: 'INTERNAL_ERROR' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       await supabase.from('nfe').update({ status: 'cancelada' }).eq('id', nfeId);
 
       await supabase.rpc('registrar_log', {
