@@ -36,6 +36,7 @@ interface NFePayload {
     cep?: string;
     telefone?: string;
   };
+  serie?: string;
   itens: {
     codigo: string;
     descricao: string;
@@ -47,12 +48,20 @@ interface NFePayload {
     cst_icms?: string;
     csosn?: string;
     aliquota_icms?: number;
+    base_calculo_icms?: number;
+    aliquota_fcp?: number;
+    base_calculo_icms_st?: number;
+    aliquota_icms_st?: number;
+    mva_icms_st?: number;
     cst_ipi?: string;
     aliquota_ipi?: number;
+    base_calculo_ipi?: number;
     cst_pis?: string;
     aliquota_pis?: number;
+    base_calculo_pis?: number;
     cst_cofins?: string;
     aliquota_cofins?: number;
+    base_calculo_cofins?: number;
     // Reforma Tributária - IBS/CBS (Grupo UB)
     cst_ibs_cbs?: string;
     c_class_trib?: string;
@@ -79,6 +88,9 @@ interface NFePayload {
     c_class_trib_is?: string;
     vbc_is?: number;
     aliquota_is?: number;
+    base_calculo_is?: number;
+    base_calculo_ibs?: number;
+    base_calculo_cbs?: number;
   }[];
   valor_desconto?: number;
   valor_frete?: number;
