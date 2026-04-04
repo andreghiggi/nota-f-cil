@@ -605,10 +605,10 @@ Deno.serve(async (req) => {
 
       const isPF = empresa.tipo_pessoa === 'PF';
 
-      // Build items
+      // Build items with IBS/CBS/IS data (Grupo UB - Reforma Tributária)
       const itensObj: Record<string, any> = {};
       (nfe.nfe_itens || []).forEach((item: any, idx: number) => {
-        itensObj[String(idx)] = {
+        const itemData: any = {
           descricao: item.descricao,
           quantidade: item.quantidade,
           valor_unitario: item.valor_unitario,
@@ -627,9 +627,57 @@ Deno.serve(async (req) => {
           cst_cofins: item.cst_cofins,
           aliquota_cofins: item.aliquota_cofins,
         };
+
+        // Grupo UB - IBS/CBS (only if CST is set)
+        if (item.cst_ibs_cbs) {
+          itemData.ibs_cbs = {
+            CST: item.cst_ibs_cbs,
+            cClassTrib: item.c_class_trib || '',
+            vBC: item.vbc_ibs_cbs || item.valor_total || 0,
+            indDoacao: item.ind_doacao ?? undefined,
+            gIBSUF: {
+              pIBSUF: item.aliquota_ibs_uf || 0,
+              vIBSUF: item.valor_ibs_uf || 0,
+              ...(item.p_red_aliq_ibs_uf ? { gRed: { pRedAliq: item.p_red_aliq_ibs_uf, pAliqEfet: item.p_aliq_efet_ibs_uf || 0 } } : {}),
+              ...(item.valor_dif_ibs_uf ? { gDif: { vDif: item.valor_dif_ibs_uf } } : {}),
+              ...(item.valor_dev_trib_ibs_uf ? { gDevTrib: { vDevTrib: item.valor_dev_trib_ibs_uf } } : {}),
+            },
+            gIBSMun: {
+              pIBSMun: item.aliquota_ibs_mun || 0,
+              vIBSMun: item.valor_ibs_mun || 0,
+              ...(item.p_red_aliq_ibs_mun ? { gRed: { pRedAliq: item.p_red_aliq_ibs_mun, pAliqEfet: item.p_aliq_efet_ibs_mun || 0 } } : {}),
+              ...(item.valor_dif_ibs_mun ? { gDif: { vDif: item.valor_dif_ibs_mun } } : {}),
+              ...(item.valor_dev_trib_ibs_mun ? { gDevTrib: { vDevTrib: item.valor_dev_trib_ibs_mun } } : {}),
+            },
+            gCBS: {
+              pCBS: item.aliquota_cbs || 0,
+              vCBS: item.valor_cbs || 0,
+              ...(item.p_red_aliq_cbs ? { gRed: { pRedAliq: item.p_red_aliq_cbs, pAliqEfet: item.p_aliq_efet_cbs || 0 } } : {}),
+              ...(item.valor_dif_cbs ? { gDif: { vDif: item.valor_dif_cbs } } : {}),
+              ...(item.valor_dev_trib_cbs ? { gDevTrib: { vDevTrib: item.valor_dev_trib_cbs } } : {}),
+            },
+          };
+        }
+
+        // Imposto Seletivo
+        if (item.cst_is) {
+          itemData.imposto_seletivo = {
+            CSTIS: item.cst_is,
+            cClassTribIS: item.c_class_trib_is || '',
+            vBCIS: item.vbc_is || 0,
+            pIS: item.aliquota_is || 0,
+            vIS: item.valor_is || 0,
+          };
+        }
+
+        if (item.ind_bem_movel_usado) {
+          itemData.indBemMovelUsado = item.ind_bem_movel_usado;
+        }
+
+        itensObj[String(idx)] = itemData;
       });
 
-      // Build destinatário - PHP expects "cliente" with fields: nome, cpf, cnpj, ie, email, indIEDest, logradouro, numero, bairro, cMun, xMun, uf, cep
+      // Build destinatário
       const clientePayload: any = {};
       if (nfe.dest_cpf_cnpj) {
         const doc = nfe.dest_cpf_cnpj.replace(/\D/g, '');
@@ -656,10 +704,8 @@ Deno.serve(async (req) => {
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
-        modelo: 55, // NF-e = modelo 55
-        // Explicitly tell PHP whether emitente is PF or PJ
+        modelo: 55,
         tipo_pessoa: isPF ? 'PF' : 'PJ',
-        // Emitente data flat for PHP to override registered values
         cMun: empresa.codigo_municipio || '',
         xMun: empresa.municipio || '',
         codigo_municipio: empresa.codigo_municipio || '',
@@ -673,14 +719,32 @@ Deno.serve(async (req) => {
           modalidade_frete: nfe.modalidade_frete || '9',
           cliente: clientePayload,
           itens: itensObj,
+          // Reforma Tributária - Grupo B
+          ...(nfe.d_prev_entrega ? { dPrevEntrega: nfe.d_prev_entrega } : {}),
+          ...(nfe.c_mun_fg_ibs ? { cMunFGIBS: nfe.c_mun_fg_ibs } : {}),
+          ...(nfe.tp_nf_debito ? { tpNFDebito: nfe.tp_nf_debito } : {}),
+          ...(nfe.tp_nf_credito ? { tpNFCredito: nfe.tp_nf_credito } : {}),
+          ...(nfe.ind_intermed != null ? { indIntermed: nfe.ind_intermed } : {}),
+          ...(nfe.tp_ente_gov != null ? { gCompraGov: { tpEnteGov: nfe.tp_ente_gov, tpOperGov: nfe.tp_oper_gov, pRedutor: nfe.p_redutor_gov || 0 } } : {}),
+          // Totais IBS/CBS/IS (Grupo W03)
+          totais_ibs_cbs: {
+            vIBSUFTot: nfe.valor_ibs_uf_total || 0,
+            vIBSMunTot: nfe.valor_ibs_mun_total || 0,
+            vCBSTot: nfe.valor_cbs_total || 0,
+            vISTot: nfe.valor_is_total || 0,
+            vDifIBSUFTot: nfe.valor_dif_ibs_uf_total || 0,
+            vDifIBSMunTot: nfe.valor_dif_ibs_mun_total || 0,
+            vDifCBSTot: nfe.valor_dif_cbs_total || 0,
+            vDevTribIBSUFTot: nfe.valor_dev_trib_ibs_uf_total || 0,
+            vDevTribIBSMunTot: nfe.valor_dev_trib_ibs_mun_total || 0,
+            vDevTribCBSTot: nfe.valor_dev_trib_cbs_total || 0,
+          },
         },
-        // Include emitente data nested as well
         emitente: {
           cMun: empresa.codigo_municipio || '',
           xMun: empresa.municipio || '',
           UF: empresa.uf || '',
           IE: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
-          // Send CPF or CNPJ based on tipo_pessoa
           ...(isPF
             ? { CPF: (empresa.cpf || '').replace(/\D/g, '') }
             : { CNPJ: (empresa.cnpj || '').replace(/\D/g, '') }
