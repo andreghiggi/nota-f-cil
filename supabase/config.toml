@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.nfe-api]
 verify_jwt = false
+
+[functions.management-api]
+verify_jwt = false

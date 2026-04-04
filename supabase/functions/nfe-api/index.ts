@@ -36,6 +36,7 @@ interface NFePayload {
     cep?: string;
     telefone?: string;
   };
+  serie?: string;
   itens: {
     codigo: string;
     descricao: string;
@@ -47,12 +48,20 @@ interface NFePayload {
     cst_icms?: string;
     csosn?: string;
     aliquota_icms?: number;
+    base_calculo_icms?: number;
+    aliquota_fcp?: number;
+    base_calculo_icms_st?: number;
+    aliquota_icms_st?: number;
+    mva_icms_st?: number;
     cst_ipi?: string;
     aliquota_ipi?: number;
+    base_calculo_ipi?: number;
     cst_pis?: string;
     aliquota_pis?: number;
+    base_calculo_pis?: number;
     cst_cofins?: string;
     aliquota_cofins?: number;
+    base_calculo_cofins?: number;
     // Reforma Tributária - IBS/CBS (Grupo UB)
     cst_ibs_cbs?: string;
     c_class_trib?: string;
@@ -79,6 +88,9 @@ interface NFePayload {
     c_class_trib_is?: string;
     vbc_is?: number;
     aliquota_is?: number;
+    base_calculo_is?: number;
+    base_calculo_ibs?: number;
+    base_calculo_cbs?: number;
   }[];
   valor_desconto?: number;
   valor_frete?: number;
@@ -166,7 +178,8 @@ Deno.serve(async (req) => {
         .eq('id', empresa_id)
         .single();
 
-      const serieNfe = empresaData?.serie_nfe || '001';
+      // Use serie from payload if provided, otherwise use empresa default
+      const serieNfe = payload.serie || empresaData?.serie_nfe || '001';
 
       const { data: numeroData, error: numeroError } = await supabase
         .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id, p_serie: serieNfe });
@@ -303,16 +316,26 @@ Deno.serve(async (req) => {
           cst_icms: item.cst_icms,
           csosn: item.csosn,
           aliquota_icms: item.aliquota_icms || 0,
+          base_calculo_icms: item.base_calculo_icms || valorItem,
           valor_icms: valorItem * (item.aliquota_icms || 0) / 100,
+          aliquota_fcp: item.aliquota_fcp || 0,
+          valor_fcp: (item.base_calculo_icms || valorItem) * (item.aliquota_fcp || 0) / 100,
+          base_calculo_icms_st: item.base_calculo_icms_st || 0,
+          aliquota_icms_st: item.aliquota_icms_st || 0,
+          mva_icms_st: item.mva_icms_st || 0,
+          valor_icms_st: (item.base_calculo_icms_st || 0) * (item.aliquota_icms_st || 0) / 100,
           cst_ipi: item.cst_ipi,
           aliquota_ipi: item.aliquota_ipi || 0,
-          valor_ipi: valorItem * (item.aliquota_ipi || 0) / 100,
+          base_calculo_ipi: item.base_calculo_ipi || valorItem,
+          valor_ipi: (item.base_calculo_ipi || valorItem) * (item.aliquota_ipi || 0) / 100,
           cst_pis: item.cst_pis,
           aliquota_pis: item.aliquota_pis || 0,
-          valor_pis: valorItem * (item.aliquota_pis || 0) / 100,
+          base_calculo_pis: item.base_calculo_pis || valorItem,
+          valor_pis: (item.base_calculo_pis || valorItem) * (item.aliquota_pis || 0) / 100,
           cst_cofins: item.cst_cofins,
           aliquota_cofins: item.aliquota_cofins || 0,
-          valor_cofins: valorItem * (item.aliquota_cofins || 0) / 100,
+          base_calculo_cofins: item.base_calculo_cofins || valorItem,
+          valor_cofins: (item.base_calculo_cofins || valorItem) * (item.aliquota_cofins || 0) / 100,
           // IBS/CBS
           cst_ibs_cbs: item.cst_ibs_cbs || null,
           c_class_trib: item.c_class_trib || null,
