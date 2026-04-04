@@ -620,12 +620,20 @@ Deno.serve(async (req) => {
           cst_icms: item.cst_icms,
           csosn: item.csosn,
           aliquota_icms: item.aliquota_icms,
+          base_calculo_icms: item.base_calculo_icms || item.valor_total || 0,
+          aliquota_fcp: item.aliquota_fcp || 0,
+          base_calculo_icms_st: item.base_calculo_icms_st || 0,
+          aliquota_icms_st: item.aliquota_icms_st || 0,
+          mva_icms_st: item.mva_icms_st || 0,
           cst_ipi: item.cst_ipi,
           aliquota_ipi: item.aliquota_ipi,
+          base_calculo_ipi: item.base_calculo_ipi || item.valor_total || 0,
           cst_pis: item.cst_pis,
           aliquota_pis: item.aliquota_pis,
+          base_calculo_pis: item.base_calculo_pis || item.valor_total || 0,
           cst_cofins: item.cst_cofins,
           aliquota_cofins: item.aliquota_cofins,
+          base_calculo_cofins: item.base_calculo_cofins || item.valor_total || 0,
         };
 
         // Grupo UB - IBS/CBS (only if CST is set)

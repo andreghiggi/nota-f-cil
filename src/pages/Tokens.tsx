@@ -64,6 +64,7 @@ const permissoesDisponiveis = [
   { id: "consultar", label: "Consultar", description: "Permite consultar status e listar documentos fiscais" },
   { id: "cancelar", label: "Cancelar", description: "Permite cancelar NFC-e e NF-e autorizadas" },
   { id: "reprocessar", label: "Reprocessar", description: "Permite reprocessar documentos rejeitados" },
+  { id: "gerenciar", label: "Gerenciar", description: "Permite criar/revogar tokens e gerenciar séries, certificados e ambiente via API" },
 ];
 
 const statusConfig = {
