@@ -7,7 +7,8 @@ const corsHeaders = {
 
 interface WebhookPayload {
   evento: string;
-  nfce_id: string;
+  documento_id: string;
+  tipo_documento: 'nfce' | 'nfe';
   empresa_id: string;
   dados: {
     numero: string;
@@ -22,11 +23,13 @@ interface WebhookPayload {
     data_autorizacao?: string;
     qrcode_url?: string;
     external_id?: string;
+    natureza_operacao?: string;
+    dest_nome?: string;
+    dest_cpf_cnpj?: string;
   };
   timestamp: string;
 }
 
-// Generate HMAC-SHA256 signature
 async function generateSignature(payload: string, secret: string): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -42,7 +45,6 @@ async function generateSignature(payload: string, secret: string): Promise<strin
     .join('');
 }
 
-// Send webhook with retry logic
 async function sendWebhook(
   webhook: { id: string; url: string; secret: string; nome: string },
   payload: WebhookPayload,
@@ -50,13 +52,13 @@ async function sendWebhook(
 ): Promise<{ success: boolean; statusCode?: number; error?: string; durationMs: number }> {
   const startTime = Date.now();
   const payloadString = JSON.stringify(payload);
-  
+
   try {
     const signature = await generateSignature(payloadString, webhook.secret);
     const timestamp = Math.floor(Date.now() / 1000).toString();
-    
+
     console.log(`📤 Sending webhook to ${webhook.nome}: ${webhook.url}`);
-    
+
     const response = await fetch(webhook.url, {
       method: 'POST',
       headers: {
@@ -64,28 +66,26 @@ async function sendWebhook(
         'X-Webhook-Signature': signature,
         'X-Webhook-Timestamp': timestamp,
         'X-Webhook-Event': payload.evento,
-        'User-Agent': 'NFCe-SaaS-Webhook/1.0',
+        'User-Agent': 'FiscalFlow-Webhook/1.0',
       },
       body: payloadString,
     });
-    
+
     const durationMs = Date.now() - startTime;
     const responseBody = await response.text().catch(() => '');
-    
-    // Log the webhook delivery
+
     await supabase.from('webhook_logs').insert({
       webhook_id: webhook.id,
-      nfce_id: payload.nfce_id,
+      nfce_id: payload.documento_id,
       evento: payload.evento,
       payload: payload,
       status_code: response.status,
-      response_body: responseBody.substring(0, 1000), // Limit response body
+      response_body: responseBody.substring(0, 1000),
       duracao_ms: durationMs,
       sucesso: response.ok,
       erro: response.ok ? null : `HTTP ${response.status}: ${response.statusText}`,
     });
-    
-    // Update webhook status
+
     if (response.ok) {
       await supabase
         .from('webhooks')
@@ -95,7 +95,7 @@ async function sendWebhook(
           falhas_consecutivas: 0,
         })
         .eq('id', webhook.id);
-      
+
       console.log(`✅ Webhook ${webhook.nome} delivered successfully (${durationMs}ms)`);
     } else {
       const { data: currentWebhook } = await supabase
@@ -103,53 +103,45 @@ async function sendWebhook(
         .select('falhas_consecutivas')
         .eq('id', webhook.id)
         .single();
-      
+
       const novasFalhas = (currentWebhook?.falhas_consecutivas || 0) + 1;
-      
+
       await supabase
         .from('webhooks')
         .update({
           ultimo_envio: new Date().toISOString(),
           ultimo_status: response.status,
           falhas_consecutivas: novasFalhas,
-          // Disable webhook after 10 consecutive failures
           ativo: novasFalhas < 10,
         })
         .eq('id', webhook.id);
-      
+
       console.log(`❌ Webhook ${webhook.nome} failed with status ${response.status}`);
     }
-    
-    return {
-      success: response.ok,
-      statusCode: response.status,
-      durationMs,
-    };
+
+    return { success: response.ok, statusCode: response.status, durationMs };
   } catch (error: any) {
     const durationMs = Date.now() - startTime;
-    
     console.error(`❌ Webhook ${webhook.nome} error:`, error.message);
-    
-    // Log the error
+
     await supabase.from('webhook_logs').insert({
       webhook_id: webhook.id,
-      nfce_id: payload.nfce_id,
+      nfce_id: payload.documento_id,
       evento: payload.evento,
       payload: payload,
       duracao_ms: durationMs,
       sucesso: false,
       erro: error.message,
     });
-    
-    // Update failure count
+
     const { data: currentWebhook } = await supabase
       .from('webhooks')
       .select('falhas_consecutivas')
       .eq('id', webhook.id)
       .maybeSingle();
-    
+
     const novasFalhas = (currentWebhook?.falhas_consecutivas || 0) + 1;
-    
+
     await supabase
       .from('webhooks')
       .update({
@@ -158,12 +150,8 @@ async function sendWebhook(
         ativo: novasFalhas < 10,
       })
       .eq('id', webhook.id);
-    
-    return {
-      success: false,
-      error: error.message,
-      durationMs,
-    };
+
+    return { success: false, error: error.message, durationMs };
   }
 }
 
@@ -177,37 +165,61 @@ Deno.serve(async (req) => {
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
   try {
-    const { nfce_id, evento } = await req.json();
+    const body = await req.json();
+    const { nfce_id, nfe_id, evento } = body;
 
-    if (!nfce_id || !evento) {
+    const documentoId = nfce_id || nfe_id;
+    const isNFe = !!nfe_id && !nfce_id;
+
+    if (!documentoId || !evento) {
       return new Response(
-        JSON.stringify({ error: 'nfce_id and evento are required' }),
+        JSON.stringify({ error: 'nfce_id or nfe_id and evento are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`🔔 Processing webhook event: ${evento} for NFC-e: ${nfce_id}`);
+    console.log(`🔔 Processing webhook event: ${evento} for ${isNFe ? 'NF-e' : 'NFC-e'}: ${documentoId}`);
 
-    // Get NFC-e data
-    const { data: nfce, error: nfceError } = await supabase
-      .from('nfce')
-      .select('*')
-      .eq('id', nfce_id)
-      .maybeSingle();
+    let documento: any;
+    let empresaId: string;
 
-    if (nfceError || !nfce) {
-      console.error('NFC-e not found:', nfce_id);
-      return new Response(
-        JSON.stringify({ error: 'NFC-e not found' }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+    if (isNFe) {
+      const { data, error } = await supabase
+        .from('nfe')
+        .select('*')
+        .eq('id', documentoId)
+        .maybeSingle();
+
+      if (error || !data) {
+        return new Response(
+          JSON.stringify({ error: 'NF-e not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      documento = data;
+      empresaId = data.empresa_id;
+    } else {
+      const { data, error } = await supabase
+        .from('nfce')
+        .select('*')
+        .eq('id', documentoId)
+        .maybeSingle();
+
+      if (error || !data) {
+        return new Response(
+          JSON.stringify({ error: 'NFC-e not found' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      documento = data;
+      empresaId = data.empresa_id;
     }
 
     // Get active webhooks for this empresa that subscribe to this event
     const { data: webhooks, error: webhooksError } = await supabase
       .from('webhooks')
       .select('id, url, secret, nome')
-      .eq('empresa_id', nfce.empresa_id)
+      .eq('empresa_id', empresaId)
       .eq('ativo', true)
       .contains('eventos', [evento]);
 
@@ -229,21 +241,28 @@ Deno.serve(async (req) => {
     // Build payload
     const payload: WebhookPayload = {
       evento,
-      nfce_id: nfce.id,
-      empresa_id: nfce.empresa_id,
+      documento_id: documentoId,
+      tipo_documento: isNFe ? 'nfe' : 'nfce',
+      empresa_id: empresaId,
       dados: {
-        numero: nfce.numero,
-        serie: nfce.serie,
-        chave_acesso: nfce.chave_acesso,
-        status: nfce.status,
-        protocolo: nfce.protocolo,
-        valor_total: nfce.valor_total,
-        codigo_retorno: nfce.codigo_retorno,
-        motivo_retorno: nfce.motivo_retorno,
-        data_emissao: nfce.data_emissao,
-        data_autorizacao: nfce.data_autorizacao,
-        qrcode_url: nfce.qrcode_url,
-        external_id: nfce.external_id,
+        numero: documento.numero,
+        serie: documento.serie,
+        chave_acesso: documento.chave_acesso,
+        status: documento.status,
+        protocolo: documento.protocolo,
+        valor_total: documento.valor_total,
+        codigo_retorno: documento.codigo_retorno,
+        motivo_retorno: documento.motivo_retorno,
+        data_emissao: documento.data_emissao,
+        data_autorizacao: documento.data_autorizacao,
+        ...(isNFe ? {
+          natureza_operacao: documento.natureza_operacao,
+          dest_nome: documento.dest_nome,
+          dest_cpf_cnpj: documento.dest_cpf_cnpj,
+        } : {
+          qrcode_url: documento.qrcode_url,
+        }),
+        external_id: documento.external_id,
       },
       timestamp: new Date().toISOString(),
     };
@@ -258,24 +277,18 @@ Deno.serve(async (req) => {
 
     console.log(`📊 Webhook delivery complete: ${delivered} delivered, ${failed} failed`);
 
-    // Log the webhook dispatch
     await supabase.rpc('registrar_log', {
-      p_empresa_id: nfce.empresa_id,
-      p_nfce_id: nfce.id,
+      p_empresa_id: empresaId,
+      p_nfce_id: documentoId,
       p_token_api_id: null,
       p_tipo: failed > 0 ? 'warning' : 'info',
       p_categoria: 'webhook',
-      p_mensagem: `Webhooks enviados: ${delivered} sucesso, ${failed} falha`,
-      p_detalhes: { evento, results },
+      p_mensagem: `Webhooks ${isNFe ? 'NF-e' : 'NFC-e'} enviados: ${delivered} sucesso, ${failed} falha`,
+      p_detalhes: { evento, tipo_documento: isNFe ? 'nfe' : 'nfce', results },
     });
 
     return new Response(
-      JSON.stringify({
-        success: true,
-        delivered,
-        failed,
-        total: webhooks.length,
-      }),
+      JSON.stringify({ success: true, delivered, failed, total: webhooks.length }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: any) {
