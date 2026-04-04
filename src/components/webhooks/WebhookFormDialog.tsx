@@ -53,6 +53,9 @@ const eventosDisponiveis = [
   { id: "nfce.rejeitada", label: "NFC-e Rejeitada", description: "Quando uma NFC-e é rejeitada após todas as tentativas" },
   { id: "nfce.cancelada", label: "NFC-e Cancelada", description: "Quando uma NFC-e autorizada é cancelada" },
   { id: "nfce.denegada", label: "NFC-e Denegada", description: "Quando uma NFC-e é denegada pela SEFAZ" },
+  { id: "nfe.autorizada", label: "NF-e Autorizada", description: "Quando uma NF-e é autorizada pela SEFAZ" },
+  { id: "nfe.rejeitada", label: "NF-e Rejeitada", description: "Quando uma NF-e é rejeitada após todas as tentativas" },
+  { id: "nfe.cancelada", label: "NF-e Cancelada", description: "Quando uma NF-e autorizada é cancelada" },
 ];
 
 export function WebhookFormDialog({ open, onOpenChange, onSuccess }: WebhookFormDialogProps) {
