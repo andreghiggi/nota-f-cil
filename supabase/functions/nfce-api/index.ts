@@ -97,7 +97,7 @@ Deno.serve(async (req) => {
     
     // POST /nfce - Emit new NFC-e
     if (method === 'POST' && pathParts.length === 1 && pathParts[0] === 'nfce-api') {
-      if (!permissoes.includes('emitir')) {
+      if (!permissoes.includes('emitir') && !permissoes.includes('emitir_nfce')) {
         return new Response(
           JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
