@@ -900,12 +900,19 @@ export type Database = {
         Row: {
           aliquota_cbs: number | null
           aliquota_cofins: number | null
+          aliquota_fcp: number | null
           aliquota_ibs_mun: number | null
           aliquota_ibs_uf: number | null
           aliquota_icms: number | null
+          aliquota_icms_st: number | null
           aliquota_ipi: number | null
           aliquota_is: number | null
           aliquota_pis: number | null
+          base_calculo_cofins: number | null
+          base_calculo_icms: number | null
+          base_calculo_icms_st: number | null
+          base_calculo_ipi: number | null
+          base_calculo_pis: number | null
           c_class_trib: string | null
           c_class_trib_is: string | null
           cfop: string
@@ -922,6 +929,7 @@ export type Database = {
           id: string
           ind_bem_movel_usado: number | null
           ind_doacao: number | null
+          mva_icms_st: number | null
           ncm: string | null
           nfe_id: string
           numero_item: number
@@ -941,9 +949,11 @@ export type Database = {
           valor_dif_cbs: number | null
           valor_dif_ibs_mun: number | null
           valor_dif_ibs_uf: number | null
+          valor_fcp: number | null
           valor_ibs_mun: number | null
           valor_ibs_uf: number | null
           valor_icms: number | null
+          valor_icms_st: number | null
           valor_ipi: number | null
           valor_is: number | null
           valor_pis: number | null
@@ -955,12 +965,19 @@ export type Database = {
         Insert: {
           aliquota_cbs?: number | null
           aliquota_cofins?: number | null
+          aliquota_fcp?: number | null
           aliquota_ibs_mun?: number | null
           aliquota_ibs_uf?: number | null
           aliquota_icms?: number | null
+          aliquota_icms_st?: number | null
           aliquota_ipi?: number | null
           aliquota_is?: number | null
           aliquota_pis?: number | null
+          base_calculo_cofins?: number | null
+          base_calculo_icms?: number | null
+          base_calculo_icms_st?: number | null
+          base_calculo_ipi?: number | null
+          base_calculo_pis?: number | null
           c_class_trib?: string | null
           c_class_trib_is?: string | null
           cfop: string
@@ -977,6 +994,7 @@ export type Database = {
           id?: string
           ind_bem_movel_usado?: number | null
           ind_doacao?: number | null
+          mva_icms_st?: number | null
           ncm?: string | null
           nfe_id: string
           numero_item: number
@@ -996,9 +1014,11 @@ export type Database = {
           valor_dif_cbs?: number | null
           valor_dif_ibs_mun?: number | null
           valor_dif_ibs_uf?: number | null
+          valor_fcp?: number | null
           valor_ibs_mun?: number | null
           valor_ibs_uf?: number | null
           valor_icms?: number | null
+          valor_icms_st?: number | null
           valor_ipi?: number | null
           valor_is?: number | null
           valor_pis?: number | null
@@ -1010,12 +1030,19 @@ export type Database = {
         Update: {
           aliquota_cbs?: number | null
           aliquota_cofins?: number | null
+          aliquota_fcp?: number | null
           aliquota_ibs_mun?: number | null
           aliquota_ibs_uf?: number | null
           aliquota_icms?: number | null
+          aliquota_icms_st?: number | null
           aliquota_ipi?: number | null
           aliquota_is?: number | null
           aliquota_pis?: number | null
+          base_calculo_cofins?: number | null
+          base_calculo_icms?: number | null
+          base_calculo_icms_st?: number | null
+          base_calculo_ipi?: number | null
+          base_calculo_pis?: number | null
           c_class_trib?: string | null
           c_class_trib_is?: string | null
           cfop?: string
@@ -1032,6 +1059,7 @@ export type Database = {
           id?: string
           ind_bem_movel_usado?: number | null
           ind_doacao?: number | null
+          mva_icms_st?: number | null
           ncm?: string | null
           nfe_id?: string
           numero_item?: number
@@ -1051,9 +1079,11 @@ export type Database = {
           valor_dif_cbs?: number | null
           valor_dif_ibs_mun?: number | null
           valor_dif_ibs_uf?: number | null
+          valor_fcp?: number | null
           valor_ibs_mun?: number | null
           valor_ibs_uf?: number | null
           valor_icms?: number | null
+          valor_icms_st?: number | null
           valor_ipi?: number | null
           valor_is?: number | null
           valor_pis?: number | null
