@@ -421,7 +421,41 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Update NFC-e status (in production, this would go to SEFAZ first)
+      // Cancel via fiscal API (SEFAZ)
+      let cancelResult: any = null;
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'cancel_nfce', nfce_id: nfceId }
+        });
+
+        if (!fiscalError && fiscalResult?.success) {
+          cancelResult = fiscalResult.data;
+        } else {
+          console.warn('Fiscal cancel failed:', fiscalError?.message || fiscalResult?.error);
+          // If SEFAZ cancel fails, revert status
+          await supabase.from('nfce').update({ status: 'autorizada' }).eq('id', nfceId);
+          
+          return new Response(
+            JSON.stringify({ 
+              error: 'Erro ao cancelar na SEFAZ', 
+              code: 'SEFAZ_ERROR',
+              details: fiscalResult?.error || fiscalError?.message 
+            }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } catch (cancelErr: any) {
+        console.error('Cancel exception:', cancelErr.message);
+        // Revert status on exception
+        await supabase.from('nfce').update({ status: 'autorizada' }).eq('id', nfceId);
+        
+        return new Response(
+          JSON.stringify({ error: 'Erro interno ao cancelar', code: 'INTERNAL_ERROR' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update NFC-e status to cancelled
       await supabase
         .from('nfce')
         .update({ status: 'cancelada' })
