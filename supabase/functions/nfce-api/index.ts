@@ -135,13 +135,6 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Get empresa info
-      const { data: empresaData } = await supabase
-        .from('empresas')
-        .select('serie_nfce, uf')
-        .eq('id', empresa_id)
-        .single();
-
       // Calculate totals
       let valorProdutos = 0;
       let valorIcms = 0;
@@ -165,7 +158,7 @@ Deno.serve(async (req) => {
           empresa_id,
           token_api_id: token_id,
           numero: numeroData,
-          serie: empresaData?.serie_nfce || '001',
+          serie: serieNfce,
           status: 'pendente',
           ambiente,
           valor_total: valorTotal,
