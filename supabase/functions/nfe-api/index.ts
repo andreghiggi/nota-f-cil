@@ -124,7 +124,198 @@ Deno.serve(async (req) => {
     const url = new URL(req.url);
     const pathParts = url.pathname.split('/').filter(Boolean);
 
-    // Validate API Key
+    // ===== PUBLIC ENDPOINT: POST /nfe-api/register =====
+    const subPath = pathParts.length >= 2 ? pathParts.slice(1).join('/') : '';
+
+    if (req.method === 'POST' && subPath === 'register') {
+      const body = await req.json();
+      const { cnpj, razao_social, email, nome_fantasia, inscricao_estadual, uf, municipio, codigo_municipio } = body;
+
+      if (!cnpj || !razao_social) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Campos cnpj e razao_social são obrigatórios.', code: 'VALIDATION_ERROR' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const cnpjClean = cnpj.replace(/\D/g, '');
+      if (cnpjClean.length !== 11 && cnpjClean.length !== 14) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'CNPJ/CPF deve ter 11 ou 14 dígitos.', code: 'VALIDATION_ERROR' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Check if CNPJ already registered
+      const tipoPessoa = cnpjClean.length === 11 ? 'PF' : 'PJ';
+      const cnpjField = tipoPessoa === 'PF' ? 'cpf' : 'cnpj';
+      const { data: existingEmpresa } = await supabase
+        .from('empresas')
+        .select('id')
+        .eq(cnpjField, cnpjClean)
+        .maybeSingle();
+
+      if (existingEmpresa) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'CNPJ/CPF já possui cadastro. Use o endpoint de tokens para gerar novos acessos.', code: 'ALREADY_REGISTERED' }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Create empresa (user_id will be a system UUID since this is API-driven)
+      const systemUserId = '00000000-0000-0000-0000-000000000000';
+      const empresaInsert: any = {
+        user_id: systemUserId,
+        razao_social,
+        nome_fantasia: nome_fantasia || razao_social,
+        tipo_pessoa: tipoPessoa,
+        uf: uf || 'SP',
+        municipio: municipio || 'SAO PAULO',
+        codigo_municipio: codigo_municipio || '3550308',
+        ambiente: 'homologacao',
+      };
+      if (tipoPessoa === 'PF') {
+        empresaInsert.cpf = cnpjClean;
+      } else {
+        empresaInsert.cnpj = cnpjClean;
+        empresaInsert.inscricao_estadual = inscricao_estadual || null;
+      }
+
+      const { data: novaEmpresa, error: empresaError } = await supabase
+        .from('empresas')
+        .insert(empresaInsert)
+        .select('id, razao_social, ambiente, created_at')
+        .single();
+
+      if (empresaError) {
+        console.error('Register empresa error:', empresaError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Erro ao cadastrar empresa.', details: empresaError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Generate API token
+      const token = `sk_live_${crypto.randomUUID()}`;
+      const tokenPrefix = token.substring(0, 16);
+      const newTokenHash = await hashToken(token);
+
+      const { error: tokenInsertError } = await supabase
+        .from('tokens_api')
+        .insert({
+          empresa_id: novaEmpresa.id,
+          nome: `Token principal - ${razao_social}`,
+          token_hash: newTokenHash,
+          token_prefix: tokenPrefix,
+          permissoes: ['emitir_nfce', 'emitir_nfe', 'emitir', 'consultar', 'cancelar', 'gerenciar'],
+          status: 'ativo',
+        });
+
+      if (tokenInsertError) {
+        console.error('Register token error:', tokenInsertError);
+      }
+
+      // Create default series
+      await supabase.from('series_fiscais').insert([
+        { empresa_id: novaEmpresa.id, tipo: 'nfe', serie: '001', numero_atual: 0 },
+        { empresa_id: novaEmpresa.id, tipo: 'nfce', serie: '001', numero_atual: 0 },
+      ]);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            api_key: token,
+            cnpj: cnpjClean,
+            razao_social: novaEmpresa.razao_social,
+            ambiente: novaEmpresa.ambiente,
+            empresa_id: novaEmpresa.id,
+            created_at: novaEmpresa.created_at,
+            message: 'Empresa registrada com sucesso. Guarde a api_key, ela não será exibida novamente.',
+          },
+        }),
+        { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ===== PUBLIC ENDPOINT: POST /nfe-api/tokens/create =====
+    if (req.method === 'POST' && subPath === 'tokens/create') {
+      const body = await req.json();
+      const { cnpj, api_key_master, nome, permissoes: novasPermissoes, expires_at } = body;
+
+      if (!api_key_master || !nome) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Campos api_key_master e nome são obrigatórios.', code: 'VALIDATION_ERROR' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Validate master token
+      const masterHash = await hashToken(api_key_master);
+      const { data: masterData } = await supabase
+        .rpc('validar_token_api', { p_token_hash: masterHash });
+
+      if (!masterData || masterData.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'api_key_master inválida ou expirada.', code: 'AUTH_INVALID' }),
+          { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const master = masterData[0];
+      if (!master.permissoes.includes('gerenciar') && !master.permissoes.includes('admin')) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Token master não possui permissão de gerenciamento.', code: 'PERMISSION_DENIED' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const permissoesValidas = ['emitir_nfce', 'emitir_nfe', 'emitir', 'consultar', 'cancelar', 'reprocessar', 'gerenciar'];
+      const permissoesFinais = (novasPermissoes || ['emitir_nfce', 'emitir_nfe', 'consultar']).filter(
+        (p: string) => permissoesValidas.includes(p)
+      );
+
+      const newToken = `nfce_${crypto.randomUUID().replace(/-/g, '')}`;
+      const newPrefix = newToken.substring(0, 12);
+      const newHash = await hashToken(newToken);
+
+      const insertData: any = {
+        empresa_id: master.empresa_id,
+        nome,
+        token_hash: newHash,
+        token_prefix: newPrefix,
+        permissoes: permissoesFinais,
+        status: 'ativo',
+      };
+      if (expires_at) insertData.expires_at = expires_at;
+
+      const { data: createdToken, error: createError } = await supabase
+        .from('tokens_api')
+        .insert(insertData)
+        .select('id, nome, token_prefix, permissoes, status, created_at, expires_at')
+        .single();
+
+      if (createError) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Erro ao criar token.', details: createError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            ...createdToken,
+            token: newToken,
+            message: 'Token criado com sucesso. Guarde-o em local seguro.',
+          },
+        }),
+        { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Validate API Key (all other endpoints require it)
     const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace('Bearer ', '');
 
     if (!apiKey) {
