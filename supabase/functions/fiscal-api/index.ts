@@ -141,17 +141,8 @@ async function ensureRegistered(supabase: any, empresaId: string): Promise<{ emp
   // Load certificate
   const certificate = await loadCertificate(supabase, empresaId);
 
-  // Generate api_key_fiscal if missing (Supabase is the source of truth)
-  if (!empresa.api_key_fiscal) {
-    const newKey = crypto.randomUUID();
-    await supabase.from('empresas').update({ api_key_fiscal: newKey }).eq('id', empresaId);
-    empresa.api_key_fiscal = newKey;
-    console.log(`🔑 Generated new api_key_fiscal for ${empresa.razao_social}: ${newKey.substring(0, 8)}...`);
-  }
-
-  // Register/sync with PHP fiscal API
-  // PHP uses INSERT ... ON DUPLICATE KEY UPDATE, so this is idempotent
-  const registerBody = buildRegisterPayload(empresa, empresa.api_key_fiscal, certificate);
+  // Register/sync with PHP fiscal API and get the api_key PHP uses
+  const registerBody = buildRegisterPayload(empresa, empresa.api_key_fiscal || 'pending', certificate);
 
   try {
     const isPF = empresa.tipo_pessoa === 'PF';
@@ -167,11 +158,20 @@ async function ensureRegistered(supabase: any, empresaId: string): Promise<{ emp
     const responseText = await response.text();
     console.log(`   PHP register response (${response.status}): ${responseText.substring(0, 300)}`);
 
-    // We don't care about the response api_key — Supabase is the source of truth.
-    // PHP's ON DUPLICATE KEY UPDATE will use OUR api_key.
+    // Extract api_key from PHP response — PHP is source of truth for its own key
+    try {
+      // Strip PHP warnings to find JSON
+      const jsonMatch = responseText.match(/\{[^{}]*"api_key"[^{}]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (parsed.api_key && parsed.api_key !== empresa.api_key_fiscal) {
+          empresa.api_key_fiscal = parsed.api_key;
+          await supabase.from('empresas').update({ api_key_fiscal: parsed.api_key }).eq('id', empresaId);
+          console.log(`   🔑 Saved PHP api_key: ${parsed.api_key.substring(0, 8)}...`);
+        }
+      }
+    } catch {}
   } catch (err: any) {
-    // Non-fatal: PHP might be temporarily down, but we can still proceed
-    // The emission will send the api_key in the payload anyway
     console.warn(`⚠️ PHP registration failed (non-fatal): ${err.message}`);
   }
 
@@ -553,9 +553,10 @@ Deno.serve(async (req) => {
         else clientePayload.cpf = doc;
       }
       if (nfe.dest_nome) clientePayload.nome = nfe.dest_nome;
-      if (nfe.dest_ie) clientePayload.ie = nfe.dest_ie;
+      const ieClean = nfe.dest_ie ? nfe.dest_ie.replace(/\D/g, '') : null;
+      if (ieClean) clientePayload.ie = ieClean;
       if (nfe.dest_email) clientePayload.email = nfe.dest_email;
-      clientePayload.indIEDest = nfe.dest_ie ? 1 : 9;
+      clientePayload.indIEDest = ieClean ? 1 : 9;
       if (nfe.dest_logradouro) {
         clientePayload.logradouro = nfe.dest_logradouro;
         clientePayload.numero = nfe.dest_numero || 'SN';
