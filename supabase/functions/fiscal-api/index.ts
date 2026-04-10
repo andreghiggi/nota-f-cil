@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
         // Try update with the new api_key
         const updateResponse = await fetch(`${FISCAL_API_BASE_URL}/empresa/atualizar`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKeyFiscal}` },
           body: JSON.stringify(registerBody),
         });
         const updateText = await updateResponse.text();
@@ -290,7 +290,8 @@ Deno.serve(async (req) => {
       }
 
       // Use the api_key returned by PHP if available, otherwise use our generated one
-      const finalApiKey = phpApiKey || responseData?.api_key || apiKeyFiscal;
+      // If empresa already has an api_key_fiscal, prefer keeping it (PHP ON DUPLICATE KEY may return a stale random key)
+      const finalApiKey = empresa.api_key_fiscal || phpApiKey || responseData?.api_key || apiKeyFiscal;
 
       // Store the fiscal API key in our database
       if (!empresa.api_key_fiscal || empresa.api_key_fiscal !== finalApiKey) {
@@ -696,15 +697,23 @@ Deno.serve(async (req) => {
           base_calculo_icms_st: item.base_calculo_icms_st || 0,
           aliquota_icms_st: item.aliquota_icms_st || 0,
           mva_icms_st: item.mva_icms_st || 0,
-          cst_ipi: item.cst_ipi,
-          aliquota_ipi: item.aliquota_ipi,
+          cst_ipi: item.cst_ipi || '99',
+          aliquota_ipi: item.aliquota_ipi ?? 0,
           base_calculo_ipi: item.base_calculo_ipi || item.valor_total || 0,
-          cst_pis: item.cst_pis,
-          aliquota_pis: item.aliquota_pis,
+          cst_pis: item.cst_pis || '99',
+          aliquota_pis: item.aliquota_pis ?? 0,
           base_calculo_pis: item.base_calculo_pis || item.valor_total || 0,
-          cst_cofins: item.cst_cofins,
-          aliquota_cofins: item.aliquota_cofins,
+          cst_cofins: item.cst_cofins || '99',
+          aliquota_cofins: item.aliquota_cofins ?? 0,
           base_calculo_cofins: item.base_calculo_cofins || item.valor_total || 0,
+          // PHP field names for PIS/COFINS/IPI (NFePHP expects these)
+          vBC_pis: item.base_calculo_pis || item.valor_total || 0,
+          pPIS: item.aliquota_pis ?? 0,
+          vPIS: item.valor_pis ?? 0,
+          vBC_cofins: item.base_calculo_cofins || item.valor_total || 0,
+          pCOFINS: item.aliquota_cofins ?? 0,
+          vCOFINS: item.valor_cofins ?? 0,
+          vBC_icms: item.base_calculo_icms || item.valor_total || 0,
         };
 
         // Grupo UB - IBS/CBS (only if CST is set)
