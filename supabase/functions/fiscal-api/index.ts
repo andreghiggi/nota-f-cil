@@ -227,7 +227,7 @@ Deno.serve(async (req) => {
         // Try update with the new api_key
         const updateResponse = await fetch(`${FISCAL_API_BASE_URL}/empresa/atualizar`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKeyFiscal}` },
           body: JSON.stringify(registerBody),
         });
         const updateText = await updateResponse.text();
