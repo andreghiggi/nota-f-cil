@@ -7,6 +7,40 @@ const corsHeaders = {
 
 const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
+// Helper: strip PHP warnings/notices from response and try to extract JSON
+function extractJsonFromPhpResponse(text: string): { json: any | null; isError: boolean; errorMessage: string } {
+  // Try direct JSON parse first
+  try {
+    return { json: JSON.parse(text), isError: false, errorMessage: '' };
+  } catch {}
+
+  // Check for Fatal errors (not warnings/notices)
+  const hasFatalError = text.includes('Fatal error') || text.includes('Uncaught') || text.includes('Stack trace');
+  
+  // Try to extract JSON from mixed HTML+JSON response
+  const jsonMatch = text.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return { json: parsed, isError: false, errorMessage: '' };
+    } catch {}
+  }
+
+  // Extract error message from HTML
+  const cleanText = text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+  
+  if (hasFatalError) {
+    // Check for Duplicate entry specifically
+    if (cleanText.includes('Duplicate entry') || cleanText.includes('1062')) {
+      return { json: null, isError: false, errorMessage: 'duplicate_entry' };
+    }
+    return { json: null, isError: true, errorMessage: cleanText.substring(0, 500) };
+  }
+
+  // Just warnings — not a fatal error, treat as partial success
+  return { json: null, isError: false, errorMessage: cleanText.substring(0, 500) };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
