@@ -7,7 +7,9 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
   const emp = nfe.empresas || {};
   const endereco = [emp.logradouro, emp.numero].filter(Boolean).join(", ");
   const endereco2 = [emp.bairro, emp.municipio ? `${emp.municipio} - ${emp.uf}` : ""].filter(Boolean).join(" - ");
-  const endereco3 = [emp.cep ? `CEP: ${emp.cep}` : "", emp.telefone ? `Fone: ${emp.telefone}` : ""].filter(Boolean).join(" | ");
+  const endereco3 = [emp.cep ? `CEP: ${formatCEP(emp.cep)}` : "", emp.telefone ? `Fone: ${emp.telefone}` : ""].filter(Boolean).join(" | ");
+
+  const tipoNF = nfe.finalidade === "entrada" ? "0" : "1";
 
   return (
     <div className="danfe-page">
@@ -18,26 +20,28 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
         </div>
       )}
 
-      {/* ========== RECIBO ========== */}
+      {/* ========== RECIBO (fora da borda principal conceitualmente, mas dentro da page) ========== */}
       <div className="recibo-area">
-        <table cellPadding={0} cellSpacing={0}>
+        <table cellPadding={0} cellSpacing={0} style={{ width: "100%", borderCollapse: "collapse" }}>
           <tbody>
             <tr>
-              <td colSpan={2} style={{ height: "8mm", fontSize: "6.5pt", padding: "2px 4px" }}>
-                RECEBEMOS DE <strong style={{ fontFamily: "'Courier New', monospace", fontSize: "7pt" }}>{emp.razao_social || "EMPRESA"}</strong> OS PRODUTOS E/OU SERVIÇOS CONSTANTES NA NOTA FISCAL INDICADA AO LADO.
+              <td colSpan={2} style={{ border: "1px solid #000", borderTop: "none", borderLeft: "none", borderRight: "none", height: "7mm", fontSize: "6pt", padding: "1px 3px", verticalAlign: "top" }}>
+                <span style={{ fontSize: "5pt", textTransform: "uppercase" }}>Recebemos de </span>
+                <strong style={{ fontFamily: "'Courier New', monospace", fontSize: "6.5pt" }}>{emp.razao_social || "EMPRESA"}</strong>
+                <span style={{ fontSize: "5pt" }}> os produtos e/ou serviços constantes na Nota Fiscal indicada ao lado.</span>
               </td>
-              <td rowSpan={2} style={{ width: "22mm", textAlign: "center", fontSize: "8pt" }}>
+              <td rowSpan={2} style={{ border: "1px solid #000", borderTop: "none", borderRight: "none", width: "20mm", textAlign: "center", fontSize: "7pt", verticalAlign: "middle", padding: "2px" }}>
                 <strong>NF-e</strong><br />
                 Nº <strong>{nfe.numero}</strong><br />
                 Série <strong>{nfe.serie}</strong>
               </td>
             </tr>
             <tr>
-              <td style={{ height: "8mm", width: "38mm" }}>
+              <td style={{ border: "1px solid #000", borderLeft: "none", width: "32mm" }}>
                 <span className="nf-label">DATA DE RECEBIMENTO</span>
                 <span className="nf-info">&nbsp;</span>
               </td>
-              <td>
+              <td style={{ border: "1px solid #000" }}>
                 <span className="nf-label">IDENTIFICAÇÃO E ASSINATURA DO RECEBEDOR</span>
                 <span className="nf-info">&nbsp;</span>
               </td>
@@ -48,12 +52,12 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
 
       <hr className="hr-dashed" />
 
-      {/* ========== HEADER ========== */}
-      <table cellPadding={0} cellSpacing={0}>
+      {/* ========== CABEÇALHO ========== */}
+      <table cellPadding={0} cellSpacing={0} className="danfe-section">
         <tbody>
-          <tr>
-            {/* Logo + Emitente */}
-            <td style={{ width: "42%" }}>
+          <tr className="header-row">
+            {/* Emitente */}
+            <td style={{ width: "40%", verticalAlign: "top" }}>
               <div className="company-name">{emp.razao_social || "EMPRESA"}</div>
               {emp.nome_fantasia && <div className="company-info" style={{ fontWeight: "bold" }}>{emp.nome_fantasia}</div>}
               <div className="company-info">
@@ -62,28 +66,31 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
                 {endereco3}
               </div>
             </td>
-            {/* DANFE title */}
-            <td style={{ width: "20%", textAlign: "center", verticalAlign: "middle" }}>
+            {/* DANFE central */}
+            <td style={{ width: "22%", verticalAlign: "top" }} className="danfe-center-col">
               <div className="danfe-title">DANFE</div>
               <div className="danfe-subtitle">
                 Documento Auxiliar da<br />Nota Fiscal Eletrônica
               </div>
               <div className="danfe-es">
-                <span className="box-number">1</span>
+                <span className="box-number">{tipoNF}</span>
                 <span className="legenda">
                   0 - Entrada<br />1 - Saída
                 </span>
               </div>
-              <div className="danfe-num">Nº {nfe.numero}</div>
-              <div className="danfe-serie-page">SÉRIE: {nfe.serie}</div>
-              <div className="danfe-serie-page">Página 1 de 1</div>
+              <div className="danfe-num">Nº {String(nfe.numero).padStart(9, "0")}</div>
+              <div className="danfe-serie-page">SÉRIE {nfe.serie} &nbsp; FOLHA 1/1</div>
             </td>
-            {/* Chave de acesso */}
-            <td style={{ width: "38%" }}>
+            {/* Chave de acesso + código de barras */}
+            <td style={{ width: "38%", verticalAlign: "top" }}>
               <div className="chave-box">
-                {nfe.chave_acesso && (
-                  <div className="chave-barcode">{nfe.chave_acesso}</div>
-                )}
+                <div className="chave-barcode">
+                  {nfe.chave_acesso ? (
+                    <span className="chave-barcode-text">{nfe.chave_acesso}</span>
+                  ) : (
+                    <span style={{ fontSize: "7pt", color: "#999" }}>CÓDIGO DE BARRAS</span>
+                  )}
+                </div>
                 <div className="chave-label">CHAVE DE ACESSO</div>
                 <div className="chave-value">
                   {nfe.chave_acesso ? formatChave(nfe.chave_acesso) : "—"}
@@ -99,10 +106,10 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
       </table>
 
       {/* ========== NATUREZA + PROTOCOLO ========== */}
-      <table cellPadding={0} cellSpacing={0} className="no-top">
+      <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
         <tbody>
           <tr>
-            <td colSpan={2}>
+            <td style={{ width: "62%" }}>
               <span className="nf-label">NATUREZA DA OPERAÇÃO</span>
               <span className="nf-info">{nfe.natureza_operacao || "VENDA"}</span>
             </td>
@@ -116,28 +123,36 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
             </td>
           </tr>
           <tr>
-            <td>
-              <span className="nf-label">INSCRIÇÃO ESTADUAL</span>
-              <span className="nf-info">{emp.inscricao_estadual || ""}</span>
-            </td>
-            <td style={{ width: "32%" }}>
-              <span className="nf-label">INSCRIÇÃO ESTADUAL DO SUBST. TRIB.</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td>
-              <span className="nf-label">CNPJ/CPF</span>
-              <span className="nf-info">{formatCPFCNPJ(emp.cnpj || emp.cpf || "")}</span>
+            <td colSpan={2}>
+              <table cellPadding={0} cellSpacing={0} style={{ width: "100%", borderCollapse: "collapse" }}>
+                <tbody>
+                  <tr>
+                    <td style={{ width: "33%", border: "none", borderRight: "1px solid #000" }}>
+                      <span className="nf-label">INSCRIÇÃO ESTADUAL</span>
+                      <span className="nf-info">{emp.inscricao_estadual || ""}</span>
+                    </td>
+                    <td style={{ width: "33%", border: "none", borderRight: "1px solid #000" }}>
+                      <span className="nf-label">INSCRIÇÃO ESTADUAL DO SUBST. TRIB.</span>
+                      <span className="nf-info">&nbsp;</span>
+                    </td>
+                    <td style={{ border: "none" }}>
+                      <span className="nf-label">CNPJ</span>
+                      <span className="nf-info">{formatCPFCNPJ(emp.cnpj || emp.cpf || "")}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </td>
           </tr>
         </tbody>
       </table>
 
       {/* ========== DESTINATÁRIO ========== */}
-      <table cellPadding={0} cellSpacing={0} className="no-top">
+      <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
         <tbody>
           <tr>
-            <td rowSpan={3} className="black-label">DESTINATÁRIO/REMETENTE</td>
-            <td colSpan={3}>
+            <td rowSpan={3} className="black-label">DESTINATÁRIO / REMETENTE</td>
+            <td style={{ width: "48%" }}>
               <span className="nf-label">NOME/RAZÃO SOCIAL</span>
               <span className="nf-info">{nfe.dest_nome || "CONSUMIDOR NÃO IDENTIFICADO"}</span>
             </td>
@@ -155,78 +170,90 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
               <span className="nf-label">ENDEREÇO</span>
               <span className="nf-info">{[nfe.dest_logradouro, nfe.dest_numero].filter(Boolean).join(", ") || ""}</span>
             </td>
-            <td colSpan={2}>
+            <td>
               <span className="nf-label">BAIRRO/DISTRITO</span>
               <span className="nf-info">{nfe.dest_bairro || ""}</span>
             </td>
             <td>
               <span className="nf-label">CEP</span>
-              <span className="nf-info">{nfe.dest_cep || ""}</span>
-            </td>
-            <td>
-              <span className="nf-label">DATA ENTR./SAÍDA</span>
-              <span className="nf-info">{nfe.data_autorizacao ? new Date(nfe.data_autorizacao).toLocaleDateString("pt-BR") : ""}</span>
+              <span className="nf-info">{formatCEP(nfe.dest_cep || "")}</span>
             </td>
           </tr>
           <tr>
             <td>
-              <span className="nf-label">MUNICÍPIO</span>
-              <span className="nf-info">{nfe.dest_municipio || ""}</span>
+              <table cellPadding={0} cellSpacing={0} style={{ width: "100%", borderCollapse: "collapse" }}>
+                <tbody>
+                  <tr>
+                    <td style={{ width: "60%", border: "none", borderRight: "1px solid #000" }}>
+                      <span className="nf-label">MUNICÍPIO</span>
+                      <span className="nf-info">{nfe.dest_municipio || ""}</span>
+                    </td>
+                    <td style={{ border: "none" }}>
+                      <span className="nf-label">FONE/FAX</span>
+                      <span className="nf-info">{nfe.dest_telefone || ""}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </td>
             <td>
-              <span className="nf-label">FONE/FAX</span>
-              <span className="nf-info">{nfe.dest_telefone || ""}</span>
+              <table cellPadding={0} cellSpacing={0} style={{ width: "100%", borderCollapse: "collapse" }}>
+                <tbody>
+                  <tr>
+                    <td style={{ width: "25%", border: "none", borderRight: "1px solid #000" }}>
+                      <span className="nf-label">UF</span>
+                      <span className="nf-info">{nfe.dest_uf || ""}</span>
+                    </td>
+                    <td style={{ border: "none" }}>
+                      <span className="nf-label">INSCRIÇÃO ESTADUAL</span>
+                      <span className="nf-info">{nfe.dest_ie || ""}</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
             </td>
             <td>
-              <span className="nf-label">UF</span>
-              <span className="nf-info">{nfe.dest_uf || ""}</span>
-            </td>
-            <td>
-              <span className="nf-label">INSCRIÇÃO ESTADUAL</span>
-              <span className="nf-info">{nfe.dest_ie || ""}</span>
-            </td>
-            <td>
-              <span className="nf-label">HORA ENTR./SAÍDA</span>
-              <span className="nf-info">{nfe.data_autorizacao ? new Date(nfe.data_autorizacao).toLocaleTimeString("pt-BR") : ""}</span>
+              <span className="nf-label">DATA ENTRADA/SAÍDA</span>
+              <span className="nf-info">{nfe.data_autorizacao ? new Date(nfe.data_autorizacao).toLocaleDateString("pt-BR") : ""}</span>
             </td>
           </tr>
         </tbody>
       </table>
 
-      {/* ========== FATURA ========== */}
-      <table cellPadding={0} cellSpacing={0} className="no-top">
+      {/* ========== FATURA / DUPLICATAS ========== */}
+      <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
         <tbody>
           <tr>
-            <td className="black-label" style={{ height: "6mm" }}>FATURA</td>
-            <td style={{ padding: "2px 4px", fontSize: "7pt" }}>&nbsp;</td>
+            <td className="black-label" style={{ height: "5mm" }}>FATURA / DUPLICATAS</td>
+            <td style={{ padding: "1px 3px", fontSize: "6.5pt" }}>&nbsp;</td>
           </tr>
         </tbody>
       </table>
 
       {/* ========== CÁLCULO DO IMPOSTO ========== */}
-      <table cellPadding={0} cellSpacing={0} className="no-top">
+      <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
         <tbody>
           <tr>
             <td rowSpan={2} className="black-label">CÁLCULO DO IMPOSTO</td>
             <td>
-              <span className="nf-label">BASE DE CÁLCULO DO ICMS</span>
-              <span className="nf-info-right">{fc(nfe.valor_icms || 0)}</span>
+              <span className="nf-label">BASE DE CÁLC. DO ICMS</span>
+              <span className="nf-info-right">{fc(calcBaseICMS(itens))}</span>
             </td>
             <td>
               <span className="nf-label">VALOR DO ICMS</span>
               <span className="nf-info-right">{fc(nfe.valor_icms || 0)}</span>
             </td>
             <td>
-              <span className="nf-label">BASE DE CÁLCULO DO ICMS ST</span>
-              <span className="nf-info-right">{fc(0)}</span>
+              <span className="nf-label">BASE DE CÁLC. ICMS ST</span>
+              <span className="nf-info-right">{fc(calcBaseICMSST(itens))}</span>
             </td>
             <td>
               <span className="nf-label">VALOR DO ICMS ST</span>
-              <span className="nf-info-right">{fc(0)}</span>
+              <span className="nf-info-right">{fc(calcICMSST(itens))}</span>
             </td>
             <td>
-              <span className="nf-label">VALOR TOTAL DOS PRODUTOS</span>
-              <span className="nf-info-right">{fc(nfe.valor_produtos || 0)}</span>
+              <span className="nf-label">V. TOTAL PRODUTOS</span>
+              <span className="nf-info-right">{fc(nfe.valor_produtos || nfe.valor_total || 0)}</span>
             </td>
           </tr>
           <tr>
@@ -243,7 +270,7 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
               <span className="nf-info-right">{fc(nfe.valor_desconto || 0)}</span>
             </td>
             <td>
-              <span className="nf-label">OUTRAS DESP. ACESSÓRIAS</span>
+              <span className="nf-label">OUTRAS DESP.</span>
               <span className="nf-info-right">{fc(nfe.valor_outras_despesas || 0)}</span>
             </td>
             <td>
@@ -251,14 +278,20 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
               <span className="nf-info-right">{fc(nfe.valor_ipi || 0)}</span>
             </td>
           </tr>
+        </tbody>
+      </table>
+
+      {/* Tributos + Total NF */}
+      <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
+        <tbody>
           <tr>
-            <td className="black-label" style={{ height: "auto" }}>&nbsp;</td>
-            <td colSpan={3}>
+            <td style={{ width: "6mm" }}>&nbsp;</td>
+            <td style={{ width: "55%" }}>
               <span className="nf-label">VALOR APROX. DOS TRIBUTOS</span>
               <span className="nf-info-right">{fc((nfe.valor_icms || 0) + (nfe.valor_pis || 0) + (nfe.valor_cofins || 0) + (nfe.valor_ipi || 0))}</span>
             </td>
-            <td colSpan={2}>
-              <span className="nf-label">VALOR TOTAL DA NOTA</span>
+            <td>
+              <span className="nf-label">VALOR TOTAL DA NOTA FISCAL</span>
               <span className="nf-info-lg" style={{ textAlign: "right" }}>{fc(nfe.valor_total)}</span>
             </td>
           </tr>
@@ -266,24 +299,24 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
       </table>
 
       {/* ========== TRANSPORTADOR ========== */}
-      <table cellPadding={0} cellSpacing={0} className="no-top">
+      <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
         <tbody>
           <tr>
-            <td rowSpan={3} className="black-label">TRANSPORTADOR / VOLUMES</td>
-            <td colSpan={2}>
+            <td rowSpan={3} className="black-label">TRANSPORTADOR / VOLUMES TRANSPORTADOS</td>
+            <td style={{ width: "30%" }}>
               <span className="nf-label">RAZÃO SOCIAL</span>
               <span className="nf-info">&nbsp;</span>
             </td>
-            <td>
+            <td style={{ width: "15%" }}>
               <span className="nf-label">FRETE POR CONTA</span>
               <span className="nf-info">{freteLabel(nfe.modalidade_frete)}</span>
             </td>
-            <td>
+            <td style={{ width: "10%" }}>
               <span className="nf-label">CÓDIGO ANTT</span>
               <span className="nf-info">&nbsp;</span>
             </td>
-            <td>
-              <span className="nf-label">PLACA</span>
+            <td style={{ width: "10%" }}>
+              <span className="nf-label">PLACA VEÍCULO</span>
               <span className="nf-info">&nbsp;</span>
             </td>
             <td style={{ width: "5%" }}>
@@ -308,7 +341,7 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
               <span className="nf-label">UF</span>
               <span className="nf-info">&nbsp;</span>
             </td>
-            <td colSpan={2}>
+            <td>
               <span className="nf-label">INSC. ESTADUAL</span>
               <span className="nf-info">&nbsp;</span>
             </td>
@@ -334,7 +367,7 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
               <span className="nf-label">PESO BRUTO</span>
               <span className="nf-info">&nbsp;</span>
             </td>
-            <td colSpan={2}>
+            <td>
               <span className="nf-label">PESO LÍQUIDO</span>
               <span className="nf-info">&nbsp;</span>
             </td>
@@ -343,28 +376,28 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
       </table>
 
       {/* ========== DADOS DO PRODUTO ========== */}
-      <table cellPadding={0} cellSpacing={0} className="no-top">
+      <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
         <tbody>
           <tr>
-            <td className="black-label" rowSpan={2}>DADOS DO PRODUTO/SERVIÇO</td>
-            <td style={{ padding: 0, border: "none" }}>
-              <table cellPadding={0} cellSpacing={0} style={{ borderTop: "none" }}>
+            <td className="black-label" rowSpan={1}>DADOS DO PRODUTO / SERVIÇO</td>
+            <td className="products-wrapper">
+              <table cellPadding={0} cellSpacing={0} className="products-table">
                 <thead>
                   <tr className="products-header">
-                    <td style={{ width: "9%" }}>CÓDIGO</td>
-                    <td style={{ width: "26%" }}>DESCRIÇÃO DO PRODUTO/SERVIÇO</td>
+                    <td style={{ width: "8%" }}>CÓD. PROD.</td>
+                    <td style={{ width: "24%" }}>DESCRIÇÃO DO PRODUTO/SERVIÇO</td>
                     <td style={{ width: "6%" }}>NCM/SH</td>
                     <td style={{ width: "4%" }}>CST</td>
                     <td style={{ width: "4%" }}>CFOP</td>
                     <td style={{ width: "3%" }}>UN</td>
-                    <td style={{ width: "7%" }}>QTD.</td>
-                    <td style={{ width: "8%" }}>VLR.UNIT.</td>
-                    <td style={{ width: "8%" }}>VLR.TOTAL</td>
-                    <td style={{ width: "7%" }}>BC ICMS</td>
-                    <td style={{ width: "7%" }}>VLR.ICMS</td>
-                    <td style={{ width: "6%" }}>VLR.IPI</td>
-                    <td style={{ width: "5%" }}>ALÍQ.ICMS</td>
-                    <td style={{ width: "5%" }}>ALÍQ.IPI</td>
+                    <td style={{ width: "7%" }}>QUANT.</td>
+                    <td style={{ width: "8%" }}>VL.UNITÁRIO</td>
+                    <td style={{ width: "8%" }}>VL.TOTAL</td>
+                    <td style={{ width: "7%" }}>B.CÁLC.ICMS</td>
+                    <td style={{ width: "7%" }}>VL.ICMS</td>
+                    <td style={{ width: "5%" }}>VL.IPI</td>
+                    <td style={{ width: "4.5%" }}>%ICMS</td>
+                    <td style={{ width: "4.5%" }}>%IPI</td>
                   </tr>
                 </thead>
                 <tbody>
@@ -376,18 +409,18 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
                       <td className="center">{item.cst_icms || item.csosn || ""}</td>
                       <td className="center">{item.cfop}</td>
                       <td className="center">{item.unidade}</td>
-                      <td className="right">{fc(Number(item.quantidade))}</td>
-                      <td className="right">{fc(Number(item.valor_unitario))}</td>
+                      <td className="right">{fq(Number(item.quantidade))}</td>
+                      <td className="right">{fv(Number(item.valor_unitario))}</td>
                       <td className="right">{fc(Number(item.valor_total))}</td>
-                      <td className="right">{item.valor_icms ? fc(Number(item.valor_total)) : ""}</td>
+                      <td className="right">{item.base_calculo_icms ? fc(Number(item.base_calculo_icms)) : (item.valor_icms ? fc(Number(item.valor_total)) : "")}</td>
                       <td className="right">{item.valor_icms ? fc(Number(item.valor_icms)) : ""}</td>
                       <td className="right">{item.valor_ipi ? fc(Number(item.valor_ipi)) : ""}</td>
                       <td className="right">{item.aliquota_icms ? `${Number(item.aliquota_icms).toFixed(2)}` : ""}</td>
                       <td className="right">{item.aliquota_ipi ? `${Number(item.aliquota_ipi).toFixed(2)}` : ""}</td>
                     </tr>
                   ))}
-                  {/* Empty rows */}
-                  {itens.length < 8 && Array.from({ length: 8 - itens.length }).map((_, i) => (
+                  {/* Linhas vazias para preencher mínimo */}
+                  {itens.length < 5 && Array.from({ length: 5 - itens.length }).map((_, i) => (
                     <tr key={`e-${i}`} className="products-body">
                       {Array.from({ length: 14 }).map((_, j) => (
                         <td key={j}>&nbsp;</td>
@@ -402,9 +435,10 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
       </table>
 
       {/* ========== ISSQN ========== */}
-      <table cellPadding={0} cellSpacing={0} className="no-top">
+      <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
         <tbody>
           <tr>
+            <td className="black-label">CÁLCULO DO ISSQN</td>
             <td>
               <span className="nf-label">INSCRIÇÃO MUNICIPAL</span>
               <span className="nf-info">&nbsp;</span>
@@ -426,16 +460,17 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
       </table>
 
       {/* ========== INFORMAÇÕES COMPLEMENTARES ========== */}
-      <table cellPadding={0} cellSpacing={0} className="no-top info-adicional">
+      <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
         <tbody>
           <tr>
-            <td colSpan={2} style={{ width: "60%", minHeight: "20mm", height: "20mm" }}>
+            <td className="black-label">DADOS ADICIONAIS</td>
+            <td style={{ width: "58%", minHeight: "18mm", height: "18mm", verticalAlign: "top" }}>
               <span className="nf-label">INFORMAÇÕES COMPLEMENTARES</span>
-              <span className="nf-info" style={{ fontSize: "6.5pt", lineHeight: 1.3 }}>
+              <span className="nf-info" style={{ fontSize: "6pt", lineHeight: "1.3" }}>
                 {buildInfoComplementar(nfe)}
               </span>
             </td>
-            <td colSpan={2} style={{ width: "40%", minHeight: "20mm" }}>
+            <td style={{ minHeight: "18mm", verticalAlign: "top" }}>
               <span className="nf-label">RESERVADO AO FISCO</span>
               <span className="nf-info">&nbsp;</span>
             </td>
@@ -453,8 +488,18 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
   );
 }
 
+// ===== Helpers =====
+
 function fc(value: number) {
   return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(value);
+}
+
+function fq(value: number) {
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(value);
+}
+
+function fv(value: number) {
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 4 }).format(value);
 }
 
 function formatCNPJ(cnpj: string) {
@@ -464,8 +509,16 @@ function formatCNPJ(cnpj: string) {
 
 function formatCPFCNPJ(doc: string) {
   if (!doc) return "";
-  if (doc.length === 11) return doc.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
-  return formatCNPJ(doc);
+  const clean = doc.replace(/\D/g, "");
+  if (clean.length === 11) return clean.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+  return formatCNPJ(clean);
+}
+
+function formatCEP(cep: string) {
+  if (!cep) return "";
+  const clean = cep.replace(/\D/g, "");
+  if (clean.length === 8) return clean.replace(/^(\d{5})(\d{3})$/, "$1-$2");
+  return cep;
 }
 
 function formatChave(chave: string) {
@@ -475,18 +528,33 @@ function formatChave(chave: string) {
 
 function freteLabel(mod: string) {
   const labels: Record<string, string> = {
-    "0": "0-Emitente",
-    "1": "1-Dest/Rem",
-    "2": "2-Terceiros",
-    "9": "9-Sem Frete",
+    "0": "0 - Emitente",
+    "1": "1 - Dest/Rem",
+    "2": "2 - Terceiros",
+    "3": "3 - Próprio Rem",
+    "4": "4 - Próprio Dest",
+    "9": "9 - Sem Frete",
   };
-  return labels[mod] || mod || "9-Sem Frete";
+  return labels[mod] || mod || "9 - Sem Frete";
+}
+
+function calcBaseICMS(itens: any[]) {
+  return itens.reduce((sum, item) => sum + (Number(item.base_calculo_icms) || 0), 0);
+}
+
+function calcBaseICMSST(itens: any[]) {
+  return itens.reduce((sum, item) => sum + (Number(item.base_calculo_icms_st) || 0), 0);
+}
+
+function calcICMSST(itens: any[]) {
+  return itens.reduce((sum, item) => sum + (Number(item.valor_icms_st) || 0), 0);
 }
 
 function buildInfoComplementar(nfe: any) {
   const parts: string[] = [];
-  if (nfe.valor_pis) parts.push(`PIS: ${fc(nfe.valor_pis)}`);
-  if (nfe.valor_cofins) parts.push(`COFINS: ${fc(nfe.valor_cofins)}`);
-  if (nfe.dest_email) parts.push(`Email: ${nfe.dest_email}`);
+  if (nfe.valor_pis) parts.push(`PIS: R$ ${fc(nfe.valor_pis)}`);
+  if (nfe.valor_cofins) parts.push(`COFINS: R$ ${fc(nfe.valor_cofins)}`);
+  if (nfe.dest_email) parts.push(`Email destinatário: ${nfe.dest_email}`);
+  if (nfe.ambiente === "homologacao") parts.push("NF-E EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO - SEM VALOR FISCAL");
   return parts.join(" | ") || "";
 }
