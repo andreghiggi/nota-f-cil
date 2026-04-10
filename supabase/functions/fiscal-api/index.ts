@@ -7,50 +7,192 @@ const corsHeaders = {
 
 const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
-// Helper: strip PHP warnings/notices from response and try to extract JSON
-function extractJsonFromPhpResponse(text: string): { json: any | null; isError: boolean; errorMessage: string } {
-  // Try direct JSON parse first
-  try {
-    return { json: JSON.parse(text), isError: false, errorMessage: '' };
-  } catch {}
+// ============================================================================
+// SHARED HELPERS
+// ============================================================================
 
-  // Check for Fatal errors (not warnings/notices)
-  const hasFatalError = text.includes('Fatal error') || text.includes('Uncaught') || text.includes('Stack trace');
-  
-  // Try to extract JSON from mixed HTML+JSON response
-  const jsonMatch = text.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/);
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return { json: parsed, isError: false, errorMessage: '' };
-    } catch {}
+/**
+ * Load certificate (PFX) from Supabase Storage and return base64 + decoded password.
+ * Returns null if no certificate is configured.
+ */
+async function loadCertificate(supabase: any, empresaId: string): Promise<{ base64: string; senha: string } | null> {
+  const { data: cert } = await supabase
+    .from('certificados_digitais')
+    .select('arquivo_path, senha_hash')
+    .eq('empresa_id', empresaId)
+    .maybeSingle();
+
+  if (!cert?.arquivo_path) return null;
+
+  const { data: fileData, error: fileError } = await supabase.storage
+    .from('certificados')
+    .download(cert.arquivo_path);
+
+  if (fileError || !fileData) {
+    console.warn(`⚠️ Could not download certificate for ${empresaId}: ${fileError?.message}`);
+    return null;
   }
 
-  // Extract error message from HTML
-  const cleanText = text.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
-  
-  if (hasFatalError) {
-    // Check for Duplicate entry specifically
-    if (cleanText.includes('Duplicate entry') || cleanText.includes('1062')) {
-      return { json: null, isError: false, errorMessage: 'duplicate_entry' };
-    }
-    return { json: null, isError: true, errorMessage: cleanText.substring(0, 500) };
-  }
+  const bytes = new Uint8Array(await fileData.arrayBuffer());
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
 
-  // Just warnings — not a fatal error, treat as partial success
-  return { json: null, isError: false, errorMessage: cleanText.substring(0, 500) };
+  return {
+    base64: btoa(binary),
+    senha: cert.senha_hash ? atob(cert.senha_hash) : '',
+  };
 }
+
+/**
+ * Build the registration payload for the PHP fiscal API.
+ * This is the single source of truth — always built from Supabase data.
+ */
+function buildRegisterPayload(empresa: any, apiKey: string, certificate: { base64: string; senha: string } | null) {
+  const crtMap: Record<string, number> = {
+    'simples_nacional': 1,
+    'lucro_presumido': 3,
+    'lucro_real': 3,
+  };
+
+  const isPF = empresa.tipo_pessoa === 'PF';
+  const cnpjClean = isPF
+    ? (empresa.cpf || '').replace(/\D/g, '').padStart(14, '0')
+    : (empresa.cnpj || '').replace(/\D/g, '');
+
+  return {
+    api_key: apiKey,
+    tipo_pessoa: isPF ? 'PF' : 'PJ',
+    razao_social: empresa.razao_social,
+    nome_fantasia: empresa.nome_fantasia || empresa.razao_social,
+    tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
+    siglaUF: empresa.uf,
+    CSC: empresa.csc_token || '',
+    CSCid: empresa.csc_id || '',
+    cnpj: cnpjClean,
+    cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
+    certificado_base64: certificate?.base64 || '',
+    senha_certificado: certificate?.senha || '',
+    ie: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
+    crt: crtMap[empresa.regime_tributario] || 1,
+    cnae: empresa.cnae_principal || '',
+    logradouro: empresa.logradouro || '',
+    numero: empresa.numero || '',
+    bairro: empresa.bairro || '',
+    cMun: empresa.codigo_municipio || '',
+    xMun: empresa.municipio,
+    codigo_municipio: empresa.codigo_municipio || '',
+    municipio: empresa.municipio,
+    uf: empresa.uf,
+    cep: (empresa.cep || '').replace(/\D/g, ''),
+    // Nested structures for backward compatibility
+    sped_config: {
+      tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
+      razaosocial: empresa.razao_social,
+      cnpj: cnpjClean,
+      cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
+      siglaUF: empresa.uf,
+      CSC: empresa.csc_token || '',
+      CSCid: empresa.csc_id || '',
+    },
+    certificado: {
+      pfx_base64: certificate?.base64 || '',
+      senha: certificate?.senha || '',
+    },
+    emitente: {
+      IE: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
+      CRT: crtMap[empresa.regime_tributario] || 1,
+      CNAE: empresa.cnae_principal || '',
+      xNome: empresa.razao_social,
+      xFant: empresa.nome_fantasia || empresa.razao_social,
+      ...(isPF
+        ? { CPF: (empresa.cpf || '').replace(/\D/g, '') }
+        : { CNPJ: (empresa.cnpj || '').replace(/\D/g, '') }),
+      ender: {
+        xLgr: empresa.logradouro || '',
+        nro: empresa.numero || '',
+        xBairro: empresa.bairro || '',
+        cMun: empresa.codigo_municipio || '',
+        xMun: empresa.municipio,
+        UF: empresa.uf,
+        CEP: (empresa.cep || '').replace(/\D/g, ''),
+      },
+    },
+  };
+}
+
+/**
+ * Ensure an empresa is registered on the PHP fiscal API.
+ * - Generates api_key_fiscal in Supabase if missing (Supabase = source of truth)
+ * - Sends registration to PHP (which uses INSERT ... ON DUPLICATE KEY UPDATE)
+ * - Returns the empresa with api_key_fiscal guaranteed
+ */
+async function ensureRegistered(supabase: any, empresaId: string): Promise<{ empresa: any; certificate: { base64: string; senha: string } | null; error?: string }> {
+  // Fetch empresa
+  const { data: empresa, error: empresaError } = await supabase
+    .from('empresas')
+    .select('*')
+    .eq('id', empresaId)
+    .single();
+
+  if (empresaError || !empresa) {
+    return { empresa: null, certificate: null, error: 'Empresa não encontrada' };
+  }
+
+  // Load certificate
+  const certificate = await loadCertificate(supabase, empresaId);
+
+  // Generate api_key_fiscal if missing (Supabase is the source of truth)
+  if (!empresa.api_key_fiscal) {
+    const newKey = crypto.randomUUID();
+    await supabase.from('empresas').update({ api_key_fiscal: newKey }).eq('id', empresaId);
+    empresa.api_key_fiscal = newKey;
+    console.log(`🔑 Generated new api_key_fiscal for ${empresa.razao_social}: ${newKey.substring(0, 8)}...`);
+  }
+
+  // Register/sync with PHP fiscal API
+  // PHP uses INSERT ... ON DUPLICATE KEY UPDATE, so this is idempotent
+  const registerBody = buildRegisterPayload(empresa, empresa.api_key_fiscal, certificate);
+
+  try {
+    const isPF = empresa.tipo_pessoa === 'PF';
+    const doc = isPF ? empresa.cpf : empresa.cnpj;
+    console.log(`📡 Syncing ${isPF ? 'PF' : 'PJ'} ${doc} with fiscal API...`);
+
+    const response = await fetch(`${FISCAL_API_BASE_URL}/empresa/cadastrar`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(registerBody),
+    });
+
+    const responseText = await response.text();
+    console.log(`   PHP register response (${response.status}): ${responseText.substring(0, 300)}`);
+
+    // We don't care about the response api_key — Supabase is the source of truth.
+    // PHP's ON DUPLICATE KEY UPDATE will use OUR api_key.
+  } catch (err: any) {
+    // Non-fatal: PHP might be temporarily down, but we can still proceed
+    // The emission will send the api_key in the payload anyway
+    console.warn(`⚠️ PHP registration failed (non-fatal): ${err.message}`);
+  }
+
+  return { empresa, certificate };
+}
+
+// ============================================================================
+// MAIN HANDLER
+// ============================================================================
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Health check endpoint for monitoring
+  // Health check
   if (req.method === 'GET') {
-    return new Response(JSON.stringify({ status: 'ok', service: 'fiscal-api', timestamp: new Date().toISOString() }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({ status: 'ok', service: 'fiscal-api', timestamp: new Date().toISOString() }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -61,263 +203,34 @@ Deno.serve(async (req) => {
     const { action, empresa_id, nfce_id, nfe_id } = await req.json();
 
     // ========================================================================
-    // ACTION: register_empresa - Register company on fiscal API
+    // ACTION: register_empresa
     // ========================================================================
     if (action === 'register_empresa') {
-      // Get empresa data
-      const { data: empresa, error: empresaError } = await supabase
-        .from('empresas')
-        .select('*')
-        .eq('id', empresa_id)
-        .single();
+      const { empresa, certificate, error } = await ensureRegistered(supabase, empresa_id);
 
-      if (empresaError || !empresa) {
+      if (error) {
         return new Response(
-          JSON.stringify({ error: 'Empresa não encontrada', details: empresaError?.message }),
+          JSON.stringify({ error }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      // Get certificate data if exists
-      const { data: certificado } = await supabase
-        .from('certificados_digitais')
-        .select('*')
-        .eq('empresa_id', empresa_id)
-        .single();
-
-      // Download certificate file from storage if available
-      let certificadoBase64: string | null = null;
-      if (certificado?.arquivo_path) {
-        const { data: fileData, error: fileError } = await supabase.storage
-          .from('certificados')
-          .download(certificado.arquivo_path);
-        
-        if (!fileError && fileData) {
-          const arrayBuffer = await fileData.arrayBuffer();
-          const bytes = new Uint8Array(arrayBuffer);
-          let binary = '';
-          for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          certificadoBase64 = btoa(binary);
-          console.log(`📎 Certificate file loaded (${bytes.length} bytes)`);
-        } else {
-          console.warn(`⚠️ Could not download certificate: ${fileError?.message}`);
-        }
-      }
-
-      // Use existing api_key_fiscal or generate a new one
-      const apiKeyFiscal = empresa.api_key_fiscal || crypto.randomUUID();
-
-      // CRITICAL: Save the api_key BEFORE calling PHP so we never lose it
-      // even if PHP returns garbled HTML warnings
-      if (!empresa.api_key_fiscal) {
-        await supabase.from('empresas').update({ api_key_fiscal: apiKeyFiscal }).eq('id', empresa_id);
-        console.log(`   💾 Pre-saved api_key_fiscal: ${apiKeyFiscal.substring(0, 8)}...`);
-      }
-
-      // Map regime_tributario to CRT code
-      const crtMap: Record<string, number> = {
-        'simples_nacional': 1,
-        'lucro_presumido': 3,
-        'lucro_real': 3,
-      };
-
-      const isPF = empresa.tipo_pessoa === 'PF';
-      const docIdentificador = isPF ? (empresa.cpf || '') : (empresa.cnpj || '');
-
-      // Build payload in the format expected by the PHP API (flat structure)
-      const registerBody: any = {
-        api_key: apiKeyFiscal,
-        tipo_pessoa: isPF ? 'PF' : 'PJ',
-        razao_social: empresa.razao_social,
-        nome_fantasia: empresa.nome_fantasia || empresa.razao_social,
-        tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
-        siglaUF: empresa.uf,
-        CSC: empresa.csc_token || '',
-        CSCid: empresa.csc_id || '',
-
-        // Document - for PF, pad CPF to 14 digits in cnpj field so PHP builds access key correctly
-        cnpj: isPF ? (empresa.cpf || '').replace(/\D/g, '').padStart(14, '0') : (empresa.cnpj || '').replace(/\D/g, ''),
-        cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
-
-        // Certificate - flat (PHP expects senha_certificado)
-        certificado_base64: certificadoBase64 || '',
-        senha_certificado: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
-
-        // Emitente - lowercase field names as PHP expects
-        ie: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
-        crt: crtMap[empresa.regime_tributario] || 1,
-        cnae: empresa.cnae_principal || '',
-        logradouro: empresa.logradouro || '',
-        numero: empresa.numero || '',
-        bairro: empresa.bairro || '',
-        cMun: empresa.codigo_municipio || '',
-        xMun: empresa.municipio,
-        codigo_municipio: empresa.codigo_municipio || '',
-        municipio: empresa.municipio,
-        uf: empresa.uf,
-        cep: (empresa.cep || '').replace(/\D/g, ''),
-
-        // Also send nested structure for backward compatibility
-        sped_config: {
-          tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
-          razaosocial: empresa.razao_social,
-          cnpj: isPF ? (empresa.cpf || '').replace(/\D/g, '').padStart(14, '0') : (empresa.cnpj || '').replace(/\D/g, ''),
-          cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
-          siglaUF: empresa.uf,
-          CSC: empresa.csc_token || '',
-          CSCid: empresa.csc_id || '',
-        },
-
-        certificado: {
-          pfx_base64: certificadoBase64 || '',
-          senha: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
-        },
-
-        emitente: {
-          IE: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
-          CRT: crtMap[empresa.regime_tributario] || 1,
-          CNAE: empresa.cnae_principal || '',
-          xNome: empresa.razao_social,
-          xFant: empresa.nome_fantasia || empresa.razao_social,
-          ...(isPF ? { CPF: (empresa.cpf || '').replace(/\D/g, '') } : { CNPJ: (empresa.cnpj || '').replace(/\D/g, '') }),
-          ender: {
-            xLgr: empresa.logradouro || '',
-            nro: empresa.numero || '',
-            xBairro: empresa.bairro || '',
-            cMun: empresa.codigo_municipio || '',
-            xMun: empresa.municipio,
-            UF: empresa.uf,
-            CEP: (empresa.cep || '').replace(/\D/g, ''),
-          },
-        },
-      };
-
-      console.log(`📡 Registering ${isPF ? 'PF (produtor rural)' : 'PJ'} ${docIdentificador} on fiscal API...`);
-      console.log(`   Has certificate: ${!!certificadoBase64}`);
-      console.log(`   codigo_municipio: ${registerBody.codigo_municipio}`);
-      console.log(`   Full payload: ${JSON.stringify(registerBody).substring(0, 1000)}`);
-      
-      const registerUrl = `${FISCAL_API_BASE_URL}/empresa/cadastrar`;
-      console.log(`   Register URL: ${registerUrl}`);
-      
-      let response = await fetch(registerUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(registerBody),
-      });
-      
-      let responseText = await response.text();
-      console.log(`   Response status: ${response.status}`);
-      console.log(`   Response body: ${responseText.substring(0, 500)}`);
-
-      let phpApiKey: string | null = null;
-      let registrationSucceeded = false;
-      let parsed = extractJsonFromPhpResponse(responseText);
-
-      if (parsed.json?.api_key) phpApiKey = parsed.json.api_key;
-
-      // Check for duplicate entry (from JSON error or HTML fatal error)
-      const isDuplicate = responseText.includes('Duplicate entry') || responseText.includes('1062') || parsed.errorMessage === 'duplicate_entry';
-
-      if (isDuplicate) {
-        console.log(`   ⚠️ Empresa already exists on PHP, trying /empresa/atualizar...`);
-        
-        // Try update with the new api_key
-        const updateResponse = await fetch(`${FISCAL_API_BASE_URL}/empresa/atualizar`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKeyFiscal}` },
-          body: JSON.stringify(registerBody),
-        });
-        const updateText = await updateResponse.text();
-        console.log(`   Update response: ${updateText.substring(0, 500)}`);
-        
-        const updateParsed = extractJsonFromPhpResponse(updateText);
-        if (updateParsed.json?.api_key) phpApiKey = updateParsed.json.api_key;
-
-        if (updateResponse.ok && !updateParsed.isError) {
-          registrationSucceeded = true;
-          parsed = updateParsed;
-        } else if (updateText.includes('API Key obrigat')) {
-          // The company exists with an empty/invalid api_key in PHP.
-          // Try update by sending cnpj as identifier for PHP to find the record
-          console.log(`   ⚠️ Update failed (empty api_key in PHP), trying update with cnpj identifier...`);
-          const cnpjUpdateBody = { ...registerBody, buscar_por_cnpj: true, cnpj_busca: docIdentificador.replace(/\D/g, '') };
-          const cnpjUpdateResp = await fetch(`${FISCAL_API_BASE_URL}/empresa/atualizar`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(cnpjUpdateBody),
-          });
-          const cnpjUpdateText = await cnpjUpdateResp.text();
-          console.log(`   CNPJ update response: ${cnpjUpdateText.substring(0, 500)}`);
-          const cnpjParsed = extractJsonFromPhpResponse(cnpjUpdateText);
-          if (cnpjParsed.json?.api_key) phpApiKey = cnpjParsed.json.api_key;
-          
-          if (cnpjUpdateResp.ok && !cnpjParsed.isError) {
-            registrationSucceeded = true;
-            parsed = cnpjParsed;
-          } else {
-            // Last resort: just save the api_key locally — next emission attempt 
-            // will send it and PHP will need manual fix or the api_key in the body
-            console.log(`   ⚠️ All update attempts failed. Saving api_key locally for future use.`);
-            registrationSucceeded = true; // Proceed anyway — save key locally
-            parsed = { json: { api_key: apiKeyFiscal, warning: 'PHP update failed, key saved locally only' }, isError: false, errorMessage: '' };
-          }
-        } else {
-          // Other error
-          parsed = updateParsed;
-        }
-      } else if (!parsed.isError && (response.ok || parsed.json)) {
-        registrationSucceeded = true;
-      }
-
-      if (parsed.isError && !registrationSucceeded) {
-        console.error(`❌ PHP Fatal Error:`, parsed.errorMessage);
-        return new Response(
-          JSON.stringify({ error: 'Erro fatal na API fiscal (PHP)', details: parsed.errorMessage }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const responseData = parsed.json || { api_key: apiKeyFiscal };
-
-      if (!response.ok && !registrationSucceeded) {
-        return new Response(
-          JSON.stringify({ error: 'Erro ao registrar na API fiscal', details: responseData }),
-          { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Use the api_key returned by PHP if available, otherwise use our generated one
-      // If empresa already has an api_key_fiscal, prefer keeping it (PHP ON DUPLICATE KEY may return a stale random key)
-      const finalApiKey = empresa.api_key_fiscal || phpApiKey || responseData?.api_key || apiKeyFiscal;
-
-      // Store the fiscal API key in our database
-      if (!empresa.api_key_fiscal || empresa.api_key_fiscal !== finalApiKey) {
-        const { error: updateError } = await supabase
-          .from('empresas')
-          .update({ api_key_fiscal: finalApiKey })
-          .eq('id', empresa_id);
-
-        if (updateError) {
-          return new Response(
-            JSON.stringify({ error: 'Erro ao salvar API key fiscal', details: updateError.message }),
-            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      }
-
-      console.log(`✅ ${isPF ? 'Produtor rural' : 'Empresa'} ${docIdentificador} registered successfully on fiscal API (key: ${finalApiKey.substring(0, 8)}...)`);
+      console.log(`✅ Empresa ${empresa.razao_social} synced (key: ${empresa.api_key_fiscal.substring(0, 8)}...)`);
 
       return new Response(
-        JSON.stringify({ success: true, data: responseData }),
+        JSON.stringify({
+          success: true,
+          data: {
+            api_key: empresa.api_key_fiscal,
+            has_certificate: !!certificate,
+          },
+        }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     // ========================================================================
-    // ACTION: emit_nfce - Emit NFC-e via fiscal API
+    // ACTION: emit_nfce
     // ========================================================================
     if (action === 'emit_nfce') {
       if (!nfce_id) {
@@ -330,10 +243,7 @@ Deno.serve(async (req) => {
       // Get NFC-e data with items
       const { data: nfce, error: nfceError } = await supabase
         .from('nfce')
-        .select(`
-          *,
-          nfce_itens(*)
-        `)
+        .select('*, nfce_itens(*)')
         .eq('id', nfce_id)
         .single();
 
@@ -344,37 +254,22 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Get empresa with fiscal API key
-      const { data: empresa, error: empresaError } = await supabase
-        .from('empresas')
-        .select('*')
-        .eq('id', nfce.empresa_id)
-        .single();
+      // Auto-register empresa (ensures api_key, syncs with PHP, loads certificate)
+      const { empresa, certificate, error: regError } = await ensureRegistered(supabase, nfce.empresa_id);
 
-      if (empresaError || !empresa) {
+      if (regError || !empresa) {
         return new Response(
-          JSON.stringify({ error: 'Empresa não encontrada' }),
+          JSON.stringify({ error: regError || 'Empresa não encontrada' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      if (!empresa.api_key_fiscal) {
-        return new Response(
-          JSON.stringify({ error: 'Empresa não registrada na API fiscal. Registre primeiro.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
       // Update status to processing
-      await supabase
-        .from('nfce')
-        .update({ status: 'processando' })
-        .eq('id', nfce_id);
+      await supabase.from('nfce').update({ status: 'processando' }).eq('id', nfce_id);
 
-      // Build payload for the fiscal API
+      // Build payload for PHP
       const clientePayload = nfce.payload_entrada?.cliente || { nome: 'Consumidor Final', cpf: null };
-      
-      // Build items as object with numeric keys (PHP stdClass compatible) instead of array
+
       const itensObj: Record<string, any> = {};
       (nfce.nfce_itens || []).forEach((item: any, idx: number) => {
         itensObj[String(idx)] = {
@@ -395,7 +290,7 @@ Deno.serve(async (req) => {
         };
       });
 
-      const payload = {
+      const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
         nota: {
@@ -407,11 +302,17 @@ Deno.serve(async (req) => {
         },
       };
 
+      // Always include certificate in emission payload
+      if (certificate) {
+        payload.certificado = {
+          pfx_base64: certificate.base64,
+          senha: certificate.senha,
+        };
+      }
+
       console.log(`📡 Emitting NFC-e ${nfce.numero} via fiscal API...`);
-      console.log(`   Payload: ${JSON.stringify(payload).substring(0, 200)}...`);
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfce/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
-      console.log(`   Emit URL: ${emitUrl.replace(empresa.api_key_fiscal, '***')}`);
       const response = await fetch(emitUrl, {
         method: 'POST',
         headers: {
@@ -423,21 +324,18 @@ Deno.serve(async (req) => {
       });
 
       const responseText = await response.text();
-      console.log(`📡 Fiscal API emit response (status ${response.status}):`, responseText.substring(0, 500));
+      console.log(`📡 NFC-e emit response (${response.status}):`, responseText.substring(0, 500));
 
       let responseData: any;
       try {
         responseData = JSON.parse(responseText);
       } catch {
-        console.error('❌ Fiscal API returned non-JSON response:', responseText.substring(0, 300));
-        await supabase
-          .from('nfce')
-          .update({
-            status: 'rejeitada',
-            erro_processamento: `API fiscal retornou resposta inválida (status ${response.status})`,
-            motivo_retorno: responseText.substring(0, 500),
-          })
-          .eq('id', nfce_id);
+        console.error('❌ Non-JSON response:', responseText.substring(0, 300));
+        await supabase.from('nfce').update({
+          status: 'rejeitada',
+          erro_processamento: `API fiscal retornou resposta inválida (status ${response.status})`,
+          motivo_retorno: responseText.substring(0, 500),
+        }).eq('id', nfce_id);
 
         await supabase.rpc('registrar_log', {
           p_empresa_id: nfce.empresa_id,
@@ -445,7 +343,7 @@ Deno.serve(async (req) => {
           p_token_api_id: nfce.token_api_id || empresa.id,
           p_tipo: 'erro',
           p_categoria: 'emissao',
-          p_mensagem: `NFC-e ${nfce.numero}: API fiscal retornou resposta não-JSON (status ${response.status})`,
+          p_mensagem: `NFC-e ${nfce.numero}: resposta não-JSON (status ${response.status})`,
           p_detalhes: { raw_response: responseText.substring(0, 500) },
         });
 
@@ -456,14 +354,11 @@ Deno.serve(async (req) => {
       }
 
       if (!response.ok) {
-        await supabase
-          .from('nfce')
-          .update({
-            status: 'rejeitada',
-            erro_processamento: responseData.error || 'Erro na API fiscal',
-            motivo_retorno: JSON.stringify(responseData),
-          })
-          .eq('id', nfce_id);
+        await supabase.from('nfce').update({
+          status: 'rejeitada',
+          erro_processamento: responseData.error || 'Erro na API fiscal',
+          motivo_retorno: JSON.stringify(responseData),
+        }).eq('id', nfce_id);
 
         await supabase.rpc('registrar_log', {
           p_empresa_id: nfce.empresa_id,
@@ -471,7 +366,7 @@ Deno.serve(async (req) => {
           p_token_api_id: nfce.token_api_id || empresa.id,
           p_tipo: 'erro',
           p_categoria: 'emissao',
-          p_mensagem: `Erro ao emitir NFC-e ${nfce.numero}: ${responseData.error || 'Erro desconhecido'}`,
+          p_mensagem: `Erro NFC-e ${nfce.numero}: ${responseData.error || 'Erro desconhecido'}`,
           p_detalhes: responseData,
         });
 
@@ -481,59 +376,24 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Success - update NFC-e with response data
-      console.log('✅ Full fiscal API response keys:', Object.keys(responseData));
-      console.log('✅ Full fiscal API response:', JSON.stringify(responseData).substring(0, 1000));
-      
-      const validStatuses = ['pendente', 'processando', 'autorizada', 'rejeitada', 'cancelada', 'denegada', 'contingencia'];
-      const mappedStatus = validStatuses.includes(responseData.status) ? responseData.status : 'processando';
-      const updateData: any = {
-        status: mappedStatus,
-        processado_em: new Date().toISOString(),
-      };
+      // Success - update NFC-e
+      const updateData = buildNfUpdateData(responseData);
 
-      const chaveAcesso = responseData.chave_acesso || responseData.chave || responseData.chNFe || responseData.chave_nfe || responseData.key;
-      const protocolo = responseData.protocolo || responseData.nProt || responseData.protocol;
-      const codigoRetorno = responseData.codigo_retorno || responseData.cStat || responseData.code;
-      const motivoRetorno = responseData.motivo_retorno || responseData.xMotivo || responseData.motivo || responseData.message;
-      const xmlRetorno = responseData.xml_retorno || responseData.xml || responseData.xmlRetorno;
-      let qrcodeUrl = responseData.qrcode_url || responseData.qrcode || responseData.urlQRCode || responseData.qr_code || responseData.qrCode || responseData.url_qrcode;
-      const dataAutorizacao = responseData.data_autorizacao || responseData.dhRecbto || responseData.data_recebimento;
-
-      if (!qrcodeUrl && xmlRetorno) {
+      // Extract QR Code from XML if not present
+      if (!updateData.qrcode_url && updateData.xml_retorno) {
         try {
-          let xmlStr = xmlRetorno;
-          if (!xmlStr.startsWith('<') && !xmlStr.startsWith('<?')) {
-            xmlStr = atob(xmlStr);
-          }
+          let xmlStr = updateData.xml_retorno;
+          if (!xmlStr.startsWith('<') && !xmlStr.startsWith('<?')) xmlStr = atob(xmlStr);
           const qrMatch = xmlStr.match(/<qrCode>(.*?)<\/qrCode>/);
-          if (qrMatch && qrMatch[1]) {
-            qrcodeUrl = qrMatch[1];
-            console.log('📱 QR Code extracted from XML:', qrcodeUrl.substring(0, 100));
-          }
-          if (!dataAutorizacao) {
+          if (qrMatch?.[1]) updateData.qrcode_url = qrMatch[1];
+          if (!updateData.data_autorizacao) {
             const dhMatch = xmlStr.match(/<dhRecbto>(.*?)<\/dhRecbto>/);
-            if (dhMatch && dhMatch[1]) {
-              updateData.data_autorizacao = dhMatch[1];
-            }
+            if (dhMatch?.[1]) updateData.data_autorizacao = dhMatch[1];
           }
-        } catch (xmlErr) {
-          console.error('⚠️ Error extracting QR Code from XML:', xmlErr);
-        }
+        } catch {}
       }
 
-      if (chaveAcesso) updateData.chave_acesso = chaveAcesso;
-      if (protocolo) updateData.protocolo = protocolo;
-      if (codigoRetorno) updateData.codigo_retorno = codigoRetorno;
-      if (motivoRetorno) updateData.motivo_retorno = motivoRetorno;
-      if (xmlRetorno) updateData.xml_retorno = xmlRetorno;
-      if (qrcodeUrl) updateData.qrcode_url = qrcodeUrl;
-      if (dataAutorizacao) updateData.data_autorizacao = dataAutorizacao;
-
-      await supabase
-        .from('nfce')
-        .update(updateData)
-        .eq('id', nfce_id);
+      await supabase.from('nfce').update(updateData).eq('id', nfce_id);
 
       await supabase.rpc('registrar_log', {
         p_empresa_id: nfce.empresa_id,
@@ -542,18 +402,15 @@ Deno.serve(async (req) => {
         p_tipo: 'sucesso',
         p_categoria: 'emissao',
         p_mensagem: `NFC-e ${nfce.numero} ${updateData.status} via API fiscal`,
-        p_detalhes: { protocolo, chave_acesso: chaveAcesso, qrcode_url: qrcodeUrl, response_keys: Object.keys(responseData) },
+        p_detalhes: { protocolo: updateData.protocolo, chave_acesso: updateData.chave_acesso, qrcode_url: updateData.qrcode_url },
       });
 
+      // Dispatch webhook
       try {
-        const evento = updateData.status === 'autorizada' ? 'nfce.autorizada' : 
+        const evento = updateData.status === 'autorizada' ? 'nfce.autorizada' :
                        updateData.status === 'rejeitada' ? 'nfce.rejeitada' : 'nfce.processando';
-        await supabase.functions.invoke('send-webhook', {
-          body: { nfce_id: nfce_id, evento }
-        });
-      } catch (webhookError) {
-        console.error('Webhook dispatch error:', webhookError);
-      }
+        await supabase.functions.invoke('send-webhook', { body: { nfce_id, evento } });
+      } catch {}
 
       return new Response(
         JSON.stringify({ success: true, data: { ...updateData, id: nfce_id } }),
@@ -562,11 +419,10 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================================
-    // ACTION: emit_nfe - Emit NF-e via fiscal API
+    // ACTION: emit_nfe
     // ========================================================================
     if (action === 'emit_nfe') {
       const nfeId = nfe_id;
-
       if (!nfeId) {
         return new Response(
           JSON.stringify({ error: 'nfe_id é obrigatório' }),
@@ -577,7 +433,7 @@ Deno.serve(async (req) => {
       // Get NF-e data with items
       const { data: nfe, error: nfeError } = await supabase
         .from('nfe')
-        .select(`*, nfe_itens(*)`)
+        .select('*, nfe_itens(*)')
         .eq('id', nfeId)
         .single();
 
@@ -588,88 +444,14 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Get empresa with fiscal API key
-      const { data: empresa, error: empresaError } = await supabase
-        .from('empresas')
-        .select('*')
-        .eq('id', nfe.empresa_id)
-        .single();
+      // Auto-register empresa
+      const { empresa, certificate, error: regError } = await ensureRegistered(supabase, nfe.empresa_id);
 
-      if (empresaError || !empresa) {
+      if (regError || !empresa) {
         return new Response(
-          JSON.stringify({ error: 'Empresa não encontrada' }),
+          JSON.stringify({ error: regError || 'Empresa não encontrada' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
-      }
-
-      if (!empresa.api_key_fiscal) {
-        // Auto-register empresa on fiscal API before emitting
-        console.log(`📡 Auto-registering empresa ${empresa.razao_social} before NF-e emission...`);
-        const registerResponse = await fetch(req.url.replace(/\/fiscal-api.*/, '/fiscal-api'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': req.headers.get('Authorization') || '' },
-          body: JSON.stringify({ action: 'register_empresa', empresa_id: nfe.empresa_id }),
-        });
-        // Ignore register errors, just try - refetch empresa to get new api_key
-        const { data: updatedEmpresa } = await supabase
-          .from('empresas')
-          .select('api_key_fiscal')
-          .eq('id', nfe.empresa_id)
-          .single();
-        
-        if (!updatedEmpresa?.api_key_fiscal) {
-          // Fallback: self-invoke register_empresa action
-          const selfUrl = `${supabaseUrl}/functions/v1/fiscal-api`;
-          const regResp = await fetch(selfUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseServiceKey}` },
-            body: JSON.stringify({ action: 'register_empresa', empresa_id: nfe.empresa_id }),
-          });
-          await regResp.text(); // consume body
-          
-          // Re-fetch empresa
-          const { data: refetchedEmpresa } = await supabase
-            .from('empresas')
-            .select('*')
-            .eq('id', nfe.empresa_id)
-            .single();
-          
-          if (!refetchedEmpresa?.api_key_fiscal) {
-            return new Response(
-              JSON.stringify({ error: 'Empresa não registrada na API fiscal. Registre primeiro.' }),
-              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-            );
-          }
-          
-          // Use refetched empresa for the rest
-          Object.assign(empresa, refetchedEmpresa);
-        } else {
-          empresa.api_key_fiscal = updatedEmpresa.api_key_fiscal;
-        }
-      }
-
-      // Get certificate data to send along with emission
-      const { data: certificado } = await supabase
-        .from('certificados_digitais')
-        .select('*')
-        .eq('empresa_id', nfe.empresa_id)
-        .single();
-
-      let certificadoBase64: string | null = null;
-      if (certificado?.arquivo_path) {
-        const { data: fileData, error: fileError } = await supabase.storage
-          .from('certificados')
-          .download(certificado.arquivo_path);
-        if (!fileError && fileData) {
-          const arrayBuffer = await fileData.arrayBuffer();
-          const bytes = new Uint8Array(arrayBuffer);
-          let binary = '';
-          for (let i = 0; i < bytes.length; i++) {
-            binary += String.fromCharCode(bytes[i]);
-          }
-          certificadoBase64 = btoa(binary);
-          console.log(`📎 Certificate loaded for NF-e emission (${bytes.length} bytes)`);
-        }
       }
 
       // Update status to processing
@@ -677,7 +459,7 @@ Deno.serve(async (req) => {
 
       const isPF = empresa.tipo_pessoa === 'PF';
 
-      // Build items with IBS/CBS/IS data (Grupo UB - Reforma Tributária)
+      // Build items with full tax data
       const itensObj: Record<string, any> = {};
       (nfe.nfe_itens || []).forEach((item: any, idx: number) => {
         const itemData: any = {
@@ -706,7 +488,7 @@ Deno.serve(async (req) => {
           cst_cofins: item.cst_cofins || '99',
           aliquota_cofins: item.aliquota_cofins ?? 0,
           base_calculo_cofins: item.base_calculo_cofins || item.valor_total || 0,
-          // PHP field names for PIS/COFINS/IPI (NFePHP expects these)
+          // PHP NFePHP field names
           vBC_pis: item.base_calculo_pis || item.valor_total || 0,
           pPIS: item.aliquota_pis ?? 0,
           vPIS: item.valor_pis ?? 0,
@@ -716,7 +498,7 @@ Deno.serve(async (req) => {
           vBC_icms: item.base_calculo_icms || item.valor_total || 0,
         };
 
-        // Grupo UB - IBS/CBS (only if CST is set)
+        // IBS/CBS (Reforma Tributária)
         if (item.cst_ibs_cbs) {
           itemData.ibs_cbs = {
             CST: item.cst_ibs_cbs,
@@ -758,9 +540,7 @@ Deno.serve(async (req) => {
           };
         }
 
-        if (item.ind_bem_movel_usado) {
-          itemData.indBemMovelUsado = item.ind_bem_movel_usado;
-        }
+        if (item.ind_bem_movel_usado) itemData.indBemMovelUsado = item.ind_bem_movel_usado;
 
         itensObj[String(idx)] = itemData;
       });
@@ -769,11 +549,8 @@ Deno.serve(async (req) => {
       const clientePayload: any = {};
       if (nfe.dest_cpf_cnpj) {
         const doc = nfe.dest_cpf_cnpj.replace(/\D/g, '');
-        if (doc.length > 11) {
-          clientePayload.cnpj = doc;
-        } else {
-          clientePayload.cpf = doc;
-        }
+        if (doc.length > 11) clientePayload.cnpj = doc;
+        else clientePayload.cpf = doc;
       }
       if (nfe.dest_nome) clientePayload.nome = nfe.dest_nome;
       if (nfe.dest_ie) clientePayload.ie = nfe.dest_ie;
@@ -807,14 +584,13 @@ Deno.serve(async (req) => {
           modalidade_frete: nfe.modalidade_frete || '9',
           cliente: clientePayload,
           itens: itensObj,
-          // Reforma Tributária - Grupo B
+          // Reforma Tributária
           ...(nfe.d_prev_entrega ? { dPrevEntrega: nfe.d_prev_entrega } : {}),
           ...(nfe.c_mun_fg_ibs ? { cMunFGIBS: nfe.c_mun_fg_ibs } : {}),
           ...(nfe.tp_nf_debito ? { tpNFDebito: nfe.tp_nf_debito } : {}),
           ...(nfe.tp_nf_credito ? { tpNFCredito: nfe.tp_nf_credito } : {}),
           ...(nfe.ind_intermed != null ? { indIntermed: nfe.ind_intermed } : {}),
           ...(nfe.tp_ente_gov != null ? { gCompraGov: { tpEnteGov: nfe.tp_ente_gov, tpOperGov: nfe.tp_oper_gov, pRedutor: nfe.p_redutor_gov || 0 } } : {}),
-          // Totais IBS/CBS/IS (Grupo W03)
           totais_ibs_cbs: {
             vIBSUFTot: nfe.valor_ibs_uf_total || 0,
             vIBSMunTot: nfe.valor_ibs_mun_total || 0,
@@ -835,35 +611,30 @@ Deno.serve(async (req) => {
           IE: (empresa.inscricao_estadual || '').replace(/\D/g, ''),
           ...(isPF
             ? { CPF: (empresa.cpf || '').replace(/\D/g, '') }
-            : { CNPJ: (empresa.cnpj || '').replace(/\D/g, '') }
-          ),
+            : { CNPJ: (empresa.cnpj || '').replace(/\D/g, '') }),
         },
       };
 
-      // For PF emitters, pad CPF to 14 digits and send as cnpj so PHP builds the access key correctly
-      // The access key requires a 14-digit document field; 11-digit CPF causes invalid check digit
+      // PF: pad CPF to 14 digits for access key generation
       if (isPF) {
         const cpfClean = (empresa.cpf || '').replace(/\D/g, '');
-        const cpfPadded = cpfClean.padStart(14, '0'); // 000 + 11-digit CPF = 14 digits
-        payload.cnpj = cpfPadded;
-        payload.cpf = cpfClean; // Also send original CPF for XML tag
-        payload.tipo_pessoa = 'PF'; // Ensure PHP knows to use <CPF> tag in XML
+        payload.cnpj = cpfClean.padStart(14, '0');
+        payload.cpf = cpfClean;
+        payload.tipo_pessoa = 'PF';
       } else {
         payload.cnpj = (empresa.cnpj || '').replace(/\D/g, '');
       }
 
-      // Include certificate in emission payload to avoid PHP-side certificate loading issues
-      if (certificadoBase64) {
+      // Always include certificate
+      if (certificate) {
         payload.certificado = {
-          pfx_base64: certificadoBase64,
-          senha: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
+          pfx_base64: certificate.base64,
+          senha: certificate.senha,
         };
       }
 
-      console.log(`📡 Emitting NF-e ${nfe.numero} via fiscal API (modelo 55, ${isPF ? 'PF/produtor rural' : 'PJ'})...`);
-      console.log(`   Payload: ${JSON.stringify(payload).substring(0, 500)}...`);
+      console.log(`📡 Emitting NF-e ${nfe.numero} via fiscal API (modelo 55, ${isPF ? 'PF' : 'PJ'})...`);
 
-      // NF-e uses the dedicated /nfe/emitir endpoint so PHP sets modelo=55 correctly
       const emitUrl = `${FISCAL_API_BASE_URL}/nfe/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
       const response = await fetch(emitUrl, {
         method: 'POST',
@@ -876,7 +647,7 @@ Deno.serve(async (req) => {
       });
 
       const responseText = await response.text();
-      console.log(`📡 Fiscal API NF-e emit response (status ${response.status}):`, responseText.substring(0, 500));
+      console.log(`📡 NF-e emit response (${response.status}):`, responseText.substring(0, 500));
 
       let responseData: any;
       try {
@@ -908,28 +679,12 @@ Deno.serve(async (req) => {
       }
 
       // Success - update NF-e
-      const validStatuses = ['pendente', 'processando', 'autorizada', 'rejeitada', 'cancelada', 'denegada', 'contingencia'];
-      const mappedStatus = validStatuses.includes(responseData.status) ? responseData.status : 'processando';
-      const updateData: any = { status: mappedStatus, processado_em: new Date().toISOString() };
-
-      const chaveAcesso = responseData.chave_acesso || responseData.chave || responseData.chNFe || responseData.key;
-      const protocolo = responseData.protocolo || responseData.nProt;
-      const codigoRetorno = responseData.codigo_retorno || responseData.cStat;
-      const motivoRetorno = responseData.motivo_retorno || responseData.xMotivo;
-      const xmlRetorno = responseData.xml_retorno || responseData.xml;
-      const dataAutorizacao = responseData.data_autorizacao || responseData.dhRecbto;
-
-      if (chaveAcesso) updateData.chave_acesso = chaveAcesso;
-      if (protocolo) updateData.protocolo = protocolo;
-      if (codigoRetorno) updateData.codigo_retorno = codigoRetorno;
-      if (motivoRetorno) updateData.motivo_retorno = motivoRetorno;
-      if (xmlRetorno) updateData.xml_retorno = xmlRetorno;
-      if (dataAutorizacao) updateData.data_autorizacao = dataAutorizacao;
+      const updateData = buildNfUpdateData(responseData);
 
       // Extract data_autorizacao from XML if not present
-      if (!dataAutorizacao && xmlRetorno) {
+      if (!updateData.data_autorizacao && updateData.xml_retorno) {
         try {
-          let xmlStr = xmlRetorno;
+          let xmlStr = updateData.xml_retorno;
           if (!xmlStr.startsWith('<')) xmlStr = atob(xmlStr);
           const dhMatch = xmlStr.match(/<dhRecbto>(.*?)<\/dhRecbto>/);
           if (dhMatch) updateData.data_autorizacao = dhMatch[1];
@@ -938,7 +693,6 @@ Deno.serve(async (req) => {
 
       await supabase.from('nfe').update(updateData).eq('id', nfeId);
 
-      // Log success
       await supabase.rpc('registrar_log', {
         p_empresa_id: nfe.empresa_id,
         p_nfce_id: nfeId,
@@ -946,21 +700,17 @@ Deno.serve(async (req) => {
         p_tipo: 'sucesso',
         p_categoria: 'emissao',
         p_mensagem: `NF-e ${nfe.numero} ${updateData.status} via API fiscal`,
-        p_detalhes: { protocolo, chave_acesso: chaveAcesso, tipo: 'nfe' },
+        p_detalhes: { protocolo: updateData.protocolo, chave_acesso: updateData.chave_acesso, tipo: 'nfe' },
       });
 
-      // Send webhook notification for NF-e
+      // Webhook
       try {
-        const nfeEvento = updateData.status === 'autorizada' ? 'nfe.autorizada' : 
+        const nfeEvento = updateData.status === 'autorizada' ? 'nfe.autorizada' :
                          updateData.status === 'rejeitada' ? 'nfe.rejeitada' : null;
         if (nfeEvento) {
-          await supabase.functions.invoke('send-webhook', {
-            body: { nfe_id: nfeId, evento: nfeEvento }
-          });
+          await supabase.functions.invoke('send-webhook', { body: { nfe_id: nfeId, evento: nfeEvento } });
         }
-      } catch (whErr: any) {
-        console.error('Webhook NF-e dispatch error (non-fatal):', whErr.message);
-      }
+      } catch {}
 
       return new Response(
         JSON.stringify({ success: true, data: { ...updateData, id: nfeId } }),
@@ -969,238 +719,17 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================================
-    // ACTION: cancel_nfce - Cancel NFC-e via fiscal API
+    // ACTION: cancel_nfce
     // ========================================================================
     if (action === 'cancel_nfce') {
-      if (!nfce_id) {
-        return new Response(
-          JSON.stringify({ error: 'nfce_id é obrigatório' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const { data: nfce } = await supabase
-        .from('nfce')
-        .select('*, nfce_eventos(*)')
-        .eq('id', nfce_id)
-        .single();
-
-      if (!nfce) {
-        return new Response(
-          JSON.stringify({ error: 'NFC-e não encontrada' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const { data: empresa } = await supabase
-        .from('empresas')
-        .select('*')
-        .eq('id', nfce.empresa_id)
-        .single();
-
-      if (!empresa?.api_key_fiscal) {
-        return new Response(
-          JSON.stringify({ error: 'Empresa não registrada na API fiscal' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Get the latest cancellation event
-      const cancelEvento = (nfce.nfce_eventos || [])
-        .filter((e: any) => e.tipo_evento === 'cancelamento')
-        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-
-      const justificativa = cancelEvento?.justificativa || 'Cancelamento solicitado pelo emitente';
-
-      // Get certificate
-      const { data: certificado } = await supabase
-        .from('certificados_digitais')
-        .select('*')
-        .eq('empresa_id', nfce.empresa_id)
-        .single();
-
-      let certificadoBase64: string | null = null;
-      if (certificado?.arquivo_path) {
-        const { data: fileData } = await supabase.storage.from('certificados').download(certificado.arquivo_path);
-        if (fileData) {
-          const bytes = new Uint8Array(await fileData.arrayBuffer());
-          let binary = '';
-          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-          certificadoBase64 = btoa(binary);
-        }
-      }
-
-      const cancelPayload: any = {
-        api_key: empresa.api_key_fiscal,
-        chave: nfce.chave_acesso,
-        protocolo: nfce.protocolo,
-        justificativa,
-      };
-
-      if (certificadoBase64) {
-        cancelPayload.certificado = {
-          pfx_base64: certificadoBase64,
-          senha: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
-        };
-      }
-
-      console.log(`📡 Cancelling NFC-e ${nfce.numero} via fiscal API...`);
-      const cancelUrl = `${FISCAL_API_BASE_URL}/nfce/cancelar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
-      const response = await fetch(cancelUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cancelPayload),
-      });
-
-      const responseText = await response.text();
-      console.log(`📡 Cancel response (${response.status}):`, responseText.substring(0, 500));
-
-      let responseData: any;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        responseData = { raw: responseText };
-      }
-
-      if (response.ok && (responseData.sucesso || responseData.success || responseData.status === 'cancelada')) {
-        await supabase.from('nfce').update({ status: 'cancelada' }).eq('id', nfce_id);
-
-        if (cancelEvento) {
-          await supabase.from('nfce_eventos').update({
-            protocolo: responseData.protocolo || responseData.nProt || null,
-            codigo_retorno: responseData.cStat || responseData.codigo_retorno || '135',
-            motivo_retorno: responseData.xMotivo || responseData.motivo || 'Evento registrado e vinculado a NF-e',
-            xml_retorno: responseData.xml_retorno || responseData.xml || null,
-          }).eq('id', cancelEvento.id);
-        }
-
-        return new Response(
-          JSON.stringify({ success: true, data: { id: nfce_id, status: 'cancelada', ...responseData } }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ error: 'Erro ao cancelar NFC-e na SEFAZ', details: responseData }),
-        { status: response.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return await handleCancel(supabase, 'nfce', nfce_id);
     }
 
     // ========================================================================
-    // ACTION: cancel_nfe - Cancel NF-e via fiscal API
+    // ACTION: cancel_nfe
     // ========================================================================
     if (action === 'cancel_nfe') {
-      const nfeId = nfe_id;
-      if (!nfeId) {
-        return new Response(
-          JSON.stringify({ error: 'nfe_id é obrigatório' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const { data: nfe } = await supabase
-        .from('nfe')
-        .select('*, nfe_eventos(*)')
-        .eq('id', nfeId)
-        .single();
-
-      if (!nfe) {
-        return new Response(
-          JSON.stringify({ error: 'NF-e não encontrada' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const { data: empresa } = await supabase
-        .from('empresas')
-        .select('*')
-        .eq('id', nfe.empresa_id)
-        .single();
-
-      if (!empresa?.api_key_fiscal) {
-        return new Response(
-          JSON.stringify({ error: 'Empresa não registrada na API fiscal' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const cancelEvento = (nfe.nfe_eventos || [])
-        .filter((e: any) => e.tipo_evento === 'cancelamento')
-        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-
-      const justificativa = cancelEvento?.justificativa || 'Cancelamento solicitado pelo emitente';
-
-      const { data: certificado } = await supabase
-        .from('certificados_digitais')
-        .select('*')
-        .eq('empresa_id', nfe.empresa_id)
-        .single();
-
-      let certificadoBase64: string | null = null;
-      if (certificado?.arquivo_path) {
-        const { data: fileData } = await supabase.storage.from('certificados').download(certificado.arquivo_path);
-        if (fileData) {
-          const bytes = new Uint8Array(await fileData.arrayBuffer());
-          let binary = '';
-          for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-          certificadoBase64 = btoa(binary);
-        }
-      }
-
-      const cancelPayload: any = {
-        api_key: empresa.api_key_fiscal,
-        chave: nfe.chave_acesso,
-        protocolo: nfe.protocolo,
-        justificativa,
-      };
-
-      if (certificadoBase64) {
-        cancelPayload.certificado = {
-          pfx_base64: certificadoBase64,
-          senha: certificado?.senha_hash ? atob(certificado.senha_hash) : '',
-        };
-      }
-
-      console.log(`📡 Cancelling NF-e ${nfe.numero} via fiscal API...`);
-      const cancelUrl = `${FISCAL_API_BASE_URL}/nfe/cancelar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
-      const response = await fetch(cancelUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cancelPayload),
-      });
-
-      const responseText = await response.text();
-      console.log(`📡 NF-e Cancel response (${response.status}):`, responseText.substring(0, 500));
-
-      let responseData: any;
-      try {
-        responseData = JSON.parse(responseText);
-      } catch {
-        responseData = { raw: responseText };
-      }
-
-      if (response.ok && (responseData.sucesso || responseData.success || responseData.status === 'cancelada')) {
-        await supabase.from('nfe').update({ status: 'cancelada' }).eq('id', nfeId);
-
-        if (cancelEvento) {
-          await supabase.from('nfe_eventos').update({
-            protocolo: responseData.protocolo || responseData.nProt || null,
-            codigo_retorno: responseData.cStat || responseData.codigo_retorno || '135',
-            motivo_retorno: responseData.xMotivo || responseData.motivo || 'Evento registrado e vinculado a NF-e',
-            xml_retorno: responseData.xml_retorno || responseData.xml || null,
-          }).eq('id', cancelEvento.id);
-        }
-
-        return new Response(
-          JSON.stringify({ success: true, data: { id: nfeId, status: 'cancelada', ...responseData } }),
-          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      return new Response(
-        JSON.stringify({ error: 'Erro ao cancelar NF-e na SEFAZ', details: responseData }),
-        { status: response.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      return await handleCancel(supabase, 'nfe', nfe_id);
     }
 
     return new Response(
@@ -1208,7 +737,7 @@ Deno.serve(async (req) => {
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Fiscal API error:', error);
     return new Response(
       JSON.stringify({ error: 'Erro interno', details: error.message }),
@@ -1216,3 +745,135 @@ Deno.serve(async (req) => {
     );
   }
 });
+
+// ============================================================================
+// SHARED: Build update data from fiscal API response
+// ============================================================================
+function buildNfUpdateData(responseData: any): any {
+  const validStatuses = ['pendente', 'processando', 'autorizada', 'rejeitada', 'cancelada', 'denegada', 'contingencia'];
+  const mappedStatus = validStatuses.includes(responseData.status) ? responseData.status : 'processando';
+
+  const updateData: any = {
+    status: mappedStatus,
+    processado_em: new Date().toISOString(),
+  };
+
+  const chaveAcesso = responseData.chave_acesso || responseData.chave || responseData.chNFe || responseData.chave_nfe || responseData.key;
+  const protocolo = responseData.protocolo || responseData.nProt || responseData.protocol;
+  const codigoRetorno = responseData.codigo_retorno || responseData.cStat || responseData.code;
+  const motivoRetorno = responseData.motivo_retorno || responseData.xMotivo || responseData.motivo || responseData.message;
+  const xmlRetorno = responseData.xml_retorno || responseData.xml || responseData.xmlRetorno;
+  const qrcodeUrl = responseData.qrcode_url || responseData.qrcode || responseData.urlQRCode || responseData.qr_code || responseData.qrCode || responseData.url_qrcode;
+  const dataAutorizacao = responseData.data_autorizacao || responseData.dhRecbto || responseData.data_recebimento;
+
+  if (chaveAcesso) updateData.chave_acesso = chaveAcesso;
+  if (protocolo) updateData.protocolo = protocolo;
+  if (codigoRetorno) updateData.codigo_retorno = codigoRetorno;
+  if (motivoRetorno) updateData.motivo_retorno = motivoRetorno;
+  if (xmlRetorno) updateData.xml_retorno = xmlRetorno;
+  if (qrcodeUrl) updateData.qrcode_url = qrcodeUrl;
+  if (dataAutorizacao) updateData.data_autorizacao = dataAutorizacao;
+
+  return updateData;
+}
+
+// ============================================================================
+// SHARED: Handle cancel for both NFC-e and NF-e
+// ============================================================================
+async function handleCancel(supabase: any, tipo: 'nfce' | 'nfe', docId: string) {
+  if (!docId) {
+    return new Response(
+      JSON.stringify({ error: `${tipo}_id é obrigatório` }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const table = tipo;
+  const eventosTable = `${tipo}_eventos`;
+
+  const { data: doc } = await supabase
+    .from(table)
+    .select(`*, ${eventosTable}(*)`)
+    .eq('id', docId)
+    .single();
+
+  if (!doc) {
+    return new Response(
+      JSON.stringify({ error: `${tipo.toUpperCase()} não encontrada` }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Auto-register to ensure api_key is synced
+  const { empresa, certificate, error: regError } = await ensureRegistered(supabase, doc.empresa_id);
+
+  if (regError || !empresa?.api_key_fiscal) {
+    return new Response(
+      JSON.stringify({ error: 'Empresa não registrada na API fiscal' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const eventos = doc[eventosTable] || [];
+  const cancelEvento = eventos
+    .filter((e: any) => e.tipo_evento === 'cancelamento')
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+
+  const justificativa = cancelEvento?.justificativa || 'Cancelamento solicitado pelo emitente';
+
+  const cancelPayload: any = {
+    api_key: empresa.api_key_fiscal,
+    chave: doc.chave_acesso,
+    protocolo: doc.protocolo,
+    justificativa,
+  };
+
+  if (certificate) {
+    cancelPayload.certificado = {
+      pfx_base64: certificate.base64,
+      senha: certificate.senha,
+    };
+  }
+
+  const endpoint = tipo === 'nfce' ? 'nfce/cancelar' : 'nfe/cancelar';
+  console.log(`📡 Cancelling ${tipo.toUpperCase()} ${doc.numero}...`);
+
+  const response = await fetch(`${FISCAL_API_BASE_URL}/${endpoint}?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(cancelPayload),
+  });
+
+  const responseText = await response.text();
+  console.log(`📡 Cancel response (${response.status}):`, responseText.substring(0, 500));
+
+  let responseData: any;
+  try {
+    responseData = JSON.parse(responseText);
+  } catch {
+    responseData = { raw: responseText };
+  }
+
+  if (response.ok && (responseData.sucesso || responseData.success || responseData.status === 'cancelada')) {
+    await supabase.from(table).update({ status: 'cancelada' }).eq('id', docId);
+
+    if (cancelEvento) {
+      await supabase.from(eventosTable).update({
+        protocolo: responseData.protocolo || responseData.nProt || null,
+        codigo_retorno: responseData.cStat || responseData.codigo_retorno || '135',
+        motivo_retorno: responseData.xMotivo || responseData.motivo || 'Evento registrado e vinculado a NF-e',
+        xml_retorno: responseData.xml_retorno || responseData.xml || null,
+      }).eq('id', cancelEvento.id);
+    }
+
+    return new Response(
+      JSON.stringify({ success: true, data: { id: docId, status: 'cancelada', ...responseData } }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  return new Response(
+    JSON.stringify({ error: `Erro ao cancelar ${tipo.toUpperCase()} na SEFAZ`, details: responseData }),
+    { status: response.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
