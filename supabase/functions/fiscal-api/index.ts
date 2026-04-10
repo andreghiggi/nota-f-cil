@@ -109,6 +109,13 @@ Deno.serve(async (req) => {
       // Use existing api_key_fiscal or generate a new one
       const apiKeyFiscal = empresa.api_key_fiscal || crypto.randomUUID();
 
+      // CRITICAL: Save the api_key BEFORE calling PHP so we never lose it
+      // even if PHP returns garbled HTML warnings
+      if (!empresa.api_key_fiscal) {
+        await supabase.from('empresas').update({ api_key_fiscal: apiKeyFiscal }).eq('id', empresa_id);
+        console.log(`   💾 Pre-saved api_key_fiscal: ${apiKeyFiscal.substring(0, 8)}...`);
+      }
+
       // Map regime_tributario to CRT code
       const crtMap: Record<string, number> = {
         'simples_nacional': 1,
