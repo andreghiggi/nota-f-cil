@@ -129,8 +129,7 @@ Deno.serve(async (req) => {
       // Build payload in the format expected by the PHP API (flat structure)
       const registerBody: any = {
         api_key: apiKeyFiscal,
-
-        // Flat fields expected by PHP
+        tipo_pessoa: isPF ? 'PF' : 'PJ',
         razao_social: empresa.razao_social,
         nome_fantasia: empresa.nome_fantasia || empresa.razao_social,
         tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
