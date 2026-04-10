@@ -141,9 +141,6 @@ async function ensureRegistered(supabase: any, empresaId: string): Promise<{ emp
   // Load certificate
   const certificate = await loadCertificate(supabase, empresaId);
 
-  // Load certificate
-  const certificate = await loadCertificate(supabase, empresaId);
-
   // Register/sync with PHP fiscal API and get the api_key PHP uses
   const registerBody = buildRegisterPayload(empresa, empresa.api_key_fiscal || 'pending', certificate);
 
