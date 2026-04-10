@@ -706,6 +706,14 @@ Deno.serve(async (req) => {
           cst_cofins: item.cst_cofins || '99',
           aliquota_cofins: item.aliquota_cofins ?? 0,
           base_calculo_cofins: item.base_calculo_cofins || item.valor_total || 0,
+          // PHP field names for PIS/COFINS/IPI (NFePHP expects these)
+          vBC_pis: item.base_calculo_pis || item.valor_total || 0,
+          pPIS: item.aliquota_pis ?? 0,
+          vPIS: item.valor_pis ?? 0,
+          vBC_cofins: item.base_calculo_cofins || item.valor_total || 0,
+          pCOFINS: item.aliquota_cofins ?? 0,
+          vCOFINS: item.valor_cofins ?? 0,
+          vBC_icms: item.base_calculo_icms || item.valor_total || 0,
         };
 
         // Grupo UB - IBS/CBS (only if CST is set)
