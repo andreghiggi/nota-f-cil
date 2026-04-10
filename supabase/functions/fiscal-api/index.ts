@@ -290,7 +290,8 @@ Deno.serve(async (req) => {
       }
 
       // Use the api_key returned by PHP if available, otherwise use our generated one
-      const finalApiKey = phpApiKey || responseData?.api_key || apiKeyFiscal;
+      // If empresa already has an api_key_fiscal, prefer keeping it (PHP ON DUPLICATE KEY may return a stale random key)
+      const finalApiKey = empresa.api_key_fiscal || phpApiKey || responseData?.api_key || apiKeyFiscal;
 
       // Store the fiscal API key in our database
       if (!empresa.api_key_fiscal || empresa.api_key_fiscal !== finalApiKey) {
