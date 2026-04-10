@@ -553,9 +553,10 @@ Deno.serve(async (req) => {
         else clientePayload.cpf = doc;
       }
       if (nfe.dest_nome) clientePayload.nome = nfe.dest_nome;
-      if (nfe.dest_ie) clientePayload.ie = nfe.dest_ie;
+      const ieClean = nfe.dest_ie ? nfe.dest_ie.replace(/\D/g, '') : null;
+      if (ieClean) clientePayload.ie = ieClean;
       if (nfe.dest_email) clientePayload.email = nfe.dest_email;
-      clientePayload.indIEDest = nfe.dest_ie ? 1 : 9;
+      clientePayload.indIEDest = ieClean ? 1 : 9;
       if (nfe.dest_logradouro) {
         clientePayload.logradouro = nfe.dest_logradouro;
         clientePayload.numero = nfe.dest_numero || 'SN';
