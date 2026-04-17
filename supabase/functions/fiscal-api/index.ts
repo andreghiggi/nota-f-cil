@@ -855,7 +855,11 @@ async function handleCancel(supabase: any, tipo: 'nfce' | 'nfe', docId: string) 
     responseData = { raw: responseText };
   }
 
-  if (response.ok && (responseData.sucesso || responseData.success || responseData.status === 'cancelada')) {
+  // Detect "already cancelled" (cStat 573) as success - happens when retrying
+  const errStr = JSON.stringify(responseData).toLowerCase();
+  const alreadyCancelled = errStr.includes('573') || errStr.includes('duplicidade de evento');
+
+  if ((response.ok && (responseData.sucesso || responseData.success || responseData.status === 'cancelada')) || alreadyCancelled) {
     await supabase.from(table).update({ status: 'cancelada' }).eq('id', docId);
 
     if (cancelEvento) {
