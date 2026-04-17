@@ -965,7 +965,99 @@ Deno.serve(async (req) => {
       );
     }
 
-    // POST /nfe-api/:id/reprocessar
+    // POST /nfe-api/:id/cce - Carta de Correção Eletrônica
+    if (method === 'POST' && pathParts.length === 3 && pathParts[0] === 'nfe-api' && pathParts[2] === 'cce') {
+      if (!permissoes.includes('cancelar') && !permissoes.includes('gerenciar') && !permissoes.includes('emitir')) {
+        return new Response(
+          JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const nfeId = pathParts[1];
+      const ccePayload = await req.json().catch(() => ({}));
+      const correcao = (ccePayload.correcao || ccePayload.justificativa || '').toString().trim();
+      const sequencia = ccePayload.sequencia ? Number(ccePayload.sequencia) : undefined;
+
+      if (correcao.length < 15 || correcao.length > 1000) {
+        return new Response(
+          JSON.stringify({ error: 'Correção deve ter entre 15 e 1000 caracteres', code: 'VALIDATION_ERROR' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: nfeData } = await supabase
+        .from('nfe')
+        .select('id, numero, status')
+        .eq('id', nfeId)
+        .eq('empresa_id', empresa_id)
+        .maybeSingle();
+
+      if (!nfeData) {
+        return new Response(
+          JSON.stringify({ error: 'NF-e not found', code: 'NOT_FOUND' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (nfeData.status !== 'autorizada') {
+        return new Response(
+          JSON.stringify({ error: 'CC-e só pode ser emitida para NF-e autorizada', code: 'INVALID_STATUS' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'cce_nfe', nfe_id: nfeId, correcao, sequencia }
+        });
+
+        if (fiscalError || !fiscalResult?.success) {
+          return new Response(
+            JSON.stringify({
+              error: 'Erro ao registrar CC-e na SEFAZ',
+              code: 'SEFAZ_ERROR',
+              details: fiscalResult?.error || fiscalError?.message
+            }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await supabase.rpc('registrar_log', {
+          p_empresa_id: empresa_id,
+          p_nfce_id: nfeId,
+          p_token_api_id: token_id,
+          p_tipo: 'sucesso',
+          p_categoria: 'api',
+          p_mensagem: `CC-e #${fiscalResult.data?.sequencia} registrada para NF-e ${nfeData.numero}`,
+          p_detalhes: { correcao, sequencia: fiscalResult.data?.sequencia, protocolo: fiscalResult.data?.protocolo, tipo: 'nfe' },
+          p_ip_origem: req.headers.get('x-forwarded-for')
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              id: nfeId,
+              evento_id: fiscalResult.data?.id,
+              sequencia: fiscalResult.data?.sequencia,
+              protocolo: fiscalResult.data?.protocolo,
+              cStat: fiscalResult.data?.cStat,
+              motivo: fiscalResult.data?.xMotivo,
+              status: 'registrada',
+            }
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (cceErr: any) {
+        console.error('CC-e exception:', cceErr.message);
+        return new Response(
+          JSON.stringify({ error: 'Erro interno ao registrar CC-e', code: 'INTERNAL_ERROR' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     if (method === 'POST' && pathParts.length === 3 && pathParts[0] === 'nfe-api' && pathParts[2] === 'reprocessar') {
       if (!permissoes.includes('reprocessar')) {
         return new Response(
