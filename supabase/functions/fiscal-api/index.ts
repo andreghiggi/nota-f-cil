@@ -890,3 +890,139 @@ async function handleCancel(supabase: any, tipo: 'nfce' | 'nfe', docId: string) 
     { status: response.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
+
+// ============================================================================
+// SHARED: Carta de Correção Eletrônica (CC-e) - apenas NF-e modelo 55
+// ============================================================================
+async function handleCCe(supabase: any, nfeId: string, correcao: string, sequencia?: number) {
+  if (!nfeId) {
+    return new Response(
+      JSON.stringify({ error: 'nfe_id é obrigatório' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  if (!correcao || correcao.trim().length < 15 || correcao.trim().length > 1000) {
+    return new Response(
+      JSON.stringify({ error: 'Correção deve ter entre 15 e 1000 caracteres' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const { data: nfe } = await supabase
+    .from('nfe')
+    .select('*, nfe_eventos(*)')
+    .eq('id', nfeId)
+    .single();
+
+  if (!nfe) {
+    return new Response(
+      JSON.stringify({ error: 'NF-e não encontrada' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  if (nfe.status !== 'autorizada') {
+    return new Response(
+      JSON.stringify({ error: 'CC-e só pode ser emitida para NF-e autorizada' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+  if (!nfe.chave_acesso) {
+    return new Response(
+      JSON.stringify({ error: 'NF-e sem chave de acesso' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Determinar próxima sequência (max existente + 1) se não informada
+  const cceEventos = (nfe.nfe_eventos || []).filter((e: any) => e.tipo_evento === 'carta_correcao');
+  const nextSeq = sequencia && sequencia > 0
+    ? sequencia
+    : (cceEventos.reduce((max: number, e: any) => Math.max(max, e.sequencia || 0), 0) + 1);
+
+  if (nextSeq > 20) {
+    return new Response(
+      JSON.stringify({ error: 'Limite de 20 CC-e por NF-e atingido' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const { empresa, certificate, error: regError } = await ensureRegistered(supabase, nfe.empresa_id);
+  if (regError || !empresa?.api_key_fiscal) {
+    return new Response(
+      JSON.stringify({ error: 'Empresa não registrada na API fiscal' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Cria evento como pendente
+  const { data: evento, error: insError } = await supabase
+    .from('nfe_eventos')
+    .insert({
+      nfe_id: nfeId,
+      tipo_evento: 'carta_correcao',
+      sequencia: nextSeq,
+      justificativa: correcao.trim(),
+    })
+    .select()
+    .single();
+
+  if (insError) {
+    return new Response(
+      JSON.stringify({ error: 'Erro ao registrar evento', details: insError.message }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const ccePayload: any = {
+    api_key: empresa.api_key_fiscal,
+    chave: nfe.chave_acesso,
+    correcao: correcao.trim(),
+    sequencia: nextSeq,
+  };
+  if (certificate) {
+    ccePayload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
+  }
+
+  console.log(`📡 Sending CC-e #${nextSeq} for NF-e ${nfe.numero}...`);
+
+  const response = await fetch(`${FISCAL_API_BASE_URL}/nfe/cce?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(ccePayload),
+  });
+
+  const responseText = await response.text();
+  console.log(`📡 CC-e response (${response.status}):`, responseText.substring(0, 500));
+
+  let responseData: any;
+  try { responseData = JSON.parse(responseText); }
+  catch { responseData = { raw: responseText }; }
+
+  const isSuccess = response.ok && (responseData.sucesso || responseData.status === 'registrada' ||
+    ['135', '136'].includes(String(responseData.cStat || '')));
+
+  if (isSuccess) {
+    await supabase.from('nfe_eventos').update({
+      protocolo: responseData.protocolo || null,
+      codigo_retorno: String(responseData.cStat || '135'),
+      motivo_retorno: responseData.xMotivo || 'Evento registrado e vinculado a NF-e',
+      xml_retorno: responseData.xml_retorno || null,
+    }).eq('id', evento.id);
+
+    return new Response(
+      JSON.stringify({ success: true, data: { id: evento.id, sequencia: nextSeq, ...responseData } }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // Falha: marca o evento com erro
+  await supabase.from('nfe_eventos').update({
+    codigo_retorno: String(responseData.cStat || ''),
+    motivo_retorno: responseData.error || responseData.xMotivo || 'Erro ao registrar CC-e',
+  }).eq('id', evento.id);
+
+  return new Response(
+    JSON.stringify({ error: 'Erro ao registrar CC-e na SEFAZ', details: responseData }),
+    { status: response.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  );
+}
