@@ -94,7 +94,7 @@ export function CartaCorrecaoDialog({ open, onOpenChange, nfeId, nfeNumero }: Pr
             Carta de Correção Eletrônica
           </DialogTitle>
           <DialogDescription>
-            NF-e {nfeNumero ? `#${nfeNumero}` : ""} — corrija informações que não alterem valores, quantidades, partes envolvidas ou dados que afetem o cálculo do imposto.
+            NF-e {nfeNumero ? `#${nfeNumero}` : ""} — corrija informações que não alterem valores, quantidades, partes envolvidas ou dados que afetem o cálculo do imposto. Você pode enviar até <strong>20 cartas</strong> por nota ({eventosRegistrados.length}/20 utilizadas).
           </DialogDescription>
         </DialogHeader>
 
