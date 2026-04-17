@@ -12,6 +12,7 @@ import {
   FileText,
   Inbox,
   Printer,
+  FileEdit,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -32,6 +33,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DANFeDialog } from "@/components/nfe/DANFeDialog";
 import { CancelNFeDialog } from "@/components/nfe/CancelNFeDialog";
+import { CartaCorrecaoDialog } from "@/components/nfe/CartaCorrecaoDialog";
 import { toast } from "sonner";
 
 const statusLabels: Record<string, string> = {
@@ -62,6 +64,8 @@ export default function NFe() {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelNfe, setCancelNfe] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [cceOpen, setCceOpen] = useState(false);
+  const [cceNfe, setCceNfe] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
   const queryClient = useQueryClient();
 
   const { data: nfeList = [], isLoading } = useQuery({
@@ -313,9 +317,14 @@ export default function NFe() {
                             )}
                             <DropdownMenuSeparator />
                             {nfe.status === "autorizada" && (
-                              <DropdownMenuItem className="text-destructive" onSelect={() => { setTimeout(() => { setCancelNfe({ id: nfe.id, numero: nfe.numero }); setCancelOpen(true); }, 0); }}>
-                                <XCircle className="h-4 w-4 mr-2" />Cancelar
-                              </DropdownMenuItem>
+                              <>
+                                <DropdownMenuItem onSelect={() => { setTimeout(() => { setCceNfe({ id: nfe.id, numero: nfe.numero }); setCceOpen(true); }, 0); }}>
+                                  <FileEdit className="h-4 w-4 mr-2" />Carta de Correção
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="text-destructive" onSelect={() => { setTimeout(() => { setCancelNfe({ id: nfe.id, numero: nfe.numero }); setCancelOpen(true); }, 0); }}>
+                                  <XCircle className="h-4 w-4 mr-2" />Cancelar
+                                </DropdownMenuItem>
+                              </>
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
@@ -340,6 +349,13 @@ export default function NFe() {
           numero={cancelNfe.numero}
           onConfirm={handleCancelar}
           loading={cancelLoading}
+        />
+
+        <CartaCorrecaoDialog
+          open={cceOpen}
+          onOpenChange={setCceOpen}
+          nfeId={cceNfe.id || null}
+          nfeNumero={cceNfe.numero}
         />
       </div>
     </AppLayout>
