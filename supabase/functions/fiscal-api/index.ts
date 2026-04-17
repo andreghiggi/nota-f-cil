@@ -733,8 +733,19 @@ Deno.serve(async (req) => {
       return await handleCancel(supabase, 'nfe', nfe_id);
     }
 
+    // ========================================================================
+    // ACTION: cce_nfe (Carta de Correção Eletrônica)
+    // ========================================================================
+    if (action === 'cce_nfe') {
+      const { correcao, sequencia } = await (async () => {
+        try { const b = await req.clone().json(); return { correcao: b.correcao, sequencia: b.sequencia }; }
+        catch { return { correcao: undefined, sequencia: undefined }; }
+      })();
+      return await handleCCe(supabase, nfe_id, correcao, sequencia);
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe' }),
+      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
