@@ -738,11 +738,7 @@ Deno.serve(async (req) => {
     // ACTION: cce_nfe (Carta de Correção Eletrônica)
     // ========================================================================
     if (action === 'cce_nfe') {
-      const { correcao, sequencia } = await (async () => {
-        try { const b = await req.clone().json(); return { correcao: b.correcao, sequencia: b.sequencia }; }
-        catch { return { correcao: undefined, sequencia: undefined }; }
-      })();
-      return await handleCCe(supabase, nfe_id, correcao, sequencia);
+      return await handleCCe(supabase, nfe_id, body.correcao, body.sequencia);
     }
 
     return new Response(
