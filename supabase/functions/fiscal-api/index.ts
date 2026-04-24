@@ -178,6 +178,29 @@ async function ensureRegistered(supabase: any, empresaId: string): Promise<{ emp
   return { empresa, certificate };
 }
 
+function buildNfceClientePayload(rawCliente: any, ambiente: string) {
+  const cliente = rawCliente && typeof rawCliente === 'object' ? rawCliente : {};
+  const nome = typeof cliente.nome === 'string' && cliente.nome.trim() ? cliente.nome.trim() : undefined;
+  const rawDoc = [cliente.cpf, cliente.cnpj, cliente.cpf_cnpj, cliente.documento]
+    .find((value) => typeof value === 'string' && value.trim());
+  const documento = typeof rawDoc === 'string' ? rawDoc.replace(/\D/g, '') : '';
+
+  if (documento.length > 11) {
+    return nome ? { cnpj: documento, nome } : { cnpj: documento };
+  }
+
+  if (documento.length === 11) {
+    return nome ? { cpf: documento, nome } : { cpf: documento };
+  }
+
+  if (ambiente === 'homologacao') {
+    console.log('⚠️ NFC-e em homologação sem documento do consumidor; aplicando CPF fictício para evitar XML inválido no PHP.');
+    return { cpf: '00000000000', nome: nome || 'Consumidor Final' };
+  }
+
+  return {};
+}
+
 // ============================================================================
 // MAIN HANDLER
 // ============================================================================
@@ -269,7 +292,7 @@ Deno.serve(async (req) => {
       await supabase.from('nfce').update({ status: 'processando' }).eq('id', nfce_id);
 
       // Build payload for PHP
-      const clientePayload = nfce.payload_entrada?.cliente || { nome: 'Consumidor Final', cpf: null };
+      const clientePayload = buildNfceClientePayload(nfce.payload_entrada?.cliente, empresa.ambiente);
 
       const itensObj: Record<string, any> = {};
       (nfce.nfce_itens || []).forEach((item: any, idx: number) => {
