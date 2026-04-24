@@ -149,11 +149,11 @@ Deno.serve(async (req) => {
 
       // Upload to storage
       const storagePath = `${empresa_id}/${docClean}_${Date.now()}.pfx`;
-      const blob = new Blob([pfxBytes], { type: 'application/x-pkcs12' });
+      const pfxBuffer = pfxBytes.buffer.slice(pfxBytes.byteOffset, pfxBytes.byteOffset + pfxBytes.byteLength);
 
       const { error: uploadError } = await supabase.storage
         .from('certificados')
-        .upload(storagePath, blob, { upsert: true });
+        .upload(storagePath, pfxBuffer, { contentType: 'application/x-pkcs12', upsert: true });
 
       if (uploadError) {
         console.error('Upload error:', uploadError);
