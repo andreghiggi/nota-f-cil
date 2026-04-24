@@ -296,21 +296,42 @@ Deno.serve(async (req) => {
 
       const itensObj: Record<string, any> = {};
       (nfce.nfce_itens || []).forEach((item: any, idx: number) => {
+        const qtd = Number(item.quantidade) || 0;
+        const vUnit = Number(item.valor_unitario) || 0;
+        const vTotal = Number(item.valor_total) || +(qtd * vUnit).toFixed(2);
+        const cstPis = item.cst_pis || '49';
+        const cstCofins = item.cst_cofins || '49';
+        const aliqPis = Number(item.aliquota_pis) || 0;
+        const aliqCofins = Number(item.aliquota_cofins) || 0;
+        const aliqIcms = Number(item.aliquota_icms) || 0;
+
         itensObj[String(idx)] = {
           descricao: item.descricao,
-          quantidade: item.quantidade,
-          valor_unitario: item.valor_unitario,
+          quantidade: qtd,
+          valor_unitario: vUnit,
+          // PHP exige valor_total para montar <vProd>; enviar também aliases por segurança
+          valor_total: vTotal,
+          valor_bruto: vTotal,
           codigo_produto: item.codigo_produto,
           ncm: item.ncm,
           cfop: item.cfop,
           unidade: item.unidade,
+          // ICMS (regime simples → CSOSN; regime normal → CST)
           cst_icms: item.cst_icms,
           csosn: item.csosn,
-          aliquota_icms: item.aliquota_icms,
-          cst_pis: item.cst_pis,
-          aliquota_pis: item.aliquota_pis,
-          cst_cofins: item.cst_cofins,
-          aliquota_cofins: item.aliquota_cofins,
+          aliquota_icms: aliqIcms,
+          base_calculo_icms: vTotal,
+          valor_icms: +((vTotal * aliqIcms) / 100).toFixed(2),
+          // PIS
+          cst_pis: cstPis,
+          aliquota_pis: aliqPis,
+          base_calculo_pis: vTotal,
+          valor_pis: +((vTotal * aliqPis) / 100).toFixed(2),
+          // COFINS
+          cst_cofins: cstCofins,
+          aliquota_cofins: aliqCofins,
+          base_calculo_cofins: vTotal,
+          valor_cofins: +((vTotal * aliqCofins) / 100).toFixed(2),
         };
       });
 
