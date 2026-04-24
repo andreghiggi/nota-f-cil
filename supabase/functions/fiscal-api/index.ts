@@ -194,8 +194,10 @@ function buildNfceClientePayload(rawCliente: any, ambiente: string) {
   }
 
   if (ambiente === 'homologacao') {
-    console.log('⚠️ NFC-e em homologação sem documento do consumidor; aplicando CPF fictício para evitar XML inválido no PHP.');
-    return { cpf: '00000000000', nome: nome || 'Consumidor Final' };
+    // CPF fictício válido para homologação (dígitos verificadores corretos).
+    // Em produção a SEFAZ-RS rejeita 00000000000.
+    console.log('⚠️ NFC-e em homologação sem documento do consumidor; aplicando CPF fictício de teste.');
+    return { cpf: '11144477735', nome: nome || 'NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL' };
   }
 
   return {};
