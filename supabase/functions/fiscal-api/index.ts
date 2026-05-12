@@ -366,7 +366,9 @@ Deno.serve(async (req) => {
           numero: parseInt(nfce.numero, 10).toString(),
           serie: parseInt(nfce.serie, 10).toString(),
           valor_total: nfce.valor_total,
-          cliente: clientePayload,
+          // Só inclui cliente se houver CPF/CNPJ — caso contrário <dest> deve ser omitido
+          // (XSD da NFC-e proíbe xNome sem CPF/CNPJ/idEstrangeiro)
+          ...((clientePayload?.cpf || clientePayload?.cnpj) ? { cliente: clientePayload } : {}),
           itens: itensObj,
         },
       };
