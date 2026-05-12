@@ -141,8 +141,16 @@ async function ensureRegistered(supabase: any, empresaId: string): Promise<{ emp
   // Load certificate
   const certificate = await loadCertificate(supabase, empresaId);
 
+  // Garantir que existe uma api_key_fiscal real (não "pending") ANTES do sync
+  if (!empresa.api_key_fiscal || empresa.api_key_fiscal === 'pending') {
+    const newKey = crypto.randomUUID().replace(/-/g, '');
+    await supabase.from('empresas').update({ api_key_fiscal: newKey }).eq('id', empresaId);
+    empresa.api_key_fiscal = newKey;
+    console.log(`   🔑 Gerada nova api_key_fiscal: ${newKey.substring(0, 8)}...`);
+  }
+
   // Register/sync with PHP fiscal API and get the api_key PHP uses
-  const registerBody = buildRegisterPayload(empresa, empresa.api_key_fiscal || 'pending', certificate);
+  const registerBody = buildRegisterPayload(empresa, empresa.api_key_fiscal, certificate);
 
   try {
     const isPF = empresa.tipo_pessoa === 'PF';
@@ -337,9 +345,23 @@ Deno.serve(async (req) => {
         };
       });
 
+      const tpAmb = empresa.ambiente === 'producao' ? 1 : 2;
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
+        // CSC/ambiente/UF redundantes no topo para o PHP nunca depender só do cadastro
+        tpAmb,
+        siglaUF: empresa.uf,
+        CSC: empresa.csc_token || '',
+        CSCid: empresa.csc_id || '',
+        sped_config: {
+          tpAmb,
+          siglaUF: empresa.uf,
+          CSC: empresa.csc_token || '',
+          CSCid: empresa.csc_id || '',
+          razaosocial: empresa.razao_social,
+          cnpj: (empresa.cnpj || '').replace(/\D/g, ''),
+        },
         nota: {
           numero: parseInt(nfce.numero, 10).toString(),
           serie: parseInt(nfce.serie, 10).toString(),
