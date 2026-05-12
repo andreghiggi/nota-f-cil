@@ -337,9 +337,23 @@ Deno.serve(async (req) => {
         };
       });
 
+      const tpAmb = empresa.ambiente === 'producao' ? 1 : 2;
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
+        // CSC/ambiente/UF redundantes no topo para o PHP nunca depender só do cadastro
+        tpAmb,
+        siglaUF: empresa.uf,
+        CSC: empresa.csc_token || '',
+        CSCid: empresa.csc_id || '',
+        sped_config: {
+          tpAmb,
+          siglaUF: empresa.uf,
+          CSC: empresa.csc_token || '',
+          CSCid: empresa.csc_id || '',
+          razaosocial: empresa.razao_social,
+          cnpj: (empresa.cnpj || '').replace(/\D/g, ''),
+        },
         nota: {
           numero: parseInt(nfce.numero, 10).toString(),
           serie: parseInt(nfce.serie, 10).toString(),
