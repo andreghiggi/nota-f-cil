@@ -571,7 +571,7 @@ export function useLogsFiscais(filters?: { empresaId?: string; tipo?: string; am
     queryFn: async () => {
       let query = supabase
         .from('logs_fiscais')
-        .select('*, empresas(ambiente)')
+        .select(filters?.ambiente && filters.ambiente !== 'todos' ? '*, empresas!inner(ambiente)' : '*')
         .order('created_at', { ascending: false })
         .limit(filters?.limit || 100);
       
