@@ -35,6 +35,8 @@ import { DANFeDialog } from "@/components/nfe/DANFeDialog";
 import { CancelNFeDialog } from "@/components/nfe/CancelNFeDialog";
 import { CartaCorrecaoDialog } from "@/components/nfe/CartaCorrecaoDialog";
 import { toast } from "sonner";
+import { useEmpresas } from "@/hooks/useSupabaseData";
+import { useEnvironment } from "@/contexts/EnvironmentContext";
 
 const statusLabels: Record<string, string> = {
   pendente: "Pendente",
@@ -58,6 +60,7 @@ const statusStyles: Record<string, string> = {
 
 export default function NFe() {
   const [statusFilter, setStatusFilter] = useState("todos");
+  const [empresaFilter, setEmpresaFilter] = useState("todas");
   const [search, setSearch] = useState("");
   const [danfeNfeId, setDanfeNfeId] = useState<string | null>(null);
   const [danfeOpen, setDanfeOpen] = useState(false);
@@ -67,18 +70,28 @@ export default function NFe() {
   const [cceOpen, setCceOpen] = useState(false);
   const [cceNfe, setCceNfe] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
   const queryClient = useQueryClient();
+  const { ambiente } = useEnvironment();
+  const { data: empresas = [] } = useEmpresas();
 
   const { data: nfeList = [], isLoading } = useQuery({
-    queryKey: ["nfe", statusFilter, search],
+    queryKey: ["nfe", statusFilter, empresaFilter, ambiente, search],
     queryFn: async () => {
       let query = supabase
         .from("nfe")
-        .select("*, empresas(razao_social, cnpj)")
+        .select("*, empresas(razao_social, nome_fantasia, cnpj)")
         .order("created_at", { ascending: false })
         .limit(50);
 
       if (statusFilter !== "todos") {
         query = query.eq("status", statusFilter as any);
+      }
+
+      if (empresaFilter !== "todas") {
+        query = query.eq("empresa_id", empresaFilter);
+      }
+
+      if (ambiente !== "todos") {
+        query = query.eq("ambiente", ambiente);
       }
 
       if (search.trim()) {
@@ -162,6 +175,20 @@ export default function NFe() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
+            </div>
+            <div className="w-56">
+              <label className="text-sm font-medium text-foreground mb-1.5 block">Empresa</label>
+              <Select value={empresaFilter} onValueChange={setEmpresaFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas as empresas</SelectItem>
+                  {empresas.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.nome_fantasia || e.razao_social}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="w-48">
               <label className="text-sm font-medium text-foreground mb-1.5 block">Status</label>
