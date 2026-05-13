@@ -569,9 +569,17 @@ export function useLogsFiscais(filters?: { empresaId?: string; tipo?: string; am
   return useQuery({
     queryKey: ['logs-fiscais', filters],
     queryFn: async () => {
+      // If filtering by ambiente, restrict to empresas matching that ambiente first
+      let empresaIds: string[] | null = null;
+      if (filters?.ambiente && filters.ambiente !== 'todos') {
+        const { data: emps } = await supabase.from('empresas').select('id').eq('ambiente', filters.ambiente);
+        empresaIds = (emps || []).map(e => e.id);
+        if (empresaIds.length === 0) return [];
+      }
+
       let query = supabase
         .from('logs_fiscais')
-        .select(filters?.ambiente && filters.ambiente !== 'todos' ? '*, empresas!inner(ambiente)' : '*')
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(filters?.limit || 100);
       
@@ -581,12 +589,11 @@ export function useLogsFiscais(filters?: { empresaId?: string; tipo?: string; am
       if (filters?.tipo) {
         query = query.eq('tipo', filters.tipo);
       }
-      if (filters?.ambiente && filters.ambiente !== 'todos') {
-        query = query.eq('empresas.ambiente', filters.ambiente);
+      if (empresaIds) {
+        query = query.in('empresa_id', empresaIds);
       }
       
       const { data, error } = await query;
-      
       if (error) throw error;
       return data;
     }
