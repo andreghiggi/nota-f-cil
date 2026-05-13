@@ -39,6 +39,8 @@ import { QRCodeDialog } from "@/components/nfce/QRCodeDialog";
 import { CancelDialog } from "@/components/nfce/CancelDialog";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
+import { useEmpresas } from "@/hooks/useSupabaseData";
+import { useEnvironment } from "@/contexts/EnvironmentContext";
 
 const statusLabels: Record<string, string> = {
   pendente: "Pendente",
@@ -66,6 +68,7 @@ type NfceWithEmpresa = Tables<"nfce"> & {
 
 export default function NFCe() {
   const [statusFilter, setStatusFilter] = useState("todos");
+  const [empresaFilter, setEmpresaFilter] = useState("todas");
   const [search, setSearch] = useState("");
   const [danfceNfceId, setDanfceNfceId] = useState<string | null>(null);
   const [danfceOpen, setDanfceOpen] = useState(false);
@@ -75,18 +78,28 @@ export default function NFCe() {
   const [cancelNfce, setCancelNfce] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
   const [cancelLoading, setCancelLoading] = useState(false);
   const queryClient = useQueryClient();
+  const { ambiente } = useEnvironment();
+  const { data: empresas = [] } = useEmpresas();
 
   const { data: nfceList = [], isLoading } = useQuery({
-    queryKey: ["nfce", statusFilter, search],
+    queryKey: ["nfce", statusFilter, empresaFilter, ambiente, search],
     queryFn: async () => {
       let query = supabase
         .from("nfce")
-        .select("*, empresas(razao_social, cnpj)")
+        .select("*, empresas(razao_social, nome_fantasia, cnpj)")
         .order("created_at", { ascending: false })
         .limit(50);
 
       if (statusFilter !== "todos") {
         query = query.eq("status", statusFilter as Tables<"nfce">["status"]);
+      }
+
+      if (empresaFilter !== "todas") {
+        query = query.eq("empresa_id", empresaFilter);
+      }
+
+      if (ambiente !== "todos") {
+        query = query.eq("ambiente", ambiente);
       }
 
       if (search.trim()) {
@@ -167,6 +180,20 @@ export default function NFCe() {
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
+            </div>
+            <div className="w-56">
+              <label className="text-sm font-medium text-foreground mb-1.5 block">Empresa</label>
+              <Select value={empresaFilter} onValueChange={setEmpresaFilter}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Todas as empresas</SelectItem>
+                  {empresas.map((e) => (
+                    <SelectItem key={e.id} value={e.id}>
+                      {e.nome_fantasia || e.razao_social}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="w-48">
               <label className="text-sm font-medium text-foreground mb-1.5 block">Status</label>
