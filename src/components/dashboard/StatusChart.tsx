@@ -1,5 +1,6 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
 import { useNFCeStats } from "@/hooks/useDashboardData";
+import { useEnvironment } from "@/contexts/EnvironmentContext";
 import { Loader2 } from "lucide-react";
 
 const COLORS: Record<string, string> = {
@@ -23,7 +24,8 @@ const LABELS: Record<string, string> = {
 };
 
 export function StatusChart() {
-  const { data: stats, isLoading } = useNFCeStats();
+  const { ambiente } = useEnvironment();
+  const { data: stats, isLoading } = useNFCeStats(ambiente);
 
   const chartData = stats
     ?.filter(s => s.count > 0)
