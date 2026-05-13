@@ -309,7 +309,7 @@ export function useCreateToken() {
 }
 
 // NFC-e hooks
-export function useNFCeList(filters?: { empresaId?: string; status?: string; limit?: number }) {
+export function useNFCeList(filters?: { empresaId?: string; status?: string; ambiente?: 'producao' | 'homologacao' | 'todos'; limit?: number }) {
   return useQuery({
     queryKey: ['nfce-list', filters],
     queryFn: async () => {
@@ -328,6 +328,9 @@ export function useNFCeList(filters?: { empresaId?: string; status?: string; lim
       }
       if (filters?.status) {
         query = query.eq('status', filters.status as NFCe['status']);
+      }
+      if (filters?.ambiente && filters.ambiente !== 'todos') {
+        query = query.eq('ambiente', filters.ambiente);
       }
       
       const { data, error } = await query;
@@ -562,10 +565,18 @@ export function useDeleteCertificado() {
 }
 
 // Logs hooks
-export function useLogsFiscais(filters?: { empresaId?: string; tipo?: string; limit?: number }) {
+export function useLogsFiscais(filters?: { empresaId?: string; tipo?: string; ambiente?: 'producao' | 'homologacao' | 'todos'; limit?: number }) {
   return useQuery({
     queryKey: ['logs-fiscais', filters],
     queryFn: async () => {
+      // If filtering by ambiente, restrict to empresas matching that ambiente first
+      let empresaIds: string[] | null = null;
+      if (filters?.ambiente && filters.ambiente !== 'todos') {
+        const { data: emps } = await supabase.from('empresas').select('id').eq('ambiente', filters.ambiente);
+        empresaIds = (emps || []).map(e => e.id);
+        if (empresaIds.length === 0) return [];
+      }
+
       let query = supabase
         .from('logs_fiscais')
         .select('*')
@@ -578,9 +589,11 @@ export function useLogsFiscais(filters?: { empresaId?: string; tipo?: string; li
       if (filters?.tipo) {
         query = query.eq('tipo', filters.tipo);
       }
+      if (empresaIds) {
+        query = query.in('empresa_id', empresaIds);
+      }
       
       const { data, error } = await query;
-      
       if (error) throw error;
       return data;
     }
@@ -675,18 +688,28 @@ export function useDeleteSerieFiscal() {
 }
 
 // Dashboard stats
-export function useDashboardStats() {
+export function useDashboardStats(ambiente: 'producao' | 'homologacao' | 'todos' = 'todos') {
   return useQuery({
-    queryKey: ['dashboard-stats'],
+    queryKey: ['dashboard-stats', ambiente],
     queryFn: async () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
+      const empresaQ = supabase.from('empresas').select('id', { count: 'exact' }).eq('ativo', true);
+      let nfceQ = supabase.from('nfce').select('id, valor_total, status, ambiente').gte('created_at', today.toISOString());
+      let nfeQ = supabase.from('nfe').select('id, valor_total, status, ambiente').gte('created_at', today.toISOString());
+      const certQ = supabase.from('certificados_digitais').select('status');
+
+      if (ambiente !== 'todos') {
+        nfceQ = nfceQ.eq('ambiente', ambiente);
+        nfeQ = nfeQ.eq('ambiente', ambiente);
+      }
+      const empresaFiltered = ambiente !== 'todos'
+        ? supabase.from('empresas').select('id', { count: 'exact' }).eq('ativo', true).eq('ambiente', ambiente)
+        : empresaQ;
+
       const [empresasRes, nfceHojeRes, nfeHojeRes, certRes] = await Promise.all([
-        supabase.from('empresas').select('id', { count: 'exact' }).eq('ativo', true),
-        supabase.from('nfce').select('id, valor_total, status').gte('created_at', today.toISOString()),
-        supabase.from('nfe').select('id, valor_total, status').gte('created_at', today.toISOString()),
-        supabase.from('certificados_digitais').select('status'),
+        empresaFiltered, nfceQ, nfeQ, certQ
       ]);
       
       const nfceHoje = nfceHojeRes.data || [];
@@ -697,15 +720,23 @@ export function useDashboardStats() {
       const totalNfceHoje = nfceHoje.length;
       const autorizadasNfceHoje = nfceHoje.filter(n => n.status === 'autorizada').length;
       const rejeitadasNfceHoje = nfceHoje.filter(n => n.status === 'rejeitada').length;
+      const valorAutorizadoNfce = nfceHoje
+        .filter(n => n.status === 'autorizada')
+        .reduce((acc, n) => acc + Number(n.valor_total || 0), 0);
       
       const totalNfeHoje = nfeHoje.length;
       const autorizadasNfeHoje = nfeHoje.filter(n => n.status === 'autorizada').length;
       const rejeitadasNfeHoje = nfeHoje.filter(n => n.status === 'rejeitada').length;
+      const valorAutorizadoNfe = nfeHoje
+        .filter(n => n.status === 'autorizada')
+        .reduce((acc, n) => acc + Number(n.valor_total || 0), 0);
       
       const totalDocHoje = totalNfceHoje + totalNfeHoje;
       const autorizadasHoje = autorizadasNfceHoje + autorizadasNfeHoje;
       const rejeitadasHoje = rejeitadasNfceHoje + rejeitadasNfeHoje;
       const taxaAutorizacao = totalDocHoje > 0 ? (autorizadasHoje / totalDocHoje) * 100 : 0;
+      const valorAutorizadoHoje = valorAutorizadoNfce + valorAutorizadoNfe;
+      const ticketMedio = autorizadasHoje > 0 ? valorAutorizadoHoje / autorizadasHoje : 0;
 
       const certsExpirando = certs.filter(c => c.status === 'expirando').length;
       const certsExpirados = certs.filter(c => c.status === 'expirado').length;
@@ -718,9 +749,12 @@ export function useDashboardStats() {
         autorizadasHoje,
         rejeitadasHoje,
         taxaAutorizacao: taxaAutorizacao.toFixed(1),
+        valorAutorizadoHoje,
+        ticketMedio,
         certsExpirando,
         certsExpirados,
       };
-    }
+    },
+    refetchInterval: 30000,
   });
 }

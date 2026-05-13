@@ -9,6 +9,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useNFCeList } from "@/hooks/useSupabaseData";
 import { useNavigate } from "react-router-dom";
+import { useEnvironment } from "@/contexts/EnvironmentContext";
 
 const statusLabels: Record<string, string> = {
   autorizada: "Autorizada",
@@ -21,7 +22,8 @@ const statusLabels: Record<string, string> = {
 };
 
 export function RecentNFCeTable() {
-  const { data: nfceList, isLoading } = useNFCeList({ limit: 10 });
+  const { ambiente } = useEnvironment();
+  const { data: nfceList, isLoading } = useNFCeList({ limit: 10, ambiente });
   const navigate = useNavigate();
 
   const formatCurrency = (value: number) => {

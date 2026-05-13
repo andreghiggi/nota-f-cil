@@ -1,6 +1,7 @@
 import { CheckCircle2, XCircle, AlertCircle, Clock, RefreshCw, Loader2, Inbox } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useLogsFiscais } from "@/hooks/useSupabaseData";
+import { useEnvironment } from "@/contexts/EnvironmentContext";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -19,7 +20,8 @@ const colorMap: Record<string, string> = {
 };
 
 export function ActivityFeed() {
-  const { data: logs, isLoading } = useLogsFiscais({ limit: 10 });
+  const { ambiente } = useEnvironment();
+  const { data: logs, isLoading } = useLogsFiscais({ limit: 10, ambiente });
 
   return (
     <div className="card-elevated p-5">

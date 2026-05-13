@@ -1,18 +1,23 @@
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 
-export function useNFCeStats() {
+export function useNFCeStats(ambiente: 'producao' | 'homologacao' | 'todos' = 'todos') {
   return useQuery({
-    queryKey: ['nfce-stats'],
+    queryKey: ['nfce-stats', ambiente],
     queryFn: async () => {
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const { data, error } = await supabase
+      let query = supabase
         .from('nfce')
-        .select('status')
+        .select('status, ambiente')
         .gte('created_at', thirtyDaysAgo.toISOString());
 
+      if (ambiente !== 'todos') {
+        query = query.eq('ambiente', ambiente);
+      }
+
+      const { data, error } = await query;
       if (error) throw error;
 
       const statusCounts: Record<string, number> = {};
@@ -25,5 +30,6 @@ export function useNFCeStats() {
         count,
       }));
     },
+    refetchInterval: 30000,
   });
 }
