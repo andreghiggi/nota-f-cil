@@ -345,6 +345,53 @@ Deno.serve(async (req) => {
         };
       });
 
+      // ----------------------------------------------------------------
+      // Pagamentos: mapeia payload_entrada.pagamento|pagamentos -> formato sped-nfe
+      // Sem isso, sped-nfe defaulta para tPag=01 (Dinheiro) — bug crítico.
+      // ----------------------------------------------------------------
+      const rawPag = nfce.payload_entrada?.pagamentos
+        ?? nfce.payload_entrada?.pagamento
+        ?? nfce.payload_entrada?.pag;
+      const pagList: any[] = Array.isArray(rawPag) ? rawPag : (rawPag ? [rawPag] : []);
+
+      const pagamentosObj: Record<string, any> = {};
+      if (pagList.length === 0) {
+        // fallback: dinheiro pelo valor total (mantém comportamento anterior)
+        pagamentosObj['1'] = {
+          indPag: 0,
+          tPag: '01',
+          vPag: Number(nfce.valor_total).toFixed(2),
+        };
+      } else {
+        pagList.forEach((p: any, idx: number) => {
+          const tPagRaw = p?.tPag ?? p?.tpag ?? p?.forma ?? '01';
+          const tPag = String(tPagRaw).padStart(2, '0');
+          const vPag = Number(p?.vPag ?? p?.vpag ?? p?.valor ?? 0).toFixed(2);
+          const indPagRaw = p?.indPag ?? p?.indpag;
+          const det: any = {
+            indPag: indPagRaw !== undefined ? Number(indPagRaw) : (['03','04','10','11','12','13','15','16','17','18'].includes(tPag) ? 0 : 0),
+            tPag,
+            vPag,
+          };
+          // Cartão / TEF / PIX integrado
+          const card = p?.card ?? p?.cartao;
+          if (card && (['03','04','10','11','12','13','15','16','17','18'].includes(tPag))) {
+            const cnpjCard = String(card?.CNPJ ?? card?.cnpj ?? '').replace(/\D/g, '');
+            det.card = {
+              tpIntegra: Number(card?.tpIntegra ?? card?.tpintegra ?? p?.tpIntegra ?? 1),
+              ...(cnpjCard ? { CNPJ: cnpjCard } : {}),
+              ...(card?.tBand ?? card?.tband ? { tBand: String(card?.tBand ?? card?.tband).padStart(2, '0') } : {}),
+              ...(card?.cAut ?? card?.caut ? { cAut: String(card?.cAut ?? card?.caut) } : {}),
+              ...(card?.NSU ?? card?.nsu ? { NSU: String(card?.NSU ?? card?.nsu) } : {}),
+            };
+          }
+          pagamentosObj[String(idx + 1)] = det;
+        });
+      }
+
+      // Troco (vTroco) opcional no topo do bloco <pag>
+      const vTroco = Number(nfce.payload_entrada?.vTroco ?? nfce.payload_entrada?.troco ?? 0);
+
       const tpAmb = empresa.ambiente === 'producao' ? 1 : 2;
       const payload: any = {
         api_key: empresa.api_key_fiscal,
@@ -370,6 +417,8 @@ Deno.serve(async (req) => {
           // (XSD da NFC-e proíbe xNome sem CPF/CNPJ/idEstrangeiro)
           ...((clientePayload?.cpf || clientePayload?.cnpj) ? { cliente: clientePayload } : {}),
           itens: itensObj,
+          pagamentos: pagamentosObj,
+          ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2) } : {}),
         },
       };
 
