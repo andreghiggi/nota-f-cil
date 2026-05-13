@@ -374,12 +374,18 @@ Deno.serve(async (req) => {
             vPag,
           };
           // Cartão / TEF / PIX integrado
+          // Regras SEFAZ (NT 2015/002):
+          //  tpIntegra=1 (TEF/integrado)  -> CNPJ da credenciadora OBRIGATÓRIO
+          //  tpIntegra=2 (POS avulso)     -> CNPJ NÃO PODE ser enviado
           const card = p?.card ?? p?.cartao;
           if (card && (['03','04','10','11','12','13','15','16','17','18'].includes(tPag))) {
+            const tpIntegraRaw = Number(card?.tpIntegra ?? card?.tpintegra ?? p?.tpIntegra ?? 1);
+            const tpIntegra = tpIntegraRaw === 2 ? 2 : 1; // só aceita 1 ou 2
             const cnpjCard = String(card?.CNPJ ?? card?.cnpj ?? '').replace(/\D/g, '');
             det.card = {
-              tpIntegra: Number(card?.tpIntegra ?? card?.tpintegra ?? p?.tpIntegra ?? 1),
-              ...(cnpjCard ? { CNPJ: cnpjCard } : {}),
+              tpIntegra,
+              // CNPJ apenas quando integrado (tpIntegra=1)
+              ...(tpIntegra === 1 && cnpjCard ? { CNPJ: cnpjCard } : {}),
               ...(card?.tBand ?? card?.tband ? { tBand: String(card?.tBand ?? card?.tband).padStart(2, '0') } : {}),
               ...(card?.cAut ?? card?.caut ? { cAut: String(card?.cAut ?? card?.caut) } : {}),
               ...(card?.NSU ?? card?.nsu ? { NSU: String(card?.NSU ?? card?.nsu) } : {}),
