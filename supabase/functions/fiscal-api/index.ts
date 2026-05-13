@@ -417,6 +417,8 @@ Deno.serve(async (req) => {
           // (XSD da NFC-e proíbe xNome sem CPF/CNPJ/idEstrangeiro)
           ...((clientePayload?.cpf || clientePayload?.cnpj) ? { cliente: clientePayload } : {}),
           itens: itensObj,
+          pagamentos: pagamentosObj,
+          ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2) } : {}),
         },
       };
 
