@@ -1237,3 +1237,228 @@ async function handleCCe(supabase: any, nfeId: string, correcao: string, sequenc
     { status: response.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
   );
 }
+
+// ============================================================================
+// MDF-e (modelo 58) handlers — delega ao PHP api2 (sped-mdfe)
+// ============================================================================
+async function handleMdfeEmit(supabase: any, mdfeId: string) {
+  if (!mdfeId) {
+    return new Response(JSON.stringify({ error: 'mdfe_id é obrigatório' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const { data: mdfe } = await supabase
+    .from('mdfe')
+    .select('*, mdfe_documentos(*)')
+    .eq('id', mdfeId).single();
+
+  if (!mdfe) {
+    return new Response(JSON.stringify({ error: 'MDF-e não encontrado' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const { empresa, certificate, error: regError } = await ensureRegistered(supabase, mdfe.empresa_id);
+  if (regError || !empresa?.api_key_fiscal) {
+    return new Response(JSON.stringify({ error: 'Empresa não registrada na API fiscal' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const cnpjEmit = (empresa.cnpj || '').replace(/\D/g, '');
+  const nMDF = String(parseInt(mdfe.numero, 10)); // strip zeros
+  const serie = String(parseInt(mdfe.serie, 10));
+
+  const phpPayload: any = {
+    api_key: empresa.api_key_fiscal,
+    cnpj: cnpjEmit,
+    mdfe: {
+      numero: nMDF,
+      serie,
+      modal: 1,
+      uf_ini: mdfe.uf_ini,
+      uf_fim: mdfe.uf_fim,
+      uf_percurso: mdfe.uf_percurso || [],
+      dh_ini_viagem: mdfe.payload_entrada?.data_inicio_viagem || new Date().toISOString().replace(/\.\d{3}Z$/, '-03:00'),
+      veiculo: {
+        placa: mdfe.placa,
+        uf: mdfe.uf_placa || mdfe.uf_ini,
+        tara: mdfe.tara,
+        cap_kg: mdfe.cap_kg || 0,
+        cap_m3: mdfe.cap_m3 || 0,
+        tipo_rodado: mdfe.payload_entrada?.veiculo?.tipo_rodado || '06',
+        tipo_carroceria: mdfe.payload_entrada?.veiculo?.tipo_carroceria || '02',
+        renavam: mdfe.payload_entrada?.veiculo?.renavam || null,
+        rntrc: mdfe.rntrc || mdfe.payload_entrada?.veiculo?.rntrc || null,
+      },
+      condutor: { nome: mdfe.condutor_nome, cpf: mdfe.condutor_cpf },
+      documentos: (mdfe.mdfe_documentos || []).map((d: any) => ({
+        tipo: d.tipo, chave: d.chave,
+        c_mun_descarga: d.c_mun_descarga, x_mun_descarga: d.x_mun_descarga,
+      })),
+      totais: {
+        valor_carga: Number(mdfe.valor_carga),
+        peso_bruto: Number(mdfe.peso_bruto),
+        unidade_peso: mdfe.unidade_peso === 2 ? '02' : '01',
+      },
+      produto_predominante: mdfe.produto_predominante || null,
+      cep_carregamento: mdfe.cep_carregamento || null,
+      cep_descarregamento: mdfe.cep_descarregamento || null,
+      info_adicional: mdfe.info_adicional || null,
+    },
+  };
+  if (certificate) phpPayload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
+
+  console.log(`📡 Emitting MDF-e ${mdfe.numero} via fiscal API...`);
+
+  const url = `${FISCAL_API_BASE_URL}/mdfe/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${empresa.api_key_fiscal}` },
+    body: JSON.stringify(phpPayload),
+  });
+  const text = await resp.text();
+  console.log(`📡 MDF-e emit response (${resp.status}):`, text.substring(0, 500));
+
+  let data: any;
+  try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+  if (!resp.ok || data.erro) {
+    await supabase.from('mdfe').update({
+      status: 'rejeitada',
+      erro_processamento: data.erro || 'Erro na API fiscal',
+      motivo_retorno: JSON.stringify(data).substring(0, 1000),
+    }).eq('id', mdfeId);
+    return new Response(JSON.stringify({ error: 'Erro na emissão MDF-e', details: data }),
+      { status: resp.status || 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const update: any = {
+    status: data.status === 'autorizada' ? 'autorizada' : 'processando',
+    chave_acesso: data.chave || null,
+    protocolo: data.protocolo || null,
+    xml_retorno: data.xml || null,
+    motivo_retorno: data.motivo || data.xMotivo || null,
+    codigo_retorno: data.cStat || null,
+    data_autorizacao: data.dhRecbto || (data.status === 'autorizada' ? new Date().toISOString() : null),
+    processado_em: new Date().toISOString(),
+  };
+  await supabase.from('mdfe').update(update).eq('id', mdfeId);
+
+  await supabase.rpc('registrar_log', {
+    p_empresa_id: mdfe.empresa_id, p_nfce_id: mdfeId, p_token_api_id: mdfe.token_api_id,
+    p_tipo: 'sucesso', p_categoria: 'emissao',
+    p_mensagem: `MDF-e ${mdfe.numero} ${update.status} via API fiscal`,
+    p_detalhes: { tipo: 'mdfe', protocolo: update.protocolo, chave: update.chave_acesso },
+  });
+
+  return new Response(JSON.stringify({ success: true, data: { ...update, id: mdfeId, numero: mdfe.numero, serie: mdfe.serie } }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
+async function handleMdfeEncerrar(supabase: any, mdfeId: string, cMunDescarga: string, dtEnc: string) {
+  const { data: mdfe } = await supabase.from('mdfe').select('*').eq('id', mdfeId).single();
+  if (!mdfe) {
+    return new Response(JSON.stringify({ error: 'MDF-e não encontrado' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const { empresa, certificate } = await ensureRegistered(supabase, mdfe.empresa_id);
+  if (!empresa?.api_key_fiscal) {
+    return new Response(JSON.stringify({ error: 'Empresa não registrada' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const payload: any = {
+    api_key: empresa.api_key_fiscal,
+    cnpj: (empresa.cnpj || '').replace(/\D/g, ''),
+    chave: mdfe.chave_acesso, protocolo: mdfe.protocolo,
+    uf_descarga: mdfe.uf_fim,
+    c_mun_descarga: cMunDescarga,
+    data_encerramento: dtEnc,
+  };
+  if (certificate) payload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
+
+  const resp = await fetch(`${FISCAL_API_BASE_URL}/mdfe/encerrar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  const text = await resp.text();
+  let data: any; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  console.log(`📡 MDF-e encerrar (${resp.status}):`, text.substring(0, 400));
+
+  if (!resp.ok || data.erro) {
+    return new Response(JSON.stringify({ error: 'Erro ao encerrar', details: data }),
+      { status: resp.status || 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  await supabase.from('mdfe').update({
+    status: 'encerrada' as any, // status enum genérico — usa string livre se enum não tiver
+    data_encerramento: new Date().toISOString(),
+    protocolo_encerramento: data.protocolo || null,
+  }).eq('id', mdfeId).then(async (r: any) => {
+    // Se enum 'encerrada' não existir, faz fallback
+    if (r.error) {
+      await supabase.from('mdfe').update({
+        data_encerramento: new Date().toISOString(),
+        protocolo_encerramento: data.protocolo || null,
+      }).eq('id', mdfeId);
+    }
+  });
+
+  return new Response(JSON.stringify({ success: true, data: { id: mdfeId, ...data } }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
+async function handleMdfeCancelar(supabase: any, mdfeId: string) {
+  const { data: mdfe } = await supabase.from('mdfe').select('*, mdfe_eventos(*)').eq('id', mdfeId).single();
+  if (!mdfe) {
+    return new Response(JSON.stringify({ error: 'MDF-e não encontrado' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const { empresa, certificate } = await ensureRegistered(supabase, mdfe.empresa_id);
+  if (!empresa?.api_key_fiscal) {
+    return new Response(JSON.stringify({ error: 'Empresa não registrada' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const cancelEvent = (mdfe.mdfe_eventos || [])
+    .filter((e: any) => e.tipo_evento === 'cancelamento')
+    .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+  const justificativa = cancelEvent?.justificativa || 'Cancelamento solicitado pelo emitente';
+
+  const payload: any = {
+    api_key: empresa.api_key_fiscal,
+    cnpj: (empresa.cnpj || '').replace(/\D/g, ''),
+    chave: mdfe.chave_acesso, protocolo: mdfe.protocolo,
+    justificativa,
+  };
+  if (certificate) payload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
+
+  const resp = await fetch(`${FISCAL_API_BASE_URL}/mdfe/cancelar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+  const text = await resp.text();
+  let data: any; try { data = JSON.parse(text); } catch { data = { raw: text }; }
+  console.log(`📡 MDF-e cancelar (${resp.status}):`, text.substring(0, 400));
+
+  const errStr = JSON.stringify(data).toLowerCase();
+  const alreadyCancelled = errStr.includes('573') || errStr.includes('duplicidade de evento');
+
+  if ((resp.ok && (data.success || data.sucesso || data.status === 'cancelada')) || alreadyCancelled) {
+    await supabase.from('mdfe').update({
+      status: 'cancelada',
+      data_cancelamento: new Date().toISOString(),
+      protocolo_cancelamento: data.protocolo || null,
+    }).eq('id', mdfeId);
+    if (cancelEvent) {
+      await supabase.from('mdfe_eventos').update({
+        protocolo: data.protocolo || null,
+        codigo_retorno: data.cStat || '135',
+        motivo_retorno: data.xMotivo || 'Evento registrado e vinculado a MDF-e',
+        xml_retorno: data.xml_retorno || null,
+      }).eq('id', cancelEvent.id);
+    }
+    return new Response(JSON.stringify({ success: true, data: { id: mdfeId, status: 'cancelada', ...data } }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  return new Response(JSON.stringify({ error: 'Erro ao cancelar MDF-e na SEFAZ', details: data }),
+    { status: resp.status || 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
