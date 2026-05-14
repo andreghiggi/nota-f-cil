@@ -1303,6 +1303,8 @@ async function handleMdfeEmit(supabase: any, mdfeId: string) {
       cep_carregamento: mdfe.cep_carregamento || null,
       cep_descarregamento: mdfe.cep_descarregamento || null,
       info_adicional: mdfe.info_adicional || null,
+      tp_emit: mdfe.tp_emit || mdfe.payload_entrada?.tp_emit || 1,
+      seguros: mdfe.seguros || mdfe.payload_entrada?.seguros || [],
     },
   };
   if (certificate) phpPayload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
