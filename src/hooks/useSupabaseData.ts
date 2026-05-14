@@ -604,7 +604,7 @@ export function useLogsFiscais(filters?: { empresaId?: string; tipo?: string; am
 export interface SerieFiscal {
   id: string;
   empresa_id: string;
-  tipo: 'nfe' | 'nfce';
+  tipo: 'nfe' | 'nfce' | 'mdfe';
   serie: string;
   numero_atual: number;
   ativo: boolean;
@@ -637,7 +637,7 @@ export function useSeriesFiscais(empresaId?: string) {
 export function useCreateSerieFiscal() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (serie: { empresa_id: string; tipo: 'nfe' | 'nfce'; serie: string; numero_atual?: number }) => {
+    mutationFn: async (serie: { empresa_id: string; tipo: 'nfe' | 'nfce' | 'mdfe'; serie: string; numero_atual?: number }) => {
       const { data, error } = await supabase
         .from('series_fiscais')
         .insert(serie)

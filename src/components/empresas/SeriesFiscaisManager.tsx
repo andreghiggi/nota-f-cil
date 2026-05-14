@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { 
   Plus, Trash2, Loader2, Edit2, Check, X, 
-  FileText, ShoppingCart 
+  FileText, ShoppingCart, Truck 
 } from "lucide-react";
 import {
   AlertDialog,
@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 
 interface SeriesFiscaisManagerProps {
   empresaId: string;
-  tipo: 'nfe' | 'nfce';
+  tipo: 'nfe' | 'nfce' | 'mdfe';
 }
 
 export function SeriesFiscaisManager({ empresaId, tipo }: SeriesFiscaisManagerProps) {
@@ -46,8 +46,8 @@ export function SeriesFiscaisManager({ empresaId, tipo }: SeriesFiscaisManagerPr
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const series = allSeries?.filter(s => s.tipo === tipo) || [];
-  const label = tipo === 'nfe' ? 'NF-e' : 'NFC-e';
-  const Icon = tipo === 'nfe' ? FileText : ShoppingCart;
+  const label = tipo === 'nfe' ? 'NF-e' : tipo === 'nfce' ? 'NFC-e' : 'MDF-e';
+  const Icon = tipo === 'nfe' ? FileText : tipo === 'nfce' ? ShoppingCart : Truck;
 
   const handleAdd = async () => {
     const serieFormatted = newSerie.padStart(3, '0');

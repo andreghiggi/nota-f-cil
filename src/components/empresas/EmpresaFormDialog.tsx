@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, FileText, Settings, Search, MapPin, User, Building } from "lucide-react";
+import { Loader2, Building2, FileText, Settings, Search, MapPin, User, Building, Truck } from "lucide-react";
 import { SeriesFiscaisManager } from "./SeriesFiscaisManager";
 import { toast } from "sonner";
 import { useCreateEmpresa, useUpdateEmpresa, Empresa } from "@/hooks/useSupabaseData";
@@ -149,6 +149,8 @@ const empresaSchema = z.object({
   ambiente: z.enum(["homologacao", "producao"]),
   serie_nfce: z.string().min(1).max(3).default("001"),
   serie_nfe: z.string().min(1).max(3).default("001"),
+  serie_mdfe: z.string().min(1).max(3).default("1"),
+  rntrc: z.string().max(8).optional().nullable(),
   
   // CSC (Código de Segurança do Contribuinte)
   csc_id: z.string().max(10).optional().nullable(),
@@ -235,6 +237,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       ambiente: "homologacao",
       serie_nfce: "001",
       serie_nfe: "001",
+      serie_mdfe: "1",
+      rntrc: "",
       csc_id: "",
       csc_token: "",
       ativo: true,
@@ -266,6 +270,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         ambiente: empresa.ambiente,
         serie_nfce: empresa.serie_nfce,
         serie_nfe: (empresa as any).serie_nfe || "001",
+        serie_mdfe: (empresa as any).serie_mdfe || "1",
+        rntrc: (empresa as any).rntrc || "",
         csc_id: empresa.csc_id || "",
         csc_token: empresa.csc_token || "",
         ativo: empresa.ativo,
@@ -292,6 +298,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         ambiente: "homologacao",
         serie_nfce: "001",
         serie_nfe: "001",
+        serie_mdfe: "1",
+        rntrc: "",
         csc_id: "",
         csc_token: "",
         ativo: true,
@@ -411,6 +419,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         ambiente: data.ambiente,
         serie_nfce: data.serie_nfce,
         serie_nfe: data.serie_nfe,
+        serie_mdfe: data.serie_mdfe,
+        rntrc: data.rntrc?.replace(/\D/g, '') || null,
         csc_id: data.csc_id || null,
         csc_token: data.csc_token || null,
         ativo: data.ativo,
@@ -452,7 +462,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
              <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-5">
+              <TabsList className="grid w-full grid-cols-6">
                 <TabsTrigger value="dados" className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Dados
@@ -472,6 +482,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                 <TabsTrigger value="nfce" className="flex items-center gap-2">
                   <Settings className="h-4 w-4" />
                   NFC-e
+                </TabsTrigger>
+                <TabsTrigger value="mdfe" className="flex items-center gap-2">
+                  <Truck className="h-4 w-4" />
+                  MDF-e
                 </TabsTrigger>
               </TabsList>
 
@@ -993,6 +1007,67 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                     </div>
                   </>
                 )}
+              </TabsContent>
+
+              <TabsContent value="mdfe" className="space-y-4 mt-4">
+                {isEditing && empresa ? (
+                  <SeriesFiscaisManager empresaId={empresa.id} tipo="mdfe" />
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name="serie_mdfe"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Série MDF-e Inicial *</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="1"
+                            maxLength={3}
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                          />
+                        </FormControl>
+                        <FormDescription>Série inicial para emissão de MDF-e (Manifesto Eletrônico). Após o cadastro você poderá gerenciar múltiplas séries.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="rntrc"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>RNTRC</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="00000000"
+                          maxLength={8}
+                          {...field}
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Registro Nacional de Transportadores Rodoviários de Carga (ANTT). Obrigatório para emissão de MDF-e.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
+                  <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
+                    <Truck className="h-4 w-4" />
+                    Configurações MDF-e (modelo 58)
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    O MDF-e (Manifesto Eletrônico de Documentos Fiscais) usa o mesmo certificado digital A1 e ambiente
+                    configurados na aba Fiscal. Atualmente apenas o modal rodoviário (modal=1) está suportado.
+                    Lembre-se de habilitar a permissão <code className="text-xs bg-muted px-1 py-0.5 rounded">emitir_mdfe</code> nos tokens de API que devem emitir MDF-e.
+                  </p>
+                </div>
               </TabsContent>
             </Tabs>
 
