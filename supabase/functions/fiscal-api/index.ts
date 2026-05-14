@@ -369,22 +369,26 @@ Deno.serve(async (req) => {
         ?? nfce.payload_entrada?.pag;
       const pagList: any[] = Array.isArray(rawPag) ? rawPag : (rawPag ? [rawPag] : []);
 
+      // Monta como ARRAY sequencial (sped-nfe usa foreach) E como objeto indexado por chave
+      // string — alguns wrappers PHP exigem um, outros o outro. Enviamos os dois formatos.
+      const pagArray: any[] = [];
       const pagamentosObj: Record<string, any> = {};
       if (pagList.length === 0) {
-        // fallback: dinheiro pelo valor total (mantém comportamento anterior)
-        pagamentosObj['1'] = {
+        const fallback = {
           indPag: 0,
           tPag: '01',
           vPag: Number(nfce.valor_total).toFixed(2),
         };
+        pagArray.push(fallback);
+        pagamentosObj['1'] = fallback;
       } else {
         pagList.forEach((p: any, idx: number) => {
-          const tPagRaw = p?.tPag ?? p?.tpag ?? p?.forma ?? '01';
+          const tPagRaw = p?.tPag ?? p?.tpag ?? p?.forma ?? p?.forma_pagamento ?? '01';
           const tPag = String(tPagRaw).padStart(2, '0');
-          const vPag = Number(p?.vPag ?? p?.vpag ?? p?.valor ?? 0).toFixed(2);
+          const vPag = Number(p?.vPag ?? p?.vpag ?? p?.valor ?? p?.valor_pagamento ?? 0).toFixed(2);
           const indPagRaw = p?.indPag ?? p?.indpag;
           const det: any = {
-            indPag: indPagRaw !== undefined ? Number(indPagRaw) : (['03','04','10','11','12','13','15','16','17','18'].includes(tPag) ? 0 : 0),
+            indPag: indPagRaw !== undefined ? Number(indPagRaw) : 0,
             tPag,
             vPag,
           };
@@ -394,18 +398,21 @@ Deno.serve(async (req) => {
           //  tpIntegra=2 (POS avulso)     -> CNPJ NÃO PODE ser enviado
           const card = p?.card ?? p?.cartao;
           if (card && (['03','04','10','11','12','13','15','16','17','18'].includes(tPag))) {
-            const tpIntegraRaw = Number(card?.tpIntegra ?? card?.tpintegra ?? p?.tpIntegra ?? 1);
-            const tpIntegra = tpIntegraRaw === 2 ? 2 : 1; // só aceita 1 ou 2
-            const cnpjCard = String(card?.CNPJ ?? card?.cnpj ?? '').replace(/\D/g, '');
+            const tpIntegraRaw = Number(card?.tpIntegra ?? card?.tpintegra ?? p?.tpIntegra ?? p?.tipo_integracao ?? 1);
+            const tpIntegra = tpIntegraRaw === 2 ? 2 : 1;
+            const cnpjCard = String(card?.CNPJ ?? card?.cnpj ?? p?.cnpj_credenciadora ?? '').replace(/\D/g, '');
+            const tBand = card?.tBand ?? card?.tband ?? p?.bandeira_operadora;
+            const cAut = card?.cAut ?? card?.caut ?? p?.numero_autorizacao;
+            const nsu = card?.NSU ?? card?.nsu ?? p?.nsu;
             det.card = {
               tpIntegra,
-              // CNPJ apenas quando integrado (tpIntegra=1)
               ...(tpIntegra === 1 && cnpjCard ? { CNPJ: cnpjCard } : {}),
-              ...(card?.tBand ?? card?.tband ? { tBand: String(card?.tBand ?? card?.tband).padStart(2, '0') } : {}),
-              ...(card?.cAut ?? card?.caut ? { cAut: String(card?.cAut ?? card?.caut) } : {}),
-              ...(card?.NSU ?? card?.nsu ? { NSU: String(card?.NSU ?? card?.nsu) } : {}),
+              ...(tBand ? { tBand: String(tBand).padStart(2, '0') } : {}),
+              ...(cAut ? { cAut: String(cAut) } : {}),
+              ...(nsu ? { NSU: String(nsu) } : {}),
             };
           }
+          pagArray.push(det);
           pagamentosObj[String(idx + 1)] = det;
         });
       }
@@ -414,10 +421,13 @@ Deno.serve(async (req) => {
       const vTroco = Number(nfce.payload_entrada?.vTroco ?? nfce.payload_entrada?.troco ?? 0);
 
       const tpAmb = empresa.ambiente === 'producao' ? 1 : 2;
+      const pagBlock = {
+        ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2) } : {}),
+        detPag: pagArray,
+      };
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
-        // CSC/ambiente/UF redundantes no topo para o PHP nunca depender só do cadastro
         tpAmb,
         siglaUF: empresa.uf,
         CSC: empresa.csc_token || '',
@@ -430,20 +440,23 @@ Deno.serve(async (req) => {
           razaosocial: empresa.razao_social,
           cnpj: (empresa.cnpj || '').replace(/\D/g, ''),
         },
+        // Pagamento também no top-level (alguns wrappers leem fora de "nota")
+        pag: pagBlock,
+        pagamentos: pagArray,
         nota: {
           numero: parseInt(nfce.numero, 10).toString(),
           serie: parseInt(nfce.serie, 10).toString(),
           valor_total: nfce.valor_total,
-          // Só inclui cliente se houver CPF/CNPJ — caso contrário <dest> deve ser omitido
-          // (XSD da NFC-e proíbe xNome sem CPF/CNPJ/idEstrangeiro)
           ...((clientePayload?.cpf || clientePayload?.cnpj) ? { cliente: clientePayload } : {}),
           itens: itensObj,
-          // Pagamentos: enviar todos os aliases conhecidos (PHP/sped-nfe variantes)
-          // Sem isso, o backend defaulta para tPag=01 (Dinheiro).
-          pagamentos: pagamentosObj,
-          pagamento: pagamentosObj,
-          pag: pagamentosObj,
-          formas_pagamento: pagamentosObj,
+          // Pagamento em todos os formatos/aliases conhecidos do PHP/sped-nfe
+          pag: pagBlock,
+          pagamentos: pagArray,
+          pagamento: pagArray,
+          formas_pagamento: pagArray,
+          detPag: pagArray,
+          // Manter também versão objeto-indexada (algumas versões do PHP exigem)
+          pagamentos_obj: pagamentosObj,
           ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2), troco: vTroco.toFixed(2) } : {}),
         },
       };
@@ -457,6 +470,7 @@ Deno.serve(async (req) => {
       }
 
       console.log(`📡 Emitting NFC-e ${nfce.numero} via fiscal API...`);
+      console.log(`   pag payload: ${JSON.stringify(pagBlock)}`);
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfce/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
       const response = await fetch(emitUrl, {
