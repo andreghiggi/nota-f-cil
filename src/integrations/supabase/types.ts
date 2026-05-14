@@ -452,11 +452,13 @@ export type Database = {
           protocolo_encerramento: string | null
           qtd_documentos: number | null
           rntrc: string | null
+          seguros: Json
           serie: string
           status: Database["public"]["Enums"]["nfce_status"]
           tara: number | null
           tentativas: number
           token_api_id: string | null
+          tp_emit: number
           uf_fim: string
           uf_ini: string
           uf_percurso: string[] | null
@@ -500,11 +502,13 @@ export type Database = {
           protocolo_encerramento?: string | null
           qtd_documentos?: number | null
           rntrc?: string | null
+          seguros?: Json
           serie?: string
           status?: Database["public"]["Enums"]["nfce_status"]
           tara?: number | null
           tentativas?: number
           token_api_id?: string | null
+          tp_emit?: number
           uf_fim: string
           uf_ini: string
           uf_percurso?: string[] | null
@@ -548,11 +552,13 @@ export type Database = {
           protocolo_encerramento?: string | null
           qtd_documentos?: number | null
           rntrc?: string | null
+          seguros?: Json
           serie?: string
           status?: Database["public"]["Enums"]["nfce_status"]
           tara?: number | null
           tentativas?: number
           token_api_id?: string | null
+          tp_emit?: number
           uf_fim?: string
           uf_ini?: string
           uf_percurso?: string[] | null
