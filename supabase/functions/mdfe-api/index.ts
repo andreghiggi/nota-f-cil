@@ -282,7 +282,13 @@ Deno.serve(async (req) => {
       const { data: fr, error: fe } = await supabase.functions.invoke('fiscal-api', {
         body: { action: 'encerrar_mdfe', mdfe_id: mdfe.id, c_mun_descarga: cMunDescarga, data_encerramento: dtEnc }
       });
-      if (fe || !fr?.success) return err('Erro ao encerrar na SEFAZ: ' + (fr?.error || fe?.message || 'desconhecido'), 'SEFAZ_ERROR', 502);
+      if (fe || !fr?.success) {
+        const detalhe = await extractInvokeError(fe, fr);
+        await supabase.from('mdfe_eventos').update({
+          codigo_retorno: 'ERRO', motivo_retorno: detalhe.substring(0, 500),
+        }).eq('id', evento?.id);
+        return err('Erro ao encerrar na SEFAZ: ' + detalhe, 'SEFAZ_ERROR', 502);
+      }
 
       return new Response(JSON.stringify({ success: true, data: { id: mdfe.id, evento_id: evento?.id, status: 'encerrado', ...fr.data } }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
