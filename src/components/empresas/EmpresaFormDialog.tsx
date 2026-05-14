@@ -419,6 +419,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         ambiente: data.ambiente,
         serie_nfce: data.serie_nfce,
         serie_nfe: data.serie_nfe,
+        serie_mdfe: data.serie_mdfe,
+        rntrc: data.rntrc?.replace(/\D/g, '') || null,
         csc_id: data.csc_id || null,
         csc_token: data.csc_token || null,
         ativo: data.ativo,
