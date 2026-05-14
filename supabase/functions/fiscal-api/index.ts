@@ -452,10 +452,10 @@ Deno.serve(async (req) => {
         NSU: primaryPayment.NSU,
         nsu: primaryPayment.nsu,
         pag: pagBlock,
-        pagamentos: pagArray,
+        pagamentos: pagamentosObj,
         pagamento: primaryPayment,
-        formas_pagamento: pagArray,
-        detPag: pagArray,
+        formas_pagamento: pagamentosObj,
+        detPag: pagamentosObj,
         nota: {
           numero: parseInt(nfce.numero, 10).toString(),
           serie: parseInt(nfce.serie, 10).toString(),
@@ -480,10 +480,10 @@ Deno.serve(async (req) => {
           itens: itensObj,
           // Pagamento em todos os formatos/aliases conhecidos do PHP/sped-nfe
           pag: pagBlock,
-          pagamentos: pagArray,
-          pagamento: pagArray,
-          formas_pagamento: pagArray,
-          detPag: pagArray,
+          pagamentos: pagamentosObj,
+          pagamento: primaryPayment,
+          formas_pagamento: pagamentosObj,
+          detPag: pagamentosObj,
           // Manter também versão objeto-indexada (algumas versões do PHP exigem)
           pagamentos_obj: pagamentosObj,
           ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2), troco: vTroco.toFixed(2) } : {}),
