@@ -1,0 +1,2 @@
+ALTER TABLE public.series_fiscais DROP CONSTRAINT series_fiscais_tipo_check;
+ALTER TABLE public.series_fiscais ADD CONSTRAINT series_fiscais_tipo_check CHECK (tipo = ANY (ARRAY['nfe'::text, 'nfce'::text, 'mdfe'::text]));
