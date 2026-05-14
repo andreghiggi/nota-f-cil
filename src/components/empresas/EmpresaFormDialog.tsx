@@ -1010,6 +1010,17 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
               </TabsContent>
 
               <TabsContent value="mdfe" className="space-y-4 mt-4">
+                <div className={`flex items-center justify-between p-3 rounded-lg border ${form.watch("ambiente") === "producao" ? "bg-success/10 border-success/30" : "bg-amber-500/10 border-amber-500/30"}`}>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Truck className="h-4 w-4" />
+                    <span className="font-medium text-foreground">Ambiente atual:</span>
+                    <span className={`font-semibold ${form.watch("ambiente") === "producao" ? "text-success" : "text-amber-600 dark:text-amber-400"}`}>
+                      {form.watch("ambiente") === "producao" ? "Produção" : "Homologação (Testes)"}
+                    </span>
+                  </div>
+                  <span className="text-xs text-muted-foreground">Altere na aba Fiscal</span>
+                </div>
+
                 {isEditing && empresa ? (
                   <SeriesFiscaisManager empresaId={empresa.id} tipo="mdfe" />
                 ) : (
