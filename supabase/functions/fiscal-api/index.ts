@@ -1316,23 +1316,53 @@ async function handleMdfeEmit(supabase: any, mdfeId: string) {
     body: JSON.stringify(phpPayload),
   });
   const text = await resp.text();
-  console.log(`📡 MDF-e emit response (${resp.status}):`, text.substring(0, 500));
+  console.log(`📡 MDF-e emit response (${resp.status}):`, text.substring(0, 800));
 
+  // Detecta HTML / fatal error do PHP (api2). PHP fatal retorna HTTP 200 com HTML.
+  const looksLikeHtml = /<br\s*\/?>|<b>|Fatal error|Stack trace|<html/i.test(text);
   let data: any;
-  try { data = JSON.parse(text); } catch { data = { raw: text }; }
-
-  if (!resp.ok || data.erro) {
-    await supabase.from('mdfe').update({
-      status: 'rejeitada',
-      erro_processamento: data.erro || 'Erro na API fiscal',
-      motivo_retorno: JSON.stringify(data).substring(0, 1000),
-    }).eq('id', mdfeId);
-    return new Response(JSON.stringify({ error: 'Erro na emissão MDF-e', details: data }),
-      { status: resp.status || 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  if (looksLikeHtml) {
+    const fatalMatch = text.match(/Uncaught[^<]+/i)?.[0]?.trim()
+      || text.match(/Fatal error[^<]+/i)?.[0]?.trim()
+      || 'Fatal error PHP na API fiscal MDF-e';
+    data = { erro: fatalMatch.substring(0, 500), php_error: true, raw: text.substring(0, 500) };
+  } else {
+    try { data = JSON.parse(text); } catch { data = { erro: 'Resposta não-JSON da API fiscal', raw: text.substring(0, 500) }; }
   }
 
+  // Trata erro: HTTP !ok, ou {erro}, ou {success:false}, ou status rejeitado
+  const hasErr = !resp.ok || data.erro || data.error
+    || data.success === false || data.sucesso === false
+    || (data.status && ['rejeitada','denegada','erro'].includes(String(data.status).toLowerCase()));
+
+  if (hasErr) {
+    const errMsg = data.erro || data.error || data.motivo || data.xMotivo || 'Erro na API fiscal MDF-e';
+    await supabase.from('mdfe').update({
+      status: 'rejeitada',
+      erro_processamento: String(errMsg).substring(0, 1000),
+      motivo_retorno: JSON.stringify(data).substring(0, 1000),
+      codigo_retorno: data.cStat || data.codigo || (data.php_error ? 'PHP_FATAL' : null),
+      processado_em: new Date().toISOString(),
+    }).eq('id', mdfeId);
+
+    await supabase.rpc('registrar_log', {
+      p_empresa_id: mdfe.empresa_id, p_nfce_id: mdfeId, p_token_api_id: mdfe.token_api_id,
+      p_tipo: 'erro', p_categoria: 'emissao',
+      p_mensagem: `Falha ao emitir MDF-e ${mdfe.numero}: ${String(errMsg).substring(0, 200)}`,
+      p_detalhes: { tipo: 'mdfe', http_status: resp.status, php_error: !!data.php_error, response: data },
+    });
+
+    return new Response(JSON.stringify({ success: false, error: errMsg, details: data }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  // Sucesso — exige chave/protocolo OU status válido
+  const chaveOk = data.chave || data.chave_acesso || data.chNFe;
+  const protoOk = data.protocolo || data.nProt;
+  const statusOk = data.status === 'autorizada' || (chaveOk && protoOk);
+
   const update: any = {
-    status: data.status === 'autorizada' ? 'autorizada' : 'processando',
+    status: statusOk ? 'autorizada' : 'processando',
     chave_acesso: data.chave || null,
     protocolo: data.protocolo || null,
     xml_retorno: data.xml || null,
