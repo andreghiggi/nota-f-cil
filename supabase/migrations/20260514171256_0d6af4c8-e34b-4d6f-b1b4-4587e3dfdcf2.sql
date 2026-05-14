@@ -1,0 +1,1 @@
+UPDATE public.mdfe SET status='pendente', codigo_retorno=NULL, motivo_retorno=NULL, processado_em=NULL WHERE id='268014f2-be10-40ee-9831-e223ba8051d6';
