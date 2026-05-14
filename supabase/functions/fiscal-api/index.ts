@@ -1303,7 +1303,9 @@ async function handleMdfeEmit(supabase: any, mdfeId: string) {
       cep_carregamento: mdfe.cep_carregamento || null,
       cep_descarregamento: mdfe.cep_descarregamento || null,
       info_adicional: mdfe.info_adicional || null,
-      tp_emit: mdfe.tp_emit || mdfe.payload_entrada?.tp_emit || 1,
+      // tpEmit SEFAZ: 1=Prestador de Serviço de Transporte (exige seguro), 2=Carga Própria, 3=Prestador CT-e Globalizado
+      // Default seguro = carga própria (2) para evitar rejeição 698 quando ERP não envia o campo
+      tp_emit: Number(mdfe.tp_emit ?? mdfe.payload_entrada?.tp_emit ?? 2),
       seguros: mdfe.seguros || mdfe.payload_entrada?.seguros || [],
     },
   };
