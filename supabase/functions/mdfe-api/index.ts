@@ -312,7 +312,13 @@ Deno.serve(async (req) => {
       const { data: fr, error: fe } = await supabase.functions.invoke('fiscal-api', {
         body: { action: 'cancel_mdfe', mdfe_id: mdfe.id }
       });
-      if (fe || !fr?.success) return err('Erro ao cancelar na SEFAZ: ' + (fr?.error || fe?.message || 'desconhecido'), 'SEFAZ_ERROR', 502);
+      if (fe || !fr?.success) {
+        const detalhe = await extractInvokeError(fe, fr);
+        await supabase.from('mdfe_eventos').update({
+          codigo_retorno: 'ERRO', motivo_retorno: detalhe.substring(0, 500),
+        }).eq('id', evento?.id);
+        return err('Erro ao cancelar na SEFAZ: ' + detalhe, 'SEFAZ_ERROR', 502);
+      }
 
       await supabase.from('mdfe').update({ status: 'cancelada' }).eq('id', mdfe.id);
       return new Response(JSON.stringify({ success: true, data: { id: mdfe.id, evento_id: evento?.id, status: 'cancelada', ...fr.data } }),
