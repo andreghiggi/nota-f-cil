@@ -8,6 +8,30 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
+// Extrai detalhes reais do erro retornado por supabase.functions.invoke()
+// Quando a função interna retorna status >=300, invoke() devolve FunctionsHttpError
+// com `error.context` sendo a Response (cujo body precisa ser lido para ver o erro real).
+async function extractInvokeError(err: any, fallbackData: any): Promise<string> {
+  try {
+    if (err?.context && typeof err.context.text === 'function') {
+      const txt = await err.context.text();
+      try {
+        const j = JSON.parse(txt);
+        // Estrutura típica do fiscal-api: { error, details: {...SEFAZ...} }
+        const det = j.details || j.detalhes || {};
+        const sefazMsg = det.xMotivo || det.mensagem || det.motivo || det.error || (det.raw && String(det.raw).substring(0, 400));
+        const cStat = det.cStat || det.codigo || det.status_sefaz;
+        if (sefazMsg) return cStat ? `[${cStat}] ${sefazMsg}` : String(sefazMsg);
+        return j.error || j.message || txt.substring(0, 500);
+      } catch {
+        return txt.substring(0, 500);
+      }
+    }
+  } catch (_) { /* ignore */ }
+  if (fallbackData?.error) return String(fallbackData.error);
+  return err?.message || 'erro desconhecido';
+}
+
 interface MDFePayload {
   external_id?: string;
   serie?: string;
