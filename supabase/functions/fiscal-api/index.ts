@@ -1411,7 +1411,9 @@ async function handleMdfeEncerrar(supabase: any, mdfeId: string, cMunDescarga: s
   if (certificate) payload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
 
   const resp = await fetch(`${FISCAL_API_BASE_URL}/mdfe/encerrar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${empresa.api_key_fiscal}` },
+    body: JSON.stringify(payload),
   });
   const text = await resp.text();
   let data: any; try { data = JSON.parse(text); } catch { data = { raw: text }; }
