@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, FileText, Settings, Search, MapPin, User, Building } from "lucide-react";
+import { Loader2, Building2, FileText, Settings, Search, MapPin, User, Building, Truck } from "lucide-react";
 import { SeriesFiscaisManager } from "./SeriesFiscaisManager";
 import { toast } from "sonner";
 import { useCreateEmpresa, useUpdateEmpresa, Empresa } from "@/hooks/useSupabaseData";
@@ -149,6 +149,8 @@ const empresaSchema = z.object({
   ambiente: z.enum(["homologacao", "producao"]),
   serie_nfce: z.string().min(1).max(3).default("001"),
   serie_nfe: z.string().min(1).max(3).default("001"),
+  serie_mdfe: z.string().min(1).max(3).default("1"),
+  rntrc: z.string().max(8).optional().nullable(),
   
   // CSC (Código de Segurança do Contribuinte)
   csc_id: z.string().max(10).optional().nullable(),
@@ -235,6 +237,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       ambiente: "homologacao",
       serie_nfce: "001",
       serie_nfe: "001",
+      serie_mdfe: "1",
+      rntrc: "",
       csc_id: "",
       csc_token: "",
       ativo: true,
@@ -266,6 +270,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         ambiente: empresa.ambiente,
         serie_nfce: empresa.serie_nfce,
         serie_nfe: (empresa as any).serie_nfe || "001",
+        serie_mdfe: (empresa as any).serie_mdfe || "1",
+        rntrc: (empresa as any).rntrc || "",
         csc_id: empresa.csc_id || "",
         csc_token: empresa.csc_token || "",
         ativo: empresa.ativo,
@@ -292,6 +298,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         ambiente: "homologacao",
         serie_nfce: "001",
         serie_nfe: "001",
+        serie_mdfe: "1",
+        rntrc: "",
         csc_id: "",
         csc_token: "",
         ativo: true,
