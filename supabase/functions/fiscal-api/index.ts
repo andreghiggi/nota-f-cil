@@ -369,22 +369,26 @@ Deno.serve(async (req) => {
         ?? nfce.payload_entrada?.pag;
       const pagList: any[] = Array.isArray(rawPag) ? rawPag : (rawPag ? [rawPag] : []);
 
+      // Monta como ARRAY sequencial (sped-nfe usa foreach) E como objeto indexado por chave
+      // string — alguns wrappers PHP exigem um, outros o outro. Enviamos os dois formatos.
+      const pagArray: any[] = [];
       const pagamentosObj: Record<string, any> = {};
       if (pagList.length === 0) {
-        // fallback: dinheiro pelo valor total (mantém comportamento anterior)
-        pagamentosObj['1'] = {
+        const fallback = {
           indPag: 0,
           tPag: '01',
           vPag: Number(nfce.valor_total).toFixed(2),
         };
+        pagArray.push(fallback);
+        pagamentosObj['1'] = fallback;
       } else {
         pagList.forEach((p: any, idx: number) => {
-          const tPagRaw = p?.tPag ?? p?.tpag ?? p?.forma ?? '01';
+          const tPagRaw = p?.tPag ?? p?.tpag ?? p?.forma ?? p?.forma_pagamento ?? '01';
           const tPag = String(tPagRaw).padStart(2, '0');
-          const vPag = Number(p?.vPag ?? p?.vpag ?? p?.valor ?? 0).toFixed(2);
+          const vPag = Number(p?.vPag ?? p?.vpag ?? p?.valor ?? p?.valor_pagamento ?? 0).toFixed(2);
           const indPagRaw = p?.indPag ?? p?.indpag;
           const det: any = {
-            indPag: indPagRaw !== undefined ? Number(indPagRaw) : (['03','04','10','11','12','13','15','16','17','18'].includes(tPag) ? 0 : 0),
+            indPag: indPagRaw !== undefined ? Number(indPagRaw) : 0,
             tPag,
             vPag,
           };
@@ -394,18 +398,21 @@ Deno.serve(async (req) => {
           //  tpIntegra=2 (POS avulso)     -> CNPJ NÃO PODE ser enviado
           const card = p?.card ?? p?.cartao;
           if (card && (['03','04','10','11','12','13','15','16','17','18'].includes(tPag))) {
-            const tpIntegraRaw = Number(card?.tpIntegra ?? card?.tpintegra ?? p?.tpIntegra ?? 1);
-            const tpIntegra = tpIntegraRaw === 2 ? 2 : 1; // só aceita 1 ou 2
-            const cnpjCard = String(card?.CNPJ ?? card?.cnpj ?? '').replace(/\D/g, '');
+            const tpIntegraRaw = Number(card?.tpIntegra ?? card?.tpintegra ?? p?.tpIntegra ?? p?.tipo_integracao ?? 1);
+            const tpIntegra = tpIntegraRaw === 2 ? 2 : 1;
+            const cnpjCard = String(card?.CNPJ ?? card?.cnpj ?? p?.cnpj_credenciadora ?? '').replace(/\D/g, '');
+            const tBand = card?.tBand ?? card?.tband ?? p?.bandeira_operadora;
+            const cAut = card?.cAut ?? card?.caut ?? p?.numero_autorizacao;
+            const nsu = card?.NSU ?? card?.nsu ?? p?.nsu;
             det.card = {
               tpIntegra,
-              // CNPJ apenas quando integrado (tpIntegra=1)
               ...(tpIntegra === 1 && cnpjCard ? { CNPJ: cnpjCard } : {}),
-              ...(card?.tBand ?? card?.tband ? { tBand: String(card?.tBand ?? card?.tband).padStart(2, '0') } : {}),
-              ...(card?.cAut ?? card?.caut ? { cAut: String(card?.cAut ?? card?.caut) } : {}),
-              ...(card?.NSU ?? card?.nsu ? { NSU: String(card?.NSU ?? card?.nsu) } : {}),
+              ...(tBand ? { tBand: String(tBand).padStart(2, '0') } : {}),
+              ...(cAut ? { cAut: String(cAut) } : {}),
+              ...(nsu ? { NSU: String(nsu) } : {}),
             };
           }
+          pagArray.push(det);
           pagamentosObj[String(idx + 1)] = det;
         });
       }
