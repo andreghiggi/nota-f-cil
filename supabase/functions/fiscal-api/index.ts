@@ -300,7 +300,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { action, empresa_id, nfce_id, nfe_id } = body;
+    const { action, empresa_id, nfce_id, nfe_id, mdfe_id } = body;
 
     // ========================================================================
     // ACTION: register_empresa
@@ -939,8 +939,21 @@ Deno.serve(async (req) => {
       return await handleCCe(supabase, nfe_id, body.correcao, body.sequencia);
     }
 
+    // ========================================================================
+    // ACTION: emit_mdfe / encerrar_mdfe / cancel_mdfe (modelo 58)
+    // ========================================================================
+    if (action === 'emit_mdfe') {
+      return await handleMdfeEmit(supabase, mdfe_id);
+    }
+    if (action === 'encerrar_mdfe') {
+      return await handleMdfeEncerrar(supabase, mdfe_id, body.c_mun_descarga, body.data_encerramento);
+    }
+    if (action === 'cancel_mdfe') {
+      return await handleMdfeCancelar(supabase, mdfe_id);
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe' }),
+      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe, emit_mdfe, encerrar_mdfe, cancel_mdfe' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
