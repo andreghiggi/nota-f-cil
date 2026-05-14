@@ -247,8 +247,10 @@ function buildNfcePaymentPayload(nfce: any) {
     if (isCartaoReal || isPixOuTransf) {
       // Para PIX/transferência, default tpIntegra=2 (não integrado). Cartão default=1.
       const tpIntegraRaw = Number(firstPresent(card?.tpIntegra, card?.tpintegra, p?.tpIntegra, p?.tipo_integracao, isPixOuTransf ? 2 : 1));
-      const tpIntegra = tpIntegraRaw === 2 ? 2 : 1;
+      let tpIntegra = tpIntegraRaw === 2 ? 2 : 1;
       const cnpjCard = String(firstPresent(card?.CNPJ, card?.cnpj, p?.CNPJ, p?.cnpj, p?.cnpj_credenciadora, '')).replace(/\D/g, '');
+      // tpIntegra=1 (integrado) exige CNPJ da credenciadora válido (14 díg). Sem CNPJ, força 2.
+      if (tpIntegra === 1 && cnpjCard.length !== 14) tpIntegra = 2;
       const tBand = firstPresent(card?.tBand, card?.tband, p?.tBand, p?.bandeira_operadora);
       const cAut = firstPresent(card?.cAut, card?.caut, p?.cAut, p?.numero_autorizacao);
       const nsu = firstPresent(card?.NSU, card?.nsu, p?.NSU, p?.nsu);
