@@ -240,9 +240,9 @@ function buildNfcePaymentPayload(nfce: any) {
       valor_pagamento: vPag,
       valor: vPag,
     };
-    // Apenas cartão crédito/débito e vouchers usam o grupo <card>.
-    // PIX (17), Transferência bancária (18), Boleto (15), Depósito (16) NÃO têm <card>.
-    if (['03','04','10','11','12','13'].includes(tPag)) {
+    // Pagamentos eletrônicos exigem tpIntegra (NT 2020.006 v1.20):
+    // 03/04 cartão crédito/débito, 10-13 vouchers, 17 PIX, 18 transferência bancária.
+    if (['03','04','10','11','12','13','17','18'].includes(tPag)) {
       const tpIntegraRaw = Number(firstPresent(card?.tpIntegra, card?.tpintegra, p?.tpIntegra, p?.tipo_integracao, 1));
       const tpIntegra = tpIntegraRaw === 2 ? 2 : 1;
       const cnpjCard = String(firstPresent(card?.CNPJ, card?.cnpj, p?.CNPJ, p?.cnpj, p?.cnpj_credenciadora, '')).replace(/\D/g, '');
