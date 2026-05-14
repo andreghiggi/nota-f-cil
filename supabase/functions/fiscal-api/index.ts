@@ -211,6 +211,62 @@ function buildNfceClientePayload(rawCliente: any, ambiente: string) {
   return {};
 }
 
+function buildNfcePaymentPayload(nfce: any) {
+  const entrada = nfce.payload_entrada || {};
+  const firstPresent = (...values: any[]) => values.find((value) => value !== undefined && value !== null && value !== '');
+  const rawPag = firstPresent(
+    entrada.pagamento,
+    entrada.pagamentos,
+    entrada.formas_pagamento,
+    entrada.forma_pagamento,
+    entrada.pag?.detPag,
+    entrada.detPag,
+    entrada.pag
+  );
+  const rawList = Array.isArray(rawPag) ? rawPag : (rawPag ? [rawPag] : []);
+  const sourceList = rawList.length > 0 ? rawList : [{ tPag: '01', vPag: nfce.valor_total }];
+
+  const detPag = sourceList.map((p: any) => {
+    const card = p?.card ?? p?.cartao ?? p;
+    const tPagRaw = firstPresent(p?.tPag, p?.tpag, p?.forma, p?.forma_pagamento, p?.tipo_pagamento, p?.codigo, '01');
+    const tPag = String(tPagRaw).replace(/\D/g, '').padStart(2, '0').slice(-2) || '01';
+    const vPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, nfce.valor_total)).toFixed(2);
+    const det: any = {
+      indPag: Number(firstPresent(p?.indPag, p?.indpag, p?.indicador_pagamento, 0)),
+      tPag,
+      forma_pagamento: tPag,
+      tipo_pagamento: tPag,
+      vPag,
+      valor_pagamento: vPag,
+      valor: vPag,
+    };
+    if (['03','04','10','11','12','13','15','16','17','18'].includes(tPag)) {
+      const tpIntegraRaw = Number(firstPresent(card?.tpIntegra, card?.tpintegra, p?.tpIntegra, p?.tipo_integracao, 1));
+      const tpIntegra = tpIntegraRaw === 2 ? 2 : 1;
+      const cnpjCard = String(firstPresent(card?.CNPJ, card?.cnpj, p?.CNPJ, p?.cnpj, p?.cnpj_credenciadora, '')).replace(/\D/g, '');
+      const tBand = firstPresent(card?.tBand, card?.tband, p?.tBand, p?.bandeira_operadora);
+      const cAut = firstPresent(card?.cAut, card?.caut, p?.cAut, p?.numero_autorizacao);
+      const nsu = firstPresent(card?.NSU, card?.nsu, p?.NSU, p?.nsu);
+      const cardPayload = {
+        tpIntegra,
+        ...(tpIntegra === 1 && cnpjCard ? { CNPJ: cnpjCard, cnpj: cnpjCard, cnpj_credenciadora: cnpjCard } : {}),
+        ...(tBand ? { tBand: String(tBand).padStart(2, '0'), bandeira_operadora: String(tBand).padStart(2, '0') } : {}),
+        ...(cAut ? { cAut: String(cAut), numero_autorizacao: String(cAut) } : {}),
+        ...(nsu ? { NSU: String(nsu), nsu: String(nsu) } : {}),
+      };
+      Object.assign(det, cardPayload, { card: cardPayload, cartao: cardPayload });
+    }
+    return det;
+  });
+
+  const primary = detPag[0];
+  const pagamentosObj = Object.fromEntries(detPag.map((pag, idx) => [String(idx + 1), pag]));
+  const vTroco = Number(firstPresent(entrada.vTroco, entrada.troco, 0));
+  const pagBlock = { ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2) } : {}), detPag };
+
+  return { detPag, primary, pagamentosObj, pagBlock, vTroco };
+}
+
 // ============================================================================
 // MAIN HANDLER
 // ============================================================================
@@ -360,71 +416,8 @@ Deno.serve(async (req) => {
         };
       });
 
-      // ----------------------------------------------------------------
-      // Pagamentos: mapeia payload_entrada.pagamento|pagamentos -> formato sped-nfe
-      // Sem isso, sped-nfe defaulta para tPag=01 (Dinheiro) — bug crítico.
-      // ----------------------------------------------------------------
-      const rawPag = nfce.payload_entrada?.pagamentos
-        ?? nfce.payload_entrada?.pagamento
-        ?? nfce.payload_entrada?.pag;
-      const pagList: any[] = Array.isArray(rawPag) ? rawPag : (rawPag ? [rawPag] : []);
-
-      // Monta como ARRAY sequencial (sped-nfe usa foreach) E como objeto indexado por chave
-      // string — alguns wrappers PHP exigem um, outros o outro. Enviamos os dois formatos.
-      const pagArray: any[] = [];
-      const pagamentosObj: Record<string, any> = {};
-      if (pagList.length === 0) {
-        const fallback = {
-          indPag: 0,
-          tPag: '01',
-          vPag: Number(nfce.valor_total).toFixed(2),
-        };
-        pagArray.push(fallback);
-        pagamentosObj['1'] = fallback;
-      } else {
-        pagList.forEach((p: any, idx: number) => {
-          const tPagRaw = p?.tPag ?? p?.tpag ?? p?.forma ?? p?.forma_pagamento ?? '01';
-          const tPag = String(tPagRaw).padStart(2, '0');
-          const vPag = Number(p?.vPag ?? p?.vpag ?? p?.valor ?? p?.valor_pagamento ?? 0).toFixed(2);
-          const indPagRaw = p?.indPag ?? p?.indpag;
-          const det: any = {
-            indPag: indPagRaw !== undefined ? Number(indPagRaw) : 0,
-            tPag,
-            vPag,
-          };
-          // Cartão / TEF / PIX integrado
-          // Regras SEFAZ (NT 2015/002):
-          //  tpIntegra=1 (TEF/integrado)  -> CNPJ da credenciadora OBRIGATÓRIO
-          //  tpIntegra=2 (POS avulso)     -> CNPJ NÃO PODE ser enviado
-          const card = p?.card ?? p?.cartao;
-          if (card && (['03','04','10','11','12','13','15','16','17','18'].includes(tPag))) {
-            const tpIntegraRaw = Number(card?.tpIntegra ?? card?.tpintegra ?? p?.tpIntegra ?? p?.tipo_integracao ?? 1);
-            const tpIntegra = tpIntegraRaw === 2 ? 2 : 1;
-            const cnpjCard = String(card?.CNPJ ?? card?.cnpj ?? p?.cnpj_credenciadora ?? '').replace(/\D/g, '');
-            const tBand = card?.tBand ?? card?.tband ?? p?.bandeira_operadora;
-            const cAut = card?.cAut ?? card?.caut ?? p?.numero_autorizacao;
-            const nsu = card?.NSU ?? card?.nsu ?? p?.nsu;
-            det.card = {
-              tpIntegra,
-              ...(tpIntegra === 1 && cnpjCard ? { CNPJ: cnpjCard } : {}),
-              ...(tBand ? { tBand: String(tBand).padStart(2, '0') } : {}),
-              ...(cAut ? { cAut: String(cAut) } : {}),
-              ...(nsu ? { NSU: String(nsu) } : {}),
-            };
-          }
-          pagArray.push(det);
-          pagamentosObj[String(idx + 1)] = det;
-        });
-      }
-
-      // Troco (vTroco) opcional no topo do bloco <pag>
-      const vTroco = Number(nfce.payload_entrada?.vTroco ?? nfce.payload_entrada?.troco ?? 0);
-
       const tpAmb = empresa.ambiente === 'producao' ? 1 : 2;
-      const pagBlock = {
-        ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2) } : {}),
-        detPag: pagArray,
-      };
+      const { detPag: pagArray, primary: primaryPayment, pagamentosObj, pagBlock, vTroco } = buildNfcePaymentPayload(nfce);
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
