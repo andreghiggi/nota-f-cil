@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.management-api]
 verify_jwt = false
+
+[functions.mdfe-api]
+verify_jwt = false
