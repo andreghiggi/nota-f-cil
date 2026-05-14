@@ -438,8 +438,13 @@ Deno.serve(async (req) => {
           // (XSD da NFC-e proíbe xNome sem CPF/CNPJ/idEstrangeiro)
           ...((clientePayload?.cpf || clientePayload?.cnpj) ? { cliente: clientePayload } : {}),
           itens: itensObj,
+          // Pagamentos: enviar todos os aliases conhecidos (PHP/sped-nfe variantes)
+          // Sem isso, o backend defaulta para tPag=01 (Dinheiro).
           pagamentos: pagamentosObj,
-          ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2) } : {}),
+          pagamento: pagamentosObj,
+          pag: pagamentosObj,
+          formas_pagamento: pagamentosObj,
+          ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2), troco: vTroco.toFixed(2) } : {}),
         },
       };
 
