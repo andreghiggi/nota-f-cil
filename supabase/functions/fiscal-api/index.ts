@@ -421,10 +421,13 @@ Deno.serve(async (req) => {
       const vTroco = Number(nfce.payload_entrada?.vTroco ?? nfce.payload_entrada?.troco ?? 0);
 
       const tpAmb = empresa.ambiente === 'producao' ? 1 : 2;
+      const pagBlock = {
+        ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2) } : {}),
+        detPag: pagArray,
+      };
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
-        // CSC/ambiente/UF redundantes no topo para o PHP nunca depender só do cadastro
         tpAmb,
         siglaUF: empresa.uf,
         CSC: empresa.csc_token || '',
@@ -437,20 +440,23 @@ Deno.serve(async (req) => {
           razaosocial: empresa.razao_social,
           cnpj: (empresa.cnpj || '').replace(/\D/g, ''),
         },
+        // Pagamento também no top-level (alguns wrappers leem fora de "nota")
+        pag: pagBlock,
+        pagamentos: pagArray,
         nota: {
           numero: parseInt(nfce.numero, 10).toString(),
           serie: parseInt(nfce.serie, 10).toString(),
           valor_total: nfce.valor_total,
-          // Só inclui cliente se houver CPF/CNPJ — caso contrário <dest> deve ser omitido
-          // (XSD da NFC-e proíbe xNome sem CPF/CNPJ/idEstrangeiro)
           ...((clientePayload?.cpf || clientePayload?.cnpj) ? { cliente: clientePayload } : {}),
           itens: itensObj,
-          // Pagamentos: enviar todos os aliases conhecidos (PHP/sped-nfe variantes)
-          // Sem isso, o backend defaulta para tPag=01 (Dinheiro).
-          pagamentos: pagamentosObj,
-          pagamento: pagamentosObj,
-          pag: pagamentosObj,
-          formas_pagamento: pagamentosObj,
+          // Pagamento em todos os formatos/aliases conhecidos do PHP/sped-nfe
+          pag: pagBlock,
+          pagamentos: pagArray,
+          pagamento: pagArray,
+          formas_pagamento: pagArray,
+          detPag: pagArray,
+          // Manter também versão objeto-indexada (algumas versões do PHP exigem)
+          pagamentos_obj: pagamentosObj,
           ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2), troco: vTroco.toFixed(2) } : {}),
         },
       };
@@ -464,6 +470,7 @@ Deno.serve(async (req) => {
       }
 
       console.log(`📡 Emitting NFC-e ${nfce.numero} via fiscal API...`);
+      console.log(`   pag payload: ${JSON.stringify(pagBlock)}`);
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfce/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
       const response = await fetch(emitUrl, {
