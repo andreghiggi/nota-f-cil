@@ -262,7 +262,7 @@ function buildNfcePaymentPayload(nfce: any) {
   const primary = detPag[0];
   const pagamentosObj = Object.fromEntries(detPag.map((pag, idx) => [String(idx + 1), pag]));
   const vTroco = Number(firstPresent(entrada.vTroco, entrada.troco, 0));
-  const pagBlock = { ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2) } : {}), detPag };
+  const pagBlock = { ...(vTroco > 0 ? { vTroco: vTroco.toFixed(2) } : {}), detPag: pagamentosObj };
 
   return { detPag, primary, pagamentosObj, pagBlock, vTroco };
 }
