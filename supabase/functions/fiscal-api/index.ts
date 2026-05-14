@@ -242,20 +242,26 @@ function buildNfcePaymentPayload(nfce: any) {
     };
     // Pagamentos eletrônicos exigem tpIntegra (NT 2020.006 v1.20):
     // 03/04 cartão crédito/débito, 10-13 vouchers, 17 PIX, 18 transferência bancária.
-    if (['03','04','10','11','12','13','17','18'].includes(tPag)) {
-      const tpIntegraRaw = Number(firstPresent(card?.tpIntegra, card?.tpintegra, p?.tpIntegra, p?.tipo_integracao, 1));
+    const isCartaoReal = ['03','04','10','11','12','13'].includes(tPag);
+    const isPixOuTransf = ['17','18'].includes(tPag);
+    if (isCartaoReal || isPixOuTransf) {
+      // Para PIX/transferência, default tpIntegra=2 (não integrado). Cartão default=1.
+      const tpIntegraRaw = Number(firstPresent(card?.tpIntegra, card?.tpintegra, p?.tpIntegra, p?.tipo_integracao, isPixOuTransf ? 2 : 1));
       const tpIntegra = tpIntegraRaw === 2 ? 2 : 1;
       const cnpjCard = String(firstPresent(card?.CNPJ, card?.cnpj, p?.CNPJ, p?.cnpj, p?.cnpj_credenciadora, '')).replace(/\D/g, '');
       const tBand = firstPresent(card?.tBand, card?.tband, p?.tBand, p?.bandeira_operadora);
       const cAut = firstPresent(card?.cAut, card?.caut, p?.cAut, p?.numero_autorizacao);
       const nsu = firstPresent(card?.NSU, card?.nsu, p?.NSU, p?.nsu);
-      const cardPayload = {
-        tpIntegra,
-        ...(tpIntegra === 1 && cnpjCard ? { CNPJ: cnpjCard, cnpj: cnpjCard, cnpj_credenciadora: cnpjCard } : {}),
-        ...(tBand ? { tBand: String(tBand).padStart(2, '0'), bandeira_operadora: String(tBand).padStart(2, '0') } : {}),
-        ...(cAut ? { cAut: String(cAut), numero_autorizacao: String(cAut) } : {}),
-        ...(nsu ? { NSU: String(nsu), nsu: String(nsu) } : {}),
-      };
+      const cardPayload: any = { tpIntegra };
+      if (tpIntegra === 1 && cnpjCard) {
+        Object.assign(cardPayload, { CNPJ: cnpjCard, cnpj: cnpjCard, cnpj_credenciadora: cnpjCard });
+      }
+      // tBand/cAut/NSU só valem para cartão real (03/04/10-13). PIX/Transferência não têm.
+      if (isCartaoReal) {
+        if (tBand) Object.assign(cardPayload, { tBand: String(tBand).padStart(2, '0'), bandeira_operadora: String(tBand).padStart(2, '0') });
+        if (cAut) Object.assign(cardPayload, { cAut: String(cAut), numero_autorizacao: String(cAut) });
+        if (nsu) Object.assign(cardPayload, { NSU: String(nsu), nsu: String(nsu) });
+      }
       Object.assign(det, cardPayload, { card: cardPayload, cartao: cardPayload });
     }
     return det;
