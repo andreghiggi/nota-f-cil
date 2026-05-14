@@ -334,10 +334,10 @@ export default function MDFe() {
                       <td className="px-5 py-4">
                         <div>
                           <p className="text-sm font-medium text-foreground">
-                            {m.empresas?.nome_fantasia || m.empresas?.razao_social || "—"}
+                            {m.empresa?.nome_fantasia || m.empresa?.razao_social || "—"}
                           </p>
                           <p className="text-xs text-muted-foreground">
-                            {m.empresas?.cnpj || "—"}
+                            {m.empresa?.cnpj || "—"}
                           </p>
                         </div>
                       </td>
