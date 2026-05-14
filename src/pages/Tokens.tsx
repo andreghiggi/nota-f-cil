@@ -61,8 +61,9 @@ import { Link } from "react-router-dom";
 const permissoesDisponiveis = [
   { id: "emitir_nfce", label: "Emitir NFC-e", description: "Permite criar novas NFC-e" },
   { id: "emitir_nfe", label: "Emitir NF-e", description: "Permite criar novas NF-e" },
+  { id: "emitir_mdfe", label: "Emitir MDF-e", description: "Permite emitir, encerrar e cancelar MDF-e (modelo 58)" },
   { id: "consultar", label: "Consultar", description: "Permite consultar status e listar documentos fiscais" },
-  { id: "cancelar", label: "Cancelar", description: "Permite cancelar NFC-e e NF-e autorizadas" },
+  { id: "cancelar", label: "Cancelar", description: "Permite cancelar NFC-e, NF-e e MDF-e autorizadas" },
   { id: "reprocessar", label: "Reprocessar", description: "Permite reprocessar documentos rejeitados" },
   { id: "gerenciar", label: "Gerenciar", description: "Permite criar/revogar tokens e gerenciar séries, certificados e ambiente via API" },
 ];
