@@ -68,7 +68,7 @@ const statusStyles: Record<string, string> = {
 };
 
 type MdfeWithEmpresa = Tables<"mdfe"> & {
-  empresas: Pick<Tables<"empresas">, "razao_social" | "nome_fantasia" | "cnpj"> | null;
+  empresa?: Pick<Tables<"empresas">, "razao_social" | "nome_fantasia" | "cnpj"> | null;
 };
 
 export default function MDFe() {
@@ -88,7 +88,7 @@ export default function MDFe() {
     queryFn: async () => {
       let query = supabase
         .from("mdfe")
-        .select("*, empresas(razao_social, nome_fantasia, cnpj)")
+        .select("*")
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -107,7 +107,11 @@ export default function MDFe() {
 
       const { data, error } = await query;
       if (error) throw error;
-      return data as MdfeWithEmpresa[];
+      const empresaMap = new Map(empresas.map((e) => [e.id, e]));
+      return (data || []).map((m) => ({
+        ...m,
+        empresa: empresaMap.get(m.empresa_id) || null,
+      })) as MdfeWithEmpresa[];
     },
   });
 
