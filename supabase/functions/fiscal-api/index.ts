@@ -315,17 +315,32 @@ Deno.serve(async (req) => {
         const aliqCofins = Number(item.aliquota_cofins) || 0;
         const aliqIcms = Number(item.aliquota_icms) || 0;
 
+        // PHP/sped-nfe: aceita variantes diferentes de nomes para descricao e codigo.
+        // Enviamos TODOS os aliases para garantir que <xProd> e <cProd> sejam preenchidos
+        // corretamente — sem isso o backend usa fallback "PRODUTO TESTE" / cProd "001".
+        const descProduto = String(item.descricao ?? '').trim() || 'PRODUTO';
+        const codProduto = String(item.codigo_produto ?? '').trim() || String(idx + 1).padStart(3, '0');
         itensObj[String(idx)] = {
-          descricao: item.descricao,
+          // Descrição (todos os aliases conhecidos)
+          descricao: descProduto,
+          descricao_produto: descProduto,
+          nome: descProduto,
+          produto: descProduto,
+          xProd: descProduto,
           quantidade: qtd,
           valor_unitario: vUnit,
           // PHP exige valor_total para montar <vProd>; enviar também aliases por segurança
           valor_total: vTotal,
           valor_bruto: vTotal,
-          codigo_produto: item.codigo_produto,
+          // Código do produto (todos os aliases conhecidos)
+          codigo: codProduto,
+          codigo_produto: codProduto,
+          cProd: codProduto,
           ncm: item.ncm,
           cfop: item.cfop,
           unidade: item.unidade,
+          uCom: item.unidade,
+          uTrib: item.unidade,
           // ICMS (regime simples → CSOSN; regime normal → CST)
           cst_icms: item.cst_icms,
           csosn: item.csosn,
