@@ -228,7 +228,7 @@ function buildPaymentPayload(doc: any) {
     entrada.pag
   );
   const rawList = Array.isArray(rawPag) ? rawPag : (rawPag ? [rawPag] : []);
-  const sourceList = rawList.length > 0 ? rawList : [{ tPag: '01', vPag: nfce.valor_total }];
+  const sourceList = rawList.length > 0 ? rawList : [{ tPag: '01', vPag: doc.valor_total }];
 
   const detPag = sourceList.map((p: any) => {
     const card = p?.card ?? p?.cartao ?? p;
