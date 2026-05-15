@@ -561,6 +561,13 @@ function formatCEP(cep: string) {
   return cep;
 }
 
+function formatDateBR(d: string) {
+  if (!d) return "";
+  const m = String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return d;
+}
+
 function formatChave(chave: string) {
   if (!chave) return "";
   return chave.replace(/(.{4})/g, "$1 ").trim();
