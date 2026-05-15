@@ -835,6 +835,13 @@ Deno.serve(async (req) => {
           vPag: nfePrimaryPag.vPag,
           forma_pagamento: nfePrimaryPag.tPag,
           ...(nfeVTroco > 0 ? { vTroco: nfeVTroco.toFixed(2), troco: nfeVTroco.toFixed(2) } : {}),
+          // Cobrança / duplicatas
+          ...(cobrancaPayload ? {
+            cobranca: cobrancaPayload,
+            cobr: cobrancaPayload,
+            fatura: cobrancaPayload.fat,
+            duplicatas: cobrancaPayload.duplicatas,
+          } : {}),
           // Reforma Tributária
           ...(nfe.d_prev_entrega ? { dPrevEntrega: nfe.d_prev_entrega } : {}),
           ...(nfe.c_mun_fg_ibs ? { cMunFGIBS: nfe.c_mun_fg_ibs } : {}),
