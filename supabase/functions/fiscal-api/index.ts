@@ -1335,18 +1335,12 @@ async function handleCCe(supabase: any, nfeId: string, correcao: string, sequenc
 
   console.log(`📡 Sending CC-e #${nextSeq} for NF-e ${nfe.numero}...`);
 
-  const response = await fetch(`${FISCAL_API_BASE_URL}/nfe/cce?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(ccePayload),
-  });
-
-  const responseText = await response.text();
+  const { response, text: responseText, data: responseData } = await postWithRetry(
+    `${FISCAL_API_BASE_URL}/nfe/cce?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`,
+    ccePayload,
+    { label: `CC-e #${nextSeq} NF-e ${nfe.numero}` }
+  );
   console.log(`📡 CC-e response (${response.status}):`, responseText.substring(0, 500));
-
-  let responseData: any;
-  try { responseData = JSON.parse(responseText); }
-  catch { responseData = { raw: responseText }; }
 
   const isSuccess = response.ok && (responseData.sucesso || responseData.status === 'registrada' ||
     ['135', '136'].includes(String(responseData.cStat || '')));
