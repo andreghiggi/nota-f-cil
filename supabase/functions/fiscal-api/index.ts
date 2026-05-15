@@ -212,7 +212,11 @@ function buildNfceClientePayload(rawCliente: any, ambiente: string) {
 }
 
 function buildNfcePaymentPayload(nfce: any) {
-  const entrada = nfce.payload_entrada || {};
+  return buildPaymentPayload(nfce);
+}
+
+function buildPaymentPayload(doc: any) {
+  const entrada = doc.payload_entrada || {};
   const firstPresent = (...values: any[]) => values.find((value) => value !== undefined && value !== null && value !== '');
   const rawPag = firstPresent(
     entrada.pagamento,
