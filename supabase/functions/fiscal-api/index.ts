@@ -12,6 +12,63 @@ const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 // ============================================================================
 
 /**
+ * POST com retry automático para falhas transitórias da SEFAZ
+ * (Connection reset by peer, timeouts, 5xx). Usado em emissão, cancelamento e CC-e.
+ */
+async function postWithRetry(
+  url: string,
+  payload: any,
+  opts: { maxAttempts?: number; label?: string } = {}
+): Promise<{ response: Response; text: string; data: any }> {
+  const maxAttempts = opts.maxAttempts ?? 3;
+  const label = opts.label ?? 'request';
+  let lastErr: any = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const text = await response.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+      const errStr = (data?.erro || data?.error || text || '').toString().toLowerCase();
+      const transient =
+        errStr.includes('connection reset by peer') ||
+        errStr.includes('recv failure') ||
+        errStr.includes('timeout') ||
+        errStr.includes('timed out') ||
+        errStr.includes('could not resolve host') ||
+        (response.status >= 502 && response.status <= 504);
+
+      if (transient && attempt < maxAttempts) {
+        const wait = 800 * attempt;
+        console.log(`⚠️ ${label} attempt ${attempt} transient (${response.status}): ${errStr.substring(0, 120)} — retrying in ${wait}ms`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+
+      return { response, text, data };
+    } catch (err: any) {
+      lastErr = err;
+      const msg = (err?.message || '').toLowerCase();
+      const transient = msg.includes('connection reset') || msg.includes('timeout') || msg.includes('network');
+      if (transient && attempt < maxAttempts) {
+        const wait = 800 * attempt;
+        console.log(`⚠️ ${label} attempt ${attempt} threw (${msg}) — retrying in ${wait}ms`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr || new Error(`${label}: max attempts exceeded`);
+}
+
+/**
  * Load certificate (PFX) from Supabase Storage and return base64 + decoded password.
  * Returns null if no certificate is configured.
  */
