@@ -459,6 +459,46 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
         </tbody>
       </table>
 
+      {/* ========== FATURA / DUPLICATAS ========== */}
+      {(() => {
+        const cobr = nfe.payload_entrada?.cobranca || nfe.payload_entrada?.cobr || null;
+        const dupRaw = cobr?.dup || cobr?.duplicatas || nfe.payload_entrada?.duplicatas || nfe.payload_entrada?.parcelas || [];
+        const dups = (Array.isArray(dupRaw) ? dupRaw : Object.values(dupRaw || {})).map((d: any, i: number) => ({
+          nDup: String(d?.nDup ?? d?.numero ?? String(i + 1).padStart(3, "0")),
+          dVenc: d?.dVenc ?? d?.data_vencimento ?? d?.vencimento ?? "",
+          vDup: Number(d?.vDup ?? d?.valor ?? 0),
+        })).filter((d) => d.dVenc && d.vDup > 0);
+        if (dups.length === 0) return null;
+        return (
+          <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
+            <tbody>
+              <tr>
+                <td className="black-label" style={{ width: "12mm" }}>FATURA / DUPLICATAS</td>
+                <td style={{ padding: "2px 4px", verticalAlign: "top" }}>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "6.5pt" }}>
+                    <tbody>
+                      {Array.from({ length: Math.ceil(dups.length / 4) }).map((_, row) => (
+                        <tr key={row}>
+                          {dups.slice(row * 4, row * 4 + 4).map((d, j) => (
+                            <td key={j} style={{ border: "1px solid #000", padding: "2px 4px", width: "25%" }}>
+                              <span className="nf-label">N° {d.nDup}</span>
+                              <span className="nf-info">Venc.: {formatDateBR(d.dVenc)} — {fc(d.vDup)}</span>
+                            </td>
+                          ))}
+                          {Array.from({ length: 4 - dups.slice(row * 4, row * 4 + 4).length }).map((_, k) => (
+                            <td key={`e-${k}`} style={{ border: "1px solid #000", padding: "2px 4px", width: "25%" }}>&nbsp;</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        );
+      })()}
+
       {/* ========== INFORMAÇÕES COMPLEMENTARES ========== */}
       <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
         <tbody>
