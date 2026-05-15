@@ -773,6 +773,40 @@ Deno.serve(async (req) => {
       // Build pagamentos (NT2016/v4: <pag> obrigatório em NF-e modelo 55)
       const { detPag: nfePagArray, primary: nfePrimaryPag, pagamentosObj: nfePagObj, pagBlock: nfePagBlock, vTroco: nfeVTroco } = buildPaymentPayload(nfe);
 
+      // Cobrança / duplicatas (<cobr>) — necessário p/ tPag=15 (boleto) com indPag=1 (a prazo)
+      const cobrancaSrc = nfe.payload_entrada?.cobranca || nfe.payload_entrada?.cobr || null;
+      let cobrancaPayload: any = null;
+      if (cobrancaSrc) {
+        const dupListRaw = Array.isArray(cobrancaSrc.dup)
+          ? cobrancaSrc.dup
+          : (Array.isArray(cobrancaSrc.duplicatas) ? cobrancaSrc.duplicatas : []);
+        const dupList = dupListRaw.map((d: any, i: number) => ({
+          nDup: String(d?.nDup ?? d?.numero ?? String(i + 1).padStart(3, '0')).padStart(3, '0').slice(-3),
+          dVenc: d?.dVenc ?? d?.data_vencimento ?? d?.vencimento,
+          vDup: Number(d?.vDup ?? d?.valor ?? 0).toFixed(2),
+        })).filter((d: any) => d.dVenc && Number(d.vDup) > 0);
+
+        const fatSrc = cobrancaSrc.fat || cobrancaSrc.fatura || {};
+        const vOrig = Number(fatSrc.vOrig ?? fatSrc.valor_original ?? nfe.valor_total ?? 0);
+        const vDesc = Number(fatSrc.vDesc ?? fatSrc.valor_desconto ?? 0);
+        const vLiq = Number(fatSrc.vLiq ?? fatSrc.valor_liquido ?? (vOrig - vDesc));
+        const fat = {
+          nFat: String(fatSrc.nFat ?? fatSrc.numero ?? nfe.numero).slice(-60),
+          vOrig: vOrig.toFixed(2),
+          vDesc: vDesc.toFixed(2),
+          vLiq: vLiq.toFixed(2),
+        };
+        // formato múltiplo p/ compat. NFePHP / PHP legado
+        const dupObj = Object.fromEntries(dupList.map((d: any, i: number) => [String(i + 1), d]));
+        cobrancaPayload = {
+          fat,
+          dup: dupList,
+          duplicatas: dupObj,
+          fatura: fat,
+        };
+      }
+
+
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
@@ -801,6 +835,13 @@ Deno.serve(async (req) => {
           vPag: nfePrimaryPag.vPag,
           forma_pagamento: nfePrimaryPag.tPag,
           ...(nfeVTroco > 0 ? { vTroco: nfeVTroco.toFixed(2), troco: nfeVTroco.toFixed(2) } : {}),
+          // Cobrança / duplicatas
+          ...(cobrancaPayload ? {
+            cobranca: cobrancaPayload,
+            cobr: cobrancaPayload,
+            fatura: cobrancaPayload.fat,
+            duplicatas: cobrancaPayload.duplicatas,
+          } : {}),
           // Reforma Tributária
           ...(nfe.d_prev_entrega ? { dPrevEntrega: nfe.d_prev_entrega } : {}),
           ...(nfe.c_mun_fg_ibs ? { cMunFGIBS: nfe.c_mun_fg_ibs } : {}),
@@ -830,6 +871,12 @@ Deno.serve(async (req) => {
         tPag: nfePrimaryPag.tPag,
         vPag: nfePrimaryPag.vPag,
         forma_pagamento: nfePrimaryPag.tPag,
+        ...(cobrancaPayload ? {
+          cobranca: cobrancaPayload,
+          cobr: cobrancaPayload,
+          fatura: cobrancaPayload.fat,
+          duplicatas: cobrancaPayload.duplicatas,
+        } : {}),
         emitente: {
           cMun: empresa.codigo_municipio || '',
           xMun: empresa.municipio || '',
@@ -862,18 +909,36 @@ Deno.serve(async (req) => {
       console.log(`📡 Emitting NF-e ${nfe.numero} via fiscal API (modelo 55, ${isPF ? 'PF' : 'PJ'})...`);
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfe/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
-      const response = await fetch(emitUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Api-Key': empresa.api_key_fiscal,
-          'Authorization': `Bearer ${empresa.api_key_fiscal}`,
-        },
-        body: JSON.stringify(payload),
-      });
 
-      const responseText = await response.text();
-      console.log(`📡 NF-e emit response (${response.status}):`, responseText.substring(0, 500));
+      // Retry automático em caso de instabilidade SEFAZ (Connection reset / Recv failure / timeout)
+      const MAX_EMIT_RETRIES = 3;
+      let response!: Response;
+      let responseText = '';
+      let lastTransient = '';
+      for (let attempt = 1; attempt <= MAX_EMIT_RETRIES; attempt++) {
+        response = await fetch(emitUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Api-Key': empresa.api_key_fiscal,
+            'Authorization': `Bearer ${empresa.api_key_fiscal}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        responseText = await response.text();
+        console.log(`📡 NF-e emit response (try ${attempt}/${MAX_EMIT_RETRIES}, status ${response.status}):`, responseText.substring(0, 500));
+
+        const isTransient = /Connection reset by peer|Recv failure|Operation timed out|Could not resolve host|SSL connect error|getaddrinfo|Empty reply from server/i.test(responseText);
+        if (!isTransient || attempt === MAX_EMIT_RETRIES) break;
+        lastTransient = responseText.substring(0, 200);
+        const delayMs = 800 * attempt; // 0.8s, 1.6s
+        console.log(`⏳ Erro transitório SEFAZ; aguardando ${delayMs}ms e retry...`);
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+      if (lastTransient && response.ok) {
+        console.log(`✅ Recuperado após retry de erro transitório: ${lastTransient}`);
+      }
+
 
       let responseData: any;
       try {
