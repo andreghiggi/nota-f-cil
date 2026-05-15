@@ -773,6 +773,40 @@ Deno.serve(async (req) => {
       // Build pagamentos (NT2016/v4: <pag> obrigatório em NF-e modelo 55)
       const { detPag: nfePagArray, primary: nfePrimaryPag, pagamentosObj: nfePagObj, pagBlock: nfePagBlock, vTroco: nfeVTroco } = buildPaymentPayload(nfe);
 
+      // Cobrança / duplicatas (<cobr>) — necessário p/ tPag=15 (boleto) com indPag=1 (a prazo)
+      const cobrancaSrc = nfe.payload_entrada?.cobranca || nfe.payload_entrada?.cobr || null;
+      let cobrancaPayload: any = null;
+      if (cobrancaSrc) {
+        const dupListRaw = Array.isArray(cobrancaSrc.dup)
+          ? cobrancaSrc.dup
+          : (Array.isArray(cobrancaSrc.duplicatas) ? cobrancaSrc.duplicatas : []);
+        const dupList = dupListRaw.map((d: any, i: number) => ({
+          nDup: String(d?.nDup ?? d?.numero ?? String(i + 1).padStart(3, '0')).padStart(3, '0').slice(-3),
+          dVenc: d?.dVenc ?? d?.data_vencimento ?? d?.vencimento,
+          vDup: Number(d?.vDup ?? d?.valor ?? 0).toFixed(2),
+        })).filter((d: any) => d.dVenc && Number(d.vDup) > 0);
+
+        const fatSrc = cobrancaSrc.fat || cobrancaSrc.fatura || {};
+        const vOrig = Number(fatSrc.vOrig ?? fatSrc.valor_original ?? nfe.valor_total ?? 0);
+        const vDesc = Number(fatSrc.vDesc ?? fatSrc.valor_desconto ?? 0);
+        const vLiq = Number(fatSrc.vLiq ?? fatSrc.valor_liquido ?? (vOrig - vDesc));
+        const fat = {
+          nFat: String(fatSrc.nFat ?? fatSrc.numero ?? nfe.numero).slice(-60),
+          vOrig: vOrig.toFixed(2),
+          vDesc: vDesc.toFixed(2),
+          vLiq: vLiq.toFixed(2),
+        };
+        // formato múltiplo p/ compat. NFePHP / PHP legado
+        const dupObj = Object.fromEntries(dupList.map((d: any, i: number) => [String(i + 1), d]));
+        cobrancaPayload = {
+          fat,
+          dup: dupList,
+          duplicatas: dupObj,
+          fatura: fat,
+        };
+      }
+
+
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
