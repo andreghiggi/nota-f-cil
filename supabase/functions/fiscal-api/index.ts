@@ -871,6 +871,12 @@ Deno.serve(async (req) => {
         tPag: nfePrimaryPag.tPag,
         vPag: nfePrimaryPag.vPag,
         forma_pagamento: nfePrimaryPag.tPag,
+        ...(cobrancaPayload ? {
+          cobranca: cobrancaPayload,
+          cobr: cobrancaPayload,
+          fatura: cobrancaPayload.fat,
+          duplicatas: cobrancaPayload.duplicatas,
+        } : {}),
         emitente: {
           cMun: empresa.codigo_municipio || '',
           xMun: empresa.municipio || '',
