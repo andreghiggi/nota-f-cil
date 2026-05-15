@@ -909,18 +909,36 @@ Deno.serve(async (req) => {
       console.log(`📡 Emitting NF-e ${nfe.numero} via fiscal API (modelo 55, ${isPF ? 'PF' : 'PJ'})...`);
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfe/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
-      const response = await fetch(emitUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Api-Key': empresa.api_key_fiscal,
-          'Authorization': `Bearer ${empresa.api_key_fiscal}`,
-        },
-        body: JSON.stringify(payload),
-      });
 
-      const responseText = await response.text();
-      console.log(`📡 NF-e emit response (${response.status}):`, responseText.substring(0, 500));
+      // Retry automático em caso de instabilidade SEFAZ (Connection reset / Recv failure / timeout)
+      const MAX_EMIT_RETRIES = 3;
+      let response!: Response;
+      let responseText = '';
+      let lastTransient = '';
+      for (let attempt = 1; attempt <= MAX_EMIT_RETRIES; attempt++) {
+        response = await fetch(emitUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Api-Key': empresa.api_key_fiscal,
+            'Authorization': `Bearer ${empresa.api_key_fiscal}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        responseText = await response.text();
+        console.log(`📡 NF-e emit response (try ${attempt}/${MAX_EMIT_RETRIES}, status ${response.status}):`, responseText.substring(0, 500));
+
+        const isTransient = /Connection reset by peer|Recv failure|Operation timed out|Could not resolve host|SSL connect error|getaddrinfo|Empty reply from server/i.test(responseText);
+        if (!isTransient || attempt === MAX_EMIT_RETRIES) break;
+        lastTransient = responseText.substring(0, 200);
+        const delayMs = 800 * attempt; // 0.8s, 1.6s
+        console.log(`⏳ Erro transitório SEFAZ; aguardando ${delayMs}ms e retry...`);
+        await new Promise(r => setTimeout(r, delayMs));
+      }
+      if (lastTransient && response.ok) {
+        console.log(`✅ Recuperado após retry de erro transitório: ${lastTransient}`);
+      }
+
 
       let responseData: any;
       try {
