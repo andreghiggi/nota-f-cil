@@ -212,7 +212,11 @@ function buildNfceClientePayload(rawCliente: any, ambiente: string) {
 }
 
 function buildNfcePaymentPayload(nfce: any) {
-  const entrada = nfce.payload_entrada || {};
+  return buildPaymentPayload(nfce);
+}
+
+function buildPaymentPayload(doc: any) {
+  const entrada = doc.payload_entrada || {};
   const firstPresent = (...values: any[]) => values.find((value) => value !== undefined && value !== null && value !== '');
   const rawPag = firstPresent(
     entrada.pagamento,
@@ -224,13 +228,13 @@ function buildNfcePaymentPayload(nfce: any) {
     entrada.pag
   );
   const rawList = Array.isArray(rawPag) ? rawPag : (rawPag ? [rawPag] : []);
-  const sourceList = rawList.length > 0 ? rawList : [{ tPag: '01', vPag: nfce.valor_total }];
+  const sourceList = rawList.length > 0 ? rawList : [{ tPag: '01', vPag: doc.valor_total }];
 
   const detPag = sourceList.map((p: any) => {
     const card = p?.card ?? p?.cartao ?? p;
     const tPagRaw = firstPresent(p?.tPag, p?.tpag, p?.forma, p?.forma_pagamento, p?.tipo_pagamento, p?.codigo, '01');
     const tPag = String(tPagRaw).replace(/\D/g, '').padStart(2, '0').slice(-2) || '01';
-    const vPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, nfce.valor_total)).toFixed(2);
+    const vPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, doc.valor_total)).toFixed(2);
     const det: any = {
       indPag: Number(firstPresent(p?.indPag, p?.indpag, p?.indicador_pagamento, 0)),
       tPag,
@@ -766,6 +770,9 @@ Deno.serve(async (req) => {
         clientePayload.cep = (nfe.dest_cep || '').replace(/\D/g, '');
       }
 
+      // Build pagamentos (NT2016/v4: <pag> obrigatório em NF-e modelo 55)
+      const { detPag: nfePagArray, primary: nfePrimaryPag, pagamentosObj: nfePagObj, pagBlock: nfePagBlock, vTroco: nfeVTroco } = buildPaymentPayload(nfe);
+
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
@@ -784,6 +791,16 @@ Deno.serve(async (req) => {
           modalidade_frete: nfe.modalidade_frete || '9',
           cliente: clientePayload,
           itens: itensObj,
+          // Pagamentos (formatos múltiplos para compat. com PHP legado/NFePHP)
+          pag: nfePagBlock,
+          pagamentos: nfePagObj,
+          pagamento: nfePrimaryPag,
+          formas_pagamento: nfePagObj,
+          detPag: nfePagObj,
+          tPag: nfePrimaryPag.tPag,
+          vPag: nfePrimaryPag.vPag,
+          forma_pagamento: nfePrimaryPag.tPag,
+          ...(nfeVTroco > 0 ? { vTroco: nfeVTroco.toFixed(2), troco: nfeVTroco.toFixed(2) } : {}),
           // Reforma Tributária
           ...(nfe.d_prev_entrega ? { dPrevEntrega: nfe.d_prev_entrega } : {}),
           ...(nfe.c_mun_fg_ibs ? { cMunFGIBS: nfe.c_mun_fg_ibs } : {}),
@@ -804,6 +821,15 @@ Deno.serve(async (req) => {
             vDevTribCBSTot: nfe.valor_dev_trib_cbs_total || 0,
           },
         },
+        // Pagamento também no nível raiz (PHP legado lê do topo)
+        pag: nfePagBlock,
+        pagamentos: nfePagObj,
+        pagamento: nfePrimaryPag,
+        formas_pagamento: nfePagObj,
+        detPag: nfePagObj,
+        tPag: nfePrimaryPag.tPag,
+        vPag: nfePrimaryPag.vPag,
+        forma_pagamento: nfePrimaryPag.tPag,
         emitente: {
           cMun: empresa.codigo_municipio || '',
           xMun: empresa.municipio || '',
