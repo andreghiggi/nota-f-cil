@@ -234,7 +234,7 @@ function buildPaymentPayload(doc: any) {
     const card = p?.card ?? p?.cartao ?? p;
     const tPagRaw = firstPresent(p?.tPag, p?.tpag, p?.forma, p?.forma_pagamento, p?.tipo_pagamento, p?.codigo, '01');
     const tPag = String(tPagRaw).replace(/\D/g, '').padStart(2, '0').slice(-2) || '01';
-    const vPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, nfce.valor_total)).toFixed(2);
+    const vPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, doc.valor_total)).toFixed(2);
     const det: any = {
       indPag: Number(firstPresent(p?.indPag, p?.indpag, p?.indicador_pagamento, 0)),
       tPag,
