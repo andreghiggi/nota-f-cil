@@ -12,6 +12,63 @@ const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 // ============================================================================
 
 /**
+ * POST com retry automático para falhas transitórias da SEFAZ
+ * (Connection reset by peer, timeouts, 5xx). Usado em emissão, cancelamento e CC-e.
+ */
+async function postWithRetry(
+  url: string,
+  payload: any,
+  opts: { maxAttempts?: number; label?: string } = {}
+): Promise<{ response: Response; text: string; data: any }> {
+  const maxAttempts = opts.maxAttempts ?? 3;
+  const label = opts.label ?? 'request';
+  let lastErr: any = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const text = await response.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+
+      const errStr = (data?.erro || data?.error || text || '').toString().toLowerCase();
+      const transient =
+        errStr.includes('connection reset by peer') ||
+        errStr.includes('recv failure') ||
+        errStr.includes('timeout') ||
+        errStr.includes('timed out') ||
+        errStr.includes('could not resolve host') ||
+        (response.status >= 502 && response.status <= 504);
+
+      if (transient && attempt < maxAttempts) {
+        const wait = 800 * attempt;
+        console.log(`⚠️ ${label} attempt ${attempt} transient (${response.status}): ${errStr.substring(0, 120)} — retrying in ${wait}ms`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+
+      return { response, text, data };
+    } catch (err: any) {
+      lastErr = err;
+      const msg = (err?.message || '').toLowerCase();
+      const transient = msg.includes('connection reset') || msg.includes('timeout') || msg.includes('network');
+      if (transient && attempt < maxAttempts) {
+        const wait = 800 * attempt;
+        console.log(`⚠️ ${label} attempt ${attempt} threw (${msg}) — retrying in ${wait}ms`);
+        await new Promise((r) => setTimeout(r, wait));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastErr || new Error(`${label}: max attempts exceeded`);
+}
+
+/**
  * Load certificate (PFX) from Supabase Storage and return base64 + decoded password.
  * Returns null if no certificate is configured.
  */
@@ -1149,21 +1206,12 @@ async function handleCancel(supabase: any, tipo: 'nfce' | 'nfe', docId: string) 
   const endpoint = tipo === 'nfce' ? 'nfce/cancelar' : 'nfe/cancelar';
   console.log(`📡 Cancelling ${tipo.toUpperCase()} ${doc.numero}...`);
 
-  const response = await fetch(`${FISCAL_API_BASE_URL}/${endpoint}?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cancelPayload),
-  });
-
-  const responseText = await response.text();
+  const { response, text: responseText, data: responseData } = await postWithRetry(
+    `${FISCAL_API_BASE_URL}/${endpoint}?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`,
+    cancelPayload,
+    { label: `Cancel ${tipo.toUpperCase()} ${doc.numero}` }
+  );
   console.log(`📡 Cancel response (${response.status}):`, responseText.substring(0, 500));
-
-  let responseData: any;
-  try {
-    responseData = JSON.parse(responseText);
-  } catch {
-    responseData = { raw: responseText };
-  }
 
   // Detect "already cancelled" (cStat 573) as success - happens when retrying
   const errStr = JSON.stringify(responseData).toLowerCase();
@@ -1287,18 +1335,12 @@ async function handleCCe(supabase: any, nfeId: string, correcao: string, sequenc
 
   console.log(`📡 Sending CC-e #${nextSeq} for NF-e ${nfe.numero}...`);
 
-  const response = await fetch(`${FISCAL_API_BASE_URL}/nfe/cce?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(ccePayload),
-  });
-
-  const responseText = await response.text();
+  const { response, text: responseText, data: responseData } = await postWithRetry(
+    `${FISCAL_API_BASE_URL}/nfe/cce?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`,
+    ccePayload,
+    { label: `CC-e #${nextSeq} NF-e ${nfe.numero}` }
+  );
   console.log(`📡 CC-e response (${response.status}):`, responseText.substring(0, 500));
-
-  let responseData: any;
-  try { responseData = JSON.parse(responseText); }
-  catch { responseData = { raw: responseText }; }
 
   const isSuccess = response.ok && (responseData.sucesso || responseData.status === 'registrada' ||
     ['135', '136'].includes(String(responseData.cStat || '')));
