@@ -1206,21 +1206,12 @@ async function handleCancel(supabase: any, tipo: 'nfce' | 'nfe', docId: string) 
   const endpoint = tipo === 'nfce' ? 'nfce/cancelar' : 'nfe/cancelar';
   console.log(`📡 Cancelling ${tipo.toUpperCase()} ${doc.numero}...`);
 
-  const response = await fetch(`${FISCAL_API_BASE_URL}/${endpoint}?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(cancelPayload),
-  });
-
-  const responseText = await response.text();
+  const { response, text: responseText, data: responseData } = await postWithRetry(
+    `${FISCAL_API_BASE_URL}/${endpoint}?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`,
+    cancelPayload,
+    { label: `Cancel ${tipo.toUpperCase()} ${doc.numero}` }
+  );
   console.log(`📡 Cancel response (${response.status}):`, responseText.substring(0, 500));
-
-  let responseData: any;
-  try {
-    responseData = JSON.parse(responseText);
-  } catch {
-    responseData = { raw: responseText };
-  }
 
   // Detect "already cancelled" (cStat 573) as success - happens when retrying
   const errStr = JSON.stringify(responseData).toLowerCase();
