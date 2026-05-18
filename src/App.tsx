@@ -8,6 +8,7 @@ import { EnvironmentProvider } from "@/contexts/EnvironmentContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import Index from "./pages/Index";
 import Empresas from "./pages/Empresas";
+import Onboarding from "./pages/Onboarding";
 import NFCe from "./pages/NFCe";
 import NFe from "./pages/NFe";
 import MDFe from "./pages/MDFe";
@@ -35,6 +36,7 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Index /></ProtectedRoute>} />
             <Route path="/empresas" element={<ProtectedRoute><Empresas /></ProtectedRoute>} />
+            <Route path="/onboarding" element={<ProtectedRoute><Onboarding /></ProtectedRoute>} />
             <Route path="/nfe" element={<ProtectedRoute><NFe /></ProtectedRoute>} />
             <Route path="/nfce" element={<ProtectedRoute><NFCe /></ProtectedRoute>} />
             <Route path="/mdfe" element={<ProtectedRoute><MDFe /></ProtectedRoute>} />

@@ -11,7 +11,8 @@ import {
   Receipt,
   BookOpen,
   Webhook,
-  Truck
+  Truck,
+  Rocket
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,7 @@ import { toast } from "sonner";
 const navigation = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Empresas", href: "/empresas", icon: Building2 },
+  { name: "Novo Cliente", href: "/onboarding", icon: Rocket },
   { name: "NF-e", href: "/nfe", icon: FileText },
   { name: "NFC-e", href: "/nfce", icon: Receipt },
   { name: "MDF-e", href: "/mdfe", icon: Truck },
