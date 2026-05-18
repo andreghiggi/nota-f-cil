@@ -65,6 +65,64 @@
 
 <hr>
 
+<h2>1.1 Cadastro de Empresa (Onboarding)</h2>
+<div class="endpoint"><span class="badge post">POST</span> /nfe-api/register</div>
+<p>Endpoint <strong>público</strong> (não exige <code>x-api-key</code>) para criar uma empresa e receber automaticamente o token principal. Suporta <strong>Pessoa Jurídica (CNPJ)</strong> e <strong>Pessoa Física (CPF) — produtor rural</strong>.</p>
+
+<h3>Campos</h3>
+<table>
+  <thead><tr><th>Campo</th><th>Obrigatório</th><th>Descrição</th></tr></thead>
+  <tbody>
+    <tr><td><code>cnpj</code></td><td>Sim</td><td>CNPJ (14 dígitos) <em>ou</em> CPF (11 dígitos) do emitente. O tipo de pessoa é inferido pelo tamanho.</td></tr>
+    <tr><td><code>razao_social</code></td><td>Sim</td><td>Razão social (PJ) ou nome completo do produtor rural (PF).</td></tr>
+    <tr><td><code>nome_fantasia</code></td><td>Não</td><td>Nome fantasia (PJ) ou nome da propriedade rural (PF).</td></tr>
+    <tr><td><code>inscricao_estadual</code></td><td>Recomendado</td><td>IE — <strong>obrigatória para produtor rural PF</strong> emitir NF-e.</td></tr>
+    <tr><td><code>uf</code></td><td>Não</td><td>UF do emitente (padrão: SP).</td></tr>
+    <tr><td><code>municipio</code></td><td>Não</td><td>Nome do município.</td></tr>
+    <tr><td><code>codigo_municipio</code></td><td>Não</td><td>Código IBGE (7 dígitos).</td></tr>
+  </tbody>
+</table>
+
+<h3>Exemplo — Pessoa Jurídica</h3>
+<pre><code>await fetch('https://&lt;BASE_URL&gt;/functions/v1/nfe-api/register', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    cnpj: '12345678000190',
+    razao_social: 'Empresa Exemplo Ltda',
+    nome_fantasia: 'Exemplo',
+    inscricao_estadual: '1234567890',
+    uf: 'RS', municipio: 'Porto Alegre', codigo_municipio: '4314902'
+  })
+});</code></pre>
+
+<h3>Exemplo — Produtor Rural (Pessoa Física)</h3>
+<pre><code>await fetch('https://&lt;BASE_URL&gt;/functions/v1/nfe-api/register', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    cnpj: '01162635045',                  // CPF com 11 dígitos
+    razao_social: 'João da Silva',        // Nome completo do produtor
+    nome_fantasia: 'Fazenda Boa Vista',   // Nome da propriedade (opcional)
+    inscricao_estadual: '2651016327',     // IE obrigatória para PF
+    uf: 'RS', municipio: 'Bagé', codigo_municipio: '4301602'
+  })
+});</code></pre>
+
+<h3>Resposta (201)</h3>
+<pre><code>{
+  "success": true,
+  "empresa": { "id": "uuid", "razao_social": "...", "ambiente": "homologacao" },
+  "token": "sk_live_xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+  "tipo_pessoa": "PF"
+}</code></pre>
+
+<div class="note">
+  <strong>⚠️ Produtor Rural (PF):</strong> a emissão de NF-e por CPF pode apresentar rejeições intermitentes em homologação da SEFAZ-RS. O cadastro está liberado; valide a primeira emissão antes de ir para produção. <strong>NFC-e não é permitida para emitentes PF.</strong>
+</div>
+
+<hr>
+
 <h2>2. Emitir NF-e</h2>
 <div class="endpoint"><span class="badge post">POST</span> /nfe-api</div>
 
