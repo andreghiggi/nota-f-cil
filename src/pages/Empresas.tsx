@@ -146,10 +146,16 @@ export default function Empresas() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <Button className="btn-gradient" onClick={() => setFormOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nova Empresa
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setFormOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nova Empresa
+            </Button>
+            <Button className="btn-gradient" onClick={() => navigate("/onboarding")}>
+              <Plus className="h-4 w-4 mr-2" />
+              Wizard de Cadastro
+            </Button>
+          </div>
         </div>
 
         {/* Stats */}
@@ -212,9 +218,9 @@ export default function Empresas() {
                 : "Cadastre sua primeira empresa para começar"}
             </p>
             {!searchTerm && (
-              <Button onClick={() => setFormOpen(true)}>
+              <Button onClick={() => navigate("/onboarding")} className="btn-gradient">
                 <Plus className="h-4 w-4 mr-2" />
-                Nova Empresa
+                Iniciar Cadastro Guiado
               </Button>
             )}
           </div>
