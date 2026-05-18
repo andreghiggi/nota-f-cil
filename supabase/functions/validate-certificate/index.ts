@@ -64,7 +64,10 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         valid: true,
-        cnpj: simulatedCertInfo.cnpj,
+        // `cnpj` mantido por retrocompatibilidade — pode conter CNPJ ou CPF
+        cnpj: simulatedCertInfo.documento,
+        documento: simulatedCertInfo.documento,
+        tipo_pessoa: simulatedCertInfo.tipoPessoa,
         emissor: simulatedCertInfo.emissor,
         dataEmissao: simulatedCertInfo.dataEmissao,
         dataVencimento: simulatedCertInfo.dataVencimento
