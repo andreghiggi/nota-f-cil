@@ -1618,6 +1618,15 @@ export type Database = {
       gerar_numero_nfe:
         | { Args: { p_empresa_id: string }; Returns: string }
         | { Args: { p_empresa_id: string; p_serie?: string }; Returns: string }
+      proximo_numero_fiscal: {
+        Args: { p_empresa_id: string; p_serie: string; p_tipo: string }
+        Returns: {
+          ativo: boolean
+          proximo_numero: number
+          serie: string
+          ultimo_numero: number
+        }[]
+      }
       registrar_log: {
         Args: {
           p_categoria: string
