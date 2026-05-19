@@ -256,30 +256,102 @@ Deno.serve(async (req) => {
         return jsonResponse({ success: false, error: 'Erro ao listar séries.' }, 500);
       }
 
+      const { data: empDef } = await supabase
+        .from('empresas')
+        .select('serie_nfe, serie_nfce, serie_mdfe')
+        .eq('id', empresa_id)
+        .single();
+
+      const tipoToModelo = (t: string) => t === 'nfe' ? '55' : t === 'nfce' ? '65' : '58';
+
       const mapped = (series || []).map(s => ({
         serie: s.serie,
-        modelo: s.tipo === 'nfe' ? '55' : '65',
+        modelo: tipoToModelo(s.tipo),
+        tipo: s.tipo,
         ultimo_numero: s.numero_atual,
+        proximo_numero: s.numero_atual + 1,
         ativa: s.ativo,
+        padrao_empresa:
+          (s.tipo === 'nfe' && s.serie === empDef?.serie_nfe) ||
+          (s.tipo === 'nfce' && s.serie === empDef?.serie_nfce) ||
+          (s.tipo === 'mdfe' && s.serie === empDef?.serie_mdfe),
       }));
 
-      return jsonResponse({ success: true, data: mapped });
+      return jsonResponse({
+        success: true,
+        data: mapped,
+        padroes: {
+          nfe: empDef?.serie_nfe || null,
+          nfce: empDef?.serie_nfce || null,
+          mdfe: empDef?.serie_mdfe || null,
+        },
+      });
     }
 
     // =====================================================================
-    // POST /series
+    // GET /proximo-numero?modelo=55&serie=002
+    //   - modelo: 55 (NF-e) | 65 (NFC-e) | 58 (MDF-e). Default: 55
+    //   - serie: opcional. Se omitida, usa a série padrão da empresa.
+    // Retorna o próximo número SEM incrementar (consulta).
+    // =====================================================================
+    if (method === 'GET' && route === 'proximo-numero') {
+      const modelo = url.searchParams.get('modelo') || '55';
+      const tipo = modelo === '65' ? 'nfce' : modelo === '58' ? 'mdfe' : 'nfe';
+      let serie = url.searchParams.get('serie');
+
+      if (!serie) {
+        const { data: emp } = await supabase
+          .from('empresas')
+          .select('serie_nfe, serie_nfce, serie_mdfe')
+          .eq('id', empresa_id)
+          .single();
+        serie = tipo === 'nfe' ? emp?.serie_nfe
+              : tipo === 'nfce' ? emp?.serie_nfce
+              : emp?.serie_mdfe;
+        if (!serie) {
+          return jsonResponse({ success: false, error: 'Série padrão não configurada para a empresa.' }, 400);
+        }
+      }
+
+      const { data: row } = await supabase
+        .from('series_fiscais')
+        .select('numero_atual, ativo')
+        .eq('empresa_id', empresa_id)
+        .eq('tipo', tipo)
+        .eq('serie', serie)
+        .maybeSingle();
+
+      const ultimo = row?.numero_atual ?? 0;
+      return jsonResponse({
+        success: true,
+        data: {
+          modelo,
+          tipo,
+          serie,
+          ultimo_numero: ultimo,
+          proximo_numero: ultimo + 1,
+          ativa: row?.ativo ?? false,
+          existe: !!row,
+        },
+      });
+    }
+
+    // =====================================================================
+    // POST /series  { serie, modelo, ativa?, ultimo_numero? }
     // =====================================================================
     if (method === 'POST' && route === 'series') {
       const body = await req.json();
-      const { serie, modelo, ativa } = body;
+      const { serie, modelo, ativa, ultimo_numero } = body;
 
       if (!serie || !modelo) {
         return jsonResponse({ success: false, error: 'Campos serie e modelo são obrigatórios.' }, 400);
       }
 
-      const tipo = modelo === '55' ? 'nfe' : 'nfce';
+      const tipo = modelo === '55' ? 'nfe' : modelo === '65' ? 'nfce' : modelo === '58' ? 'mdfe' : null;
+      if (!tipo) {
+        return jsonResponse({ success: false, error: 'Modelo inválido. Use 55, 65 ou 58.' }, 400);
+      }
 
-      // Upsert
       const { data: existing } = await supabase
         .from('series_fiscais')
         .select('id, numero_atual')
@@ -288,11 +360,21 @@ Deno.serve(async (req) => {
         .eq('serie', serie)
         .maybeSingle();
 
+      const patch: any = { updated_at: new Date().toISOString() };
+      if (ativa !== undefined) patch.ativo = ativa;
+      if (ultimo_numero !== undefined && ultimo_numero !== null) {
+        const n = parseInt(String(ultimo_numero), 10);
+        if (Number.isNaN(n) || n < 0) {
+          return jsonResponse({ success: false, error: 'ultimo_numero inválido.' }, 400);
+        }
+        patch.numero_atual = n;
+      }
+
       let result;
       if (existing) {
         const { data, error } = await supabase
           .from('series_fiscais')
-          .update({ ativo: ativa !== undefined ? ativa : true, updated_at: new Date().toISOString() })
+          .update(patch)
           .eq('id', existing.id)
           .select()
           .single();
@@ -300,7 +382,13 @@ Deno.serve(async (req) => {
       } else {
         const { data, error } = await supabase
           .from('series_fiscais')
-          .insert({ empresa_id, tipo, serie, numero_atual: 0, ativo: ativa !== undefined ? ativa : true })
+          .insert({
+            empresa_id,
+            tipo,
+            serie,
+            numero_atual: patch.numero_atual ?? 0,
+            ativo: ativa !== undefined ? ativa : true,
+          })
           .select()
           .single();
         result = { data, error };
@@ -315,7 +403,9 @@ Deno.serve(async (req) => {
         data: {
           serie: result.data.serie,
           modelo,
+          tipo,
           ultimo_numero: result.data.numero_atual,
+          proximo_numero: result.data.numero_atual + 1,
           ativa: result.data.ativo,
         },
       });
