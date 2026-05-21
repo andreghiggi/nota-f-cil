@@ -1,0 +1,1 @@
+UPDATE public.nfe SET dest_cpf_cnpj='11144477735', status='pendente', erro_processamento=NULL, motivo_retorno=NULL WHERE id='742c524c-6101-4a74-ae8e-c2dfaa9c1919';
