@@ -915,6 +915,73 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                     </p>
                   </div>
                 )}
+
+                <div className="border-t border-border pt-4 space-y-3">
+                  <div>
+                    <h4 className="font-medium text-foreground">Responsável Técnico</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Obrigatório no RS para NF-e. Geralmente os dados da empresa/desenvolvedor da solução fiscal.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="resp_tec_cnpj"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>CNPJ Resp. Técnico</FormLabel>
+                          <FormControl>
+                            <Input placeholder="00.000.000/0000-00" maxLength={18} {...field}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(formatCNPJ(e.target.value.replace(/\D/g, '')))} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="resp_tec_contato"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Contato</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nome do responsável" maxLength={60} {...field} value={field.value || ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="resp_tec_email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>E-mail</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="contato@empresa.com" maxLength={60} {...field} value={field.value || ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="resp_tec_fone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Telefone</FormLabel>
+                          <FormControl>
+                            <Input placeholder="(00) 00000-0000" maxLength={20} {...field}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(formatPhone(e.target.value.replace(/\D/g, '')))} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="nfe" className="space-y-4 mt-4">
