@@ -155,7 +155,13 @@ const empresaSchema = z.object({
   // CSC (Código de Segurança do Contribuinte)
   csc_id: z.string().max(10).optional().nullable(),
   csc_token: z.string().max(50).optional().nullable(),
-  
+
+  // Responsável Técnico (obrigatório em RS para NF-e)
+  resp_tec_cnpj: z.string().max(20).optional().nullable(),
+  resp_tec_contato: z.string().max(60).optional().nullable(),
+  resp_tec_email: z.string().email("E-mail inválido").max(60).optional().or(z.literal("")).nullable(),
+  resp_tec_fone: z.string().max(20).optional().nullable(),
+
   // Status
   ativo: z.boolean().default(true),
 }).superRefine((data, ctx) => {
@@ -241,6 +247,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       rntrc: "",
       csc_id: "",
       csc_token: "",
+      resp_tec_cnpj: "",
+      resp_tec_contato: "",
+      resp_tec_email: "",
+      resp_tec_fone: "",
       ativo: true,
     },
   });
@@ -274,6 +284,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         rntrc: (empresa as any).rntrc || "",
         csc_id: empresa.csc_id || "",
         csc_token: empresa.csc_token || "",
+        resp_tec_cnpj: (empresa as any).resp_tec_cnpj ? formatCNPJ((empresa as any).resp_tec_cnpj) : "",
+        resp_tec_contato: (empresa as any).resp_tec_contato || "",
+        resp_tec_email: (empresa as any).resp_tec_email || "",
+        resp_tec_fone: (empresa as any).resp_tec_fone || "",
         ativo: empresa.ativo,
       });
     } else {
@@ -302,6 +316,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         rntrc: "",
         csc_id: "",
         csc_token: "",
+        resp_tec_cnpj: "",
+        resp_tec_contato: "",
+        resp_tec_email: "",
+        resp_tec_fone: "",
         ativo: true,
       });
     }
@@ -423,6 +441,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         rntrc: data.rntrc?.replace(/\D/g, '') || null,
         csc_id: data.csc_id || null,
         csc_token: data.csc_token || null,
+        resp_tec_cnpj: data.resp_tec_cnpj?.replace(/\D/g, '') || null,
+        resp_tec_contato: data.resp_tec_contato || null,
+        resp_tec_email: data.resp_tec_email || null,
+        resp_tec_fone: data.resp_tec_fone?.replace(/\D/g, '') || null,
         ativo: data.ativo,
       };
 
@@ -893,6 +915,73 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                     </p>
                   </div>
                 )}
+
+                <div className="border-t border-border pt-4 space-y-3">
+                  <div>
+                    <h4 className="font-medium text-foreground">Responsável Técnico</h4>
+                    <p className="text-xs text-muted-foreground">
+                      Obrigatório no RS para NF-e. Geralmente os dados da empresa/desenvolvedor da solução fiscal.
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <FormField
+                      control={form.control}
+                      name="resp_tec_cnpj"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>CNPJ Resp. Técnico</FormLabel>
+                          <FormControl>
+                            <Input placeholder="00.000.000/0000-00" maxLength={18} {...field}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(formatCNPJ(e.target.value.replace(/\D/g, '')))} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="resp_tec_contato"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Contato</FormLabel>
+                          <FormControl>
+                            <Input placeholder="Nome do responsável" maxLength={60} {...field} value={field.value || ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="resp_tec_email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>E-mail</FormLabel>
+                          <FormControl>
+                            <Input type="email" placeholder="contato@empresa.com" maxLength={60} {...field} value={field.value || ""} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="resp_tec_fone"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Telefone</FormLabel>
+                          <FormControl>
+                            <Input placeholder="(00) 00000-0000" maxLength={20} {...field}
+                              value={field.value || ""}
+                              onChange={(e) => field.onChange(formatPhone(e.target.value.replace(/\D/g, '')))} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
               </TabsContent>
 
               <TabsContent value="nfe" className="space-y-4 mt-4">

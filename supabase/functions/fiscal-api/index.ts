@@ -731,6 +731,16 @@ Deno.serve(async (req) => {
           ncm: item.ncm,
           cfop: item.cfop,
           unidade: item.unidade,
+          // Códigos de barras (cEAN/cEANTrib): "SEM" quando ausente (exigência NT 2016)
+          cean: item.cean || 'SEM',
+          cEAN: item.cean || 'SEM',
+          cean_trib: item.cean_trib || item.cean || 'SEM',
+          cEANTrib: item.cean_trib || item.cean || 'SEM',
+          ...(item.ex_tipi ? { ex_tipi: item.ex_tipi, EXTIPI: item.ex_tipi } : {}),
+          ...(item.cest ? { cest: item.cest, CEST: item.cest } : {}),
+          ...(item.cnpj_fab ? { cnpj_fab: item.cnpj_fab, CNPJFab: item.cnpj_fab } : {}),
+          ...(item.ind_escala ? { ind_escala: item.ind_escala, indEscala: item.ind_escala } : {}),
+          ...(item.inf_ad_prod ? { inf_ad_prod: item.inf_ad_prod, infAdProd: item.inf_ad_prod } : {}),
           cst_icms: item.cst_icms,
           csosn: item.csosn,
           aliquota_icms: item.aliquota_icms,
@@ -742,6 +752,8 @@ Deno.serve(async (req) => {
           cst_ipi: item.cst_ipi || '99',
           aliquota_ipi: item.aliquota_ipi ?? 0,
           base_calculo_ipi: item.base_calculo_ipi || item.valor_total || 0,
+          c_enq_ipi: item.c_enq_ipi || '999',
+          cEnq: item.c_enq_ipi || '999',
           cst_pis: item.cst_pis || '99',
           aliquota_pis: item.aliquota_pis ?? 0,
           base_calculo_pis: item.base_calculo_pis || item.valor_total || 0,
@@ -864,6 +876,98 @@ Deno.serve(async (req) => {
       }
 
 
+      // ===== Blocos adicionais (ide extras, entrega, transp, infAdic, infRespTec) =====
+      const payloadEntrada = nfe.payload_entrada || {};
+
+      // ide opcionais
+      const ideExtras: any = {};
+      if (nfe.dh_sai_ent) ideExtras.dhSaiEnt = nfe.dh_sai_ent;
+      if (nfe.id_dest != null) ideExtras.idDest = nfe.id_dest;
+      if (nfe.ind_final != null) ideExtras.indFinal = nfe.ind_final;
+      if (nfe.ind_pres != null) ideExtras.indPres = nfe.ind_pres;
+      if (nfe.tp_nf != null) ideExtras.tpNF = nfe.tp_nf;
+      Object.assign(ideExtras, payloadEntrada.ide || {});
+
+      // Endereço de entrega (quando diferente do destinatário)
+      const entregaSrc = nfe.entrega || payloadEntrada.entrega || null;
+      const entregaPayload = entregaSrc && (entregaSrc.cnpj || entregaSrc.cpf || entregaSrc.CNPJ || entregaSrc.CPF)
+        ? {
+            ...(entregaSrc.cnpj || entregaSrc.CNPJ ? { CNPJ: (entregaSrc.cnpj || entregaSrc.CNPJ).replace(/\D/g, '') } : {}),
+            ...(entregaSrc.cpf || entregaSrc.CPF ? { CPF: (entregaSrc.cpf || entregaSrc.CPF).replace(/\D/g, '') } : {}),
+            xNome: entregaSrc.nome || entregaSrc.xNome,
+            xLgr: entregaSrc.logradouro || entregaSrc.xLgr,
+            nro: entregaSrc.numero || entregaSrc.nro || 'SN',
+            xCpl: entregaSrc.complemento || entregaSrc.xCpl,
+            xBairro: entregaSrc.bairro || entregaSrc.xBairro,
+            cMun: entregaSrc.codigo_municipio || entregaSrc.cMun,
+            xMun: entregaSrc.municipio || entregaSrc.xMun,
+            UF: entregaSrc.uf || entregaSrc.UF,
+            CEP: (entregaSrc.cep || entregaSrc.CEP || '').replace(/\D/g, ''),
+          }
+        : null;
+
+      // Transporte (transp + veicTransp + vol)
+      const transpSrc = nfe.transporte || payloadEntrada.transporte || payloadEntrada.transp || null;
+      let transpPayload: any = null;
+      if (transpSrc) {
+        const t: any = { modFrete: String(nfe.modalidade_frete ?? transpSrc.modFrete ?? '9') };
+        const tr = transpSrc.transportadora || transpSrc.transporta || null;
+        if (tr) {
+          t.transporta = {
+            ...(tr.cnpj || tr.CNPJ ? { CNPJ: (tr.cnpj || tr.CNPJ).replace(/\D/g, '') } : {}),
+            ...(tr.cpf || tr.CPF ? { CPF: (tr.cpf || tr.CPF).replace(/\D/g, '') } : {}),
+            xNome: tr.nome || tr.xNome,
+            ...(tr.ie || tr.IE ? { IE: (tr.ie || tr.IE).replace(/\D/g, '') } : {}),
+            xEnder: tr.endereco || tr.xEnder,
+            xMun: tr.municipio || tr.xMun,
+            UF: tr.uf || tr.UF,
+          };
+        }
+        const veic = transpSrc.veiculo || transpSrc.veicTransp || null;
+        if (veic?.placa) {
+          t.veicTransp = {
+            placa: veic.placa.replace(/[^A-Z0-9]/gi, '').toUpperCase(),
+            UF: veic.uf || veic.UF,
+            ...(veic.rntc || veic.RNTC ? { RNTC: veic.rntc || veic.RNTC } : {}),
+          };
+        }
+        const vols = Array.isArray(transpSrc.volumes) ? transpSrc.volumes : (transpSrc.vol ? [transpSrc.vol] : []);
+        if (vols.length) {
+          t.vol = vols.map((v: any) => ({
+            ...(v.qVol || v.quantidade ? { qVol: v.qVol || v.quantidade } : {}),
+            ...(v.esp || v.especie ? { esp: v.esp || v.especie } : {}),
+            ...(v.marca ? { marca: v.marca } : {}),
+            ...(v.nVol || v.numeracao ? { nVol: v.nVol || v.numeracao } : {}),
+            ...(v.pesoL || v.peso_liquido ? { pesoL: Number(v.pesoL || v.peso_liquido).toFixed(3) } : {}),
+            ...(v.pesoB || v.peso_bruto ? { pesoB: Number(v.pesoB || v.peso_bruto).toFixed(3) } : {}),
+          }));
+        }
+        transpPayload = t;
+      }
+
+      // Informações adicionais
+      const infAdicPayload: any = {};
+      if (nfe.inf_cpl) infAdicPayload.infCpl = nfe.inf_cpl;
+      if (nfe.inf_ad_fisco) infAdicPayload.infAdFisco = nfe.inf_ad_fisco;
+      if (payloadEntrada.inf_cpl && !infAdicPayload.infCpl) infAdicPayload.infCpl = payloadEntrada.inf_cpl;
+      if (payloadEntrada.infCpl && !infAdicPayload.infCpl) infAdicPayload.infCpl = payloadEntrada.infCpl;
+
+      // Responsável Técnico (RS exige) — nota > empresa > payload
+      const rtSrc = nfe.resp_tec || payloadEntrada.resp_tec || payloadEntrada.infRespTec || (
+        empresa.resp_tec_cnpj ? {
+          cnpj: empresa.resp_tec_cnpj,
+          contato: empresa.resp_tec_contato,
+          email: empresa.resp_tec_email,
+          fone: empresa.resp_tec_fone,
+        } : null
+      );
+      const respTecPayload = rtSrc && (rtSrc.cnpj || rtSrc.CNPJ) ? {
+        CNPJ: (rtSrc.cnpj || rtSrc.CNPJ).replace(/\D/g, ''),
+        xContato: (rtSrc.contato || rtSrc.xContato || '').toString().slice(0, 60),
+        email: rtSrc.email,
+        fone: (rtSrc.fone || rtSrc.telefone || '').toString().replace(/\D/g, ''),
+      } : null;
+
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
@@ -918,6 +1022,17 @@ Deno.serve(async (req) => {
             vDevTribIBSMunTot: nfe.valor_dev_trib_ibs_mun_total || 0,
             vDevTribCBSTot: nfe.valor_dev_trib_cbs_total || 0,
           },
+          // ide extras (dhSaiEnt, idDest, indFinal, indPres, tpNF)
+          ...ideExtras,
+          ide: ideExtras,
+          // Entrega (endereço diferente do destinatário)
+          ...(entregaPayload ? { entrega: entregaPayload } : {}),
+          // Transporte completo
+          ...(transpPayload ? { transp: transpPayload, transporte: transpPayload } : {}),
+          // Informações adicionais
+          ...(Object.keys(infAdicPayload).length ? { infAdic: infAdicPayload, ...infAdicPayload } : {}),
+          // Responsável Técnico
+          ...(respTecPayload ? { infRespTec: respTecPayload, resp_tec: respTecPayload, responsavel_tecnico: respTecPayload } : {}),
         },
         // Pagamento também no nível raiz (PHP legado lê do topo)
         pag: nfePagBlock,
@@ -934,6 +1049,12 @@ Deno.serve(async (req) => {
           fatura: cobrancaPayload.fat,
           duplicatas: cobrancaPayload.duplicatas,
         } : {}),
+        // Blocos adicionais também no nível raiz p/ compat. PHP legado
+        ...(entregaPayload ? { entrega: entregaPayload } : {}),
+        ...(transpPayload ? { transp: transpPayload, transporte: transpPayload } : {}),
+        ...(Object.keys(infAdicPayload).length ? { infAdic: infAdicPayload, ...infAdicPayload } : {}),
+        ...(respTecPayload ? { infRespTec: respTecPayload, resp_tec: respTecPayload, responsavel_tecnico: respTecPayload } : {}),
+        ...ideExtras,
         emitente: {
           cMun: empresa.codigo_municipio || '',
           xMun: empresa.municipio || '',
