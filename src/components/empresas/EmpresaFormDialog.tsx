@@ -247,6 +247,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       rntrc: "",
       csc_id: "",
       csc_token: "",
+      resp_tec_cnpj: "",
+      resp_tec_contato: "",
+      resp_tec_email: "",
+      resp_tec_fone: "",
       ativo: true,
     },
   });
