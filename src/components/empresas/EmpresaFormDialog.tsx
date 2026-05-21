@@ -284,6 +284,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         rntrc: (empresa as any).rntrc || "",
         csc_id: empresa.csc_id || "",
         csc_token: empresa.csc_token || "",
+        resp_tec_cnpj: (empresa as any).resp_tec_cnpj ? formatCNPJ((empresa as any).resp_tec_cnpj) : "",
+        resp_tec_contato: (empresa as any).resp_tec_contato || "",
+        resp_tec_email: (empresa as any).resp_tec_email || "",
+        resp_tec_fone: (empresa as any).resp_tec_fone || "",
         ativo: empresa.ativo,
       });
     } else {
