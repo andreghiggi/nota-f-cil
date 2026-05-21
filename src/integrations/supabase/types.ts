@@ -143,6 +143,10 @@ export type Database = {
           numero_nfe_atual: number
           razao_social: string
           regime_tributario: Database["public"]["Enums"]["regime_tributario"]
+          resp_tec_cnpj: string | null
+          resp_tec_contato: string | null
+          resp_tec_email: string | null
+          resp_tec_fone: string | null
           rntrc: string | null
           serie_mdfe: string
           serie_nfce: string
@@ -178,6 +182,10 @@ export type Database = {
           numero_nfe_atual?: number
           razao_social: string
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
+          resp_tec_cnpj?: string | null
+          resp_tec_contato?: string | null
+          resp_tec_email?: string | null
+          resp_tec_fone?: string | null
           rntrc?: string | null
           serie_mdfe?: string
           serie_nfce?: string
@@ -213,6 +221,10 @@ export type Database = {
           numero_nfe_atual?: number
           razao_social?: string
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
+          resp_tec_cnpj?: string | null
+          resp_tec_contato?: string | null
+          resp_tec_email?: string | null
+          resp_tec_fone?: string | null
           rntrc?: string | null
           serie_mdfe?: string
           serie_nfce?: string
@@ -935,12 +947,19 @@ export type Database = {
           dest_numero: string | null
           dest_telefone: string | null
           dest_uf: string | null
+          dh_sai_ent: string | null
           empresa_id: string
+          entrega: Json | null
           erro_processamento: string | null
           external_id: string | null
           finalidade: string
           id: string
+          id_dest: number | null
+          ind_final: number | null
           ind_intermed: number | null
+          ind_pres: number | null
+          inf_ad_fisco: string | null
+          inf_cpl: string | null
           modalidade_frete: string
           motivo_retorno: string | null
           natureza_operacao: string
@@ -949,14 +968,17 @@ export type Database = {
           payload_entrada: Json
           processado_em: string | null
           protocolo: string | null
+          resp_tec: Json | null
           serie: string
           status: Database["public"]["Enums"]["nfce_status"]
           tentativas: number
           token_api_id: string | null
           tp_ente_gov: number | null
+          tp_nf: number | null
           tp_nf_credito: string | null
           tp_nf_debito: string | null
           tp_oper_gov: number | null
+          transporte: Json | null
           updated_at: string
           valor_cbs_mono_total: number | null
           valor_cbs_total: number | null
@@ -1005,12 +1027,19 @@ export type Database = {
           dest_numero?: string | null
           dest_telefone?: string | null
           dest_uf?: string | null
+          dh_sai_ent?: string | null
           empresa_id: string
+          entrega?: Json | null
           erro_processamento?: string | null
           external_id?: string | null
           finalidade?: string
           id?: string
+          id_dest?: number | null
+          ind_final?: number | null
           ind_intermed?: number | null
+          ind_pres?: number | null
+          inf_ad_fisco?: string | null
+          inf_cpl?: string | null
           modalidade_frete?: string
           motivo_retorno?: string | null
           natureza_operacao?: string
@@ -1019,14 +1048,17 @@ export type Database = {
           payload_entrada: Json
           processado_em?: string | null
           protocolo?: string | null
+          resp_tec?: Json | null
           serie: string
           status?: Database["public"]["Enums"]["nfce_status"]
           tentativas?: number
           token_api_id?: string | null
           tp_ente_gov?: number | null
+          tp_nf?: number | null
           tp_nf_credito?: string | null
           tp_nf_debito?: string | null
           tp_oper_gov?: number | null
+          transporte?: Json | null
           updated_at?: string
           valor_cbs_mono_total?: number | null
           valor_cbs_total?: number | null
@@ -1075,12 +1107,19 @@ export type Database = {
           dest_numero?: string | null
           dest_telefone?: string | null
           dest_uf?: string | null
+          dh_sai_ent?: string | null
           empresa_id?: string
+          entrega?: Json | null
           erro_processamento?: string | null
           external_id?: string | null
           finalidade?: string
           id?: string
+          id_dest?: number | null
+          ind_final?: number | null
           ind_intermed?: number | null
+          ind_pres?: number | null
+          inf_ad_fisco?: string | null
+          inf_cpl?: string | null
           modalidade_frete?: string
           motivo_retorno?: string | null
           natureza_operacao?: string
@@ -1089,14 +1128,17 @@ export type Database = {
           payload_entrada?: Json
           processado_em?: string | null
           protocolo?: string | null
+          resp_tec?: Json | null
           serie?: string
           status?: Database["public"]["Enums"]["nfce_status"]
           tentativas?: number
           token_api_id?: string | null
           tp_ente_gov?: number | null
+          tp_nf?: number | null
           tp_nf_credito?: string | null
           tp_nf_debito?: string | null
           tp_oper_gov?: number | null
+          transporte?: Json | null
           updated_at?: string
           valor_cbs_mono_total?: number | null
           valor_cbs_total?: number | null
@@ -1212,7 +1254,12 @@ export type Database = {
           base_calculo_pis: number | null
           c_class_trib: string | null
           c_class_trib_is: string | null
+          c_enq_ipi: string | null
+          cean: string | null
+          cean_trib: string | null
+          cest: string | null
           cfop: string
+          cnpj_fab: string | null
           codigo_produto: string
           created_at: string
           csosn: string | null
@@ -1223,9 +1270,12 @@ export type Database = {
           cst_is: string | null
           cst_pis: string | null
           descricao: string
+          ex_tipi: string | null
           id: string
           ind_bem_movel_usado: number | null
           ind_doacao: number | null
+          ind_escala: string | null
+          inf_ad_prod: string | null
           mva_icms_st: number | null
           ncm: string | null
           nfe_id: string
@@ -1277,7 +1327,12 @@ export type Database = {
           base_calculo_pis?: number | null
           c_class_trib?: string | null
           c_class_trib_is?: string | null
+          c_enq_ipi?: string | null
+          cean?: string | null
+          cean_trib?: string | null
+          cest?: string | null
           cfop: string
+          cnpj_fab?: string | null
           codigo_produto: string
           created_at?: string
           csosn?: string | null
@@ -1288,9 +1343,12 @@ export type Database = {
           cst_is?: string | null
           cst_pis?: string | null
           descricao: string
+          ex_tipi?: string | null
           id?: string
           ind_bem_movel_usado?: number | null
           ind_doacao?: number | null
+          ind_escala?: string | null
+          inf_ad_prod?: string | null
           mva_icms_st?: number | null
           ncm?: string | null
           nfe_id: string
@@ -1342,7 +1400,12 @@ export type Database = {
           base_calculo_pis?: number | null
           c_class_trib?: string | null
           c_class_trib_is?: string | null
+          c_enq_ipi?: string | null
+          cean?: string | null
+          cean_trib?: string | null
+          cest?: string | null
           cfop?: string
+          cnpj_fab?: string | null
           codigo_produto?: string
           created_at?: string
           csosn?: string | null
@@ -1353,9 +1416,12 @@ export type Database = {
           cst_is?: string | null
           cst_pis?: string | null
           descricao?: string
+          ex_tipi?: string | null
           id?: string
           ind_bem_movel_usado?: number | null
           ind_doacao?: number | null
+          ind_escala?: string | null
+          inf_ad_prod?: string | null
           mva_icms_st?: number | null
           ncm?: string | null
           nfe_id?: string
