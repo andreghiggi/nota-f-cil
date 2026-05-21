@@ -1022,6 +1022,17 @@ Deno.serve(async (req) => {
             vDevTribIBSMunTot: nfe.valor_dev_trib_ibs_mun_total || 0,
             vDevTribCBSTot: nfe.valor_dev_trib_cbs_total || 0,
           },
+          // ide extras (dhSaiEnt, idDest, indFinal, indPres, tpNF)
+          ...ideExtras,
+          ide: ideExtras,
+          // Entrega (endereço diferente do destinatário)
+          ...(entregaPayload ? { entrega: entregaPayload } : {}),
+          // Transporte completo
+          ...(transpPayload ? { transp: transpPayload, transporte: transpPayload } : {}),
+          // Informações adicionais
+          ...(Object.keys(infAdicPayload).length ? { infAdic: infAdicPayload, ...infAdicPayload } : {}),
+          // Responsável Técnico
+          ...(respTecPayload ? { infRespTec: respTecPayload, resp_tec: respTecPayload, responsavel_tecnico: respTecPayload } : {}),
         },
         // Pagamento também no nível raiz (PHP legado lê do topo)
         pag: nfePagBlock,
@@ -1038,6 +1049,12 @@ Deno.serve(async (req) => {
           fatura: cobrancaPayload.fat,
           duplicatas: cobrancaPayload.duplicatas,
         } : {}),
+        // Blocos adicionais também no nível raiz p/ compat. PHP legado
+        ...(entregaPayload ? { entrega: entregaPayload } : {}),
+        ...(transpPayload ? { transp: transpPayload, transporte: transpPayload } : {}),
+        ...(Object.keys(infAdicPayload).length ? { infAdic: infAdicPayload, ...infAdicPayload } : {}),
+        ...(respTecPayload ? { infRespTec: respTecPayload, resp_tec: respTecPayload, responsavel_tecnico: respTecPayload } : {}),
+        ...ideExtras,
         emitente: {
           cMun: empresa.codigo_municipio || '',
           xMun: empresa.municipio || '',
