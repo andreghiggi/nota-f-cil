@@ -441,6 +441,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         rntrc: data.rntrc?.replace(/\D/g, '') || null,
         csc_id: data.csc_id || null,
         csc_token: data.csc_token || null,
+        resp_tec_cnpj: data.resp_tec_cnpj?.replace(/\D/g, '') || null,
+        resp_tec_contato: data.resp_tec_contato || null,
+        resp_tec_email: data.resp_tec_email || null,
+        resp_tec_fone: data.resp_tec_fone?.replace(/\D/g, '') || null,
         ativo: data.ativo,
       };
 
