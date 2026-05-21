@@ -155,7 +155,13 @@ const empresaSchema = z.object({
   // CSC (Código de Segurança do Contribuinte)
   csc_id: z.string().max(10).optional().nullable(),
   csc_token: z.string().max(50).optional().nullable(),
-  
+
+  // Responsável Técnico (obrigatório em RS para NF-e)
+  resp_tec_cnpj: z.string().max(20).optional().nullable(),
+  resp_tec_contato: z.string().max(60).optional().nullable(),
+  resp_tec_email: z.string().email("E-mail inválido").max(60).optional().or(z.literal("")).nullable(),
+  resp_tec_fone: z.string().max(20).optional().nullable(),
+
   // Status
   ativo: z.boolean().default(true),
 }).superRefine((data, ctx) => {
