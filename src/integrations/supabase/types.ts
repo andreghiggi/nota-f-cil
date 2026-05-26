@@ -1674,6 +1674,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      excluir_documento_nao_processado: {
+        Args: { p_id: string; p_tipo: string }
+        Returns: Json
+      }
       gerar_numero_mdfe: {
         Args: { p_empresa_id: string; p_serie?: string }
         Returns: string

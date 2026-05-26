@@ -14,7 +14,8 @@ import {
   QrCode,
   FileText,
   Inbox,
-  Printer
+  Printer,
+  Trash2
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -146,6 +147,19 @@ export default function NFCe() {
     await supabase.from("fila_processamento").upsert({ nfce_id: nfceId, tentativas: 0, proximo_processamento: new Date().toISOString(), erro_ultimo: null }, { onConflict: "nfce_id" });
     queryClient.invalidateQueries({ queryKey: ["nfce"] });
     toast.success(`NFC-e ${numero} enviada para reprocessamento`);
+  };
+
+  const handleExcluir = async (nfceId: string, numero: string, status: string) => {
+    if (!["pendente", "rejeitada", "denegada"].includes(status)) {
+      toast.error("Só é possível excluir notas não autorizadas");
+      return;
+    }
+    if (!confirm(`Excluir NFC-e ${numero}? Se este for o último número emitido da série, a numeração será devolvida.`)) return;
+    const { data, error } = await supabase.rpc("excluir_documento_nao_processado" as any, { p_tipo: "nfce", p_id: nfceId });
+    if (error) { toast.error(`Erro ao excluir: ${error.message}`); return; }
+    queryClient.invalidateQueries({ queryKey: ["nfce"] });
+    const devolvida = (data as any)?.numeracao_devolvida;
+    toast.success(`NFC-e ${numero} excluída${devolvida ? " (numeração devolvida)" : ""}`);
   };
 
   const handleCancelar = async (justificativa: string) => {
@@ -334,6 +348,11 @@ export default function NFCe() {
                             {nfce.status === "autorizada" && (
                               <DropdownMenuItem className="text-destructive" onSelect={() => { setTimeout(() => { setCancelNfce({ id: nfce.id, numero: nfce.numero }); setCancelOpen(true); }, 0); }}>
                                 <XCircle className="h-4 w-4 mr-2" />Cancelar
+                              </DropdownMenuItem>
+                            )}
+                            {["pendente", "rejeitada", "denegada"].includes(nfce.status) && (
+                              <DropdownMenuItem className="text-destructive" onSelect={() => handleExcluir(nfce.id, nfce.numero, nfce.status)}>
+                                <Trash2 className="h-4 w-4 mr-2" />Excluir (devolve numeração)
                               </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>

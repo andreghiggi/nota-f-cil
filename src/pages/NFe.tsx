@@ -13,6 +13,7 @@ import {
   Inbox,
   Printer,
   FileEdit,
+  Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -141,6 +142,19 @@ export default function NFe() {
     );
     queryClient.invalidateQueries({ queryKey: ["nfe"] });
     toast.success(`NF-e ${numero} enviada para reprocessamento`);
+  };
+
+  const handleExcluir = async (nfeId: string, numero: string, status: string) => {
+    if (!["pendente", "rejeitada", "denegada"].includes(status)) {
+      toast.error("Só é possível excluir notas não autorizadas");
+      return;
+    }
+    if (!confirm(`Excluir NF-e ${numero}? Se este for o último número emitido da série, a numeração será devolvida.`)) return;
+    const { data, error } = await supabase.rpc("excluir_documento_nao_processado" as any, { p_tipo: "nfe", p_id: nfeId });
+    if (error) { toast.error(`Erro ao excluir: ${error.message}`); return; }
+    queryClient.invalidateQueries({ queryKey: ["nfe"] });
+    const devolvida = (data as any)?.numeracao_devolvida;
+    toast.success(`NF-e ${numero} excluída${devolvida ? " (numeração devolvida)" : ""}`);
   };
 
   const handleCancelar = async (justificativa: string) => {
@@ -352,6 +366,11 @@ export default function NFe() {
                                   <XCircle className="h-4 w-4 mr-2" />Cancelar
                                 </DropdownMenuItem>
                               </>
+                            )}
+                            {["pendente", "rejeitada", "denegada"].includes(nfe.status) && (
+                              <DropdownMenuItem className="text-destructive" onSelect={() => handleExcluir(nfe.id, nfe.numero, nfe.status)}>
+                                <Trash2 className="h-4 w-4 mr-2" />Excluir (devolve numeração)
+                              </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
