@@ -149,6 +149,19 @@ export default function NFCe() {
     toast.success(`NFC-e ${numero} enviada para reprocessamento`);
   };
 
+  const handleExcluir = async (nfceId: string, numero: string, status: string) => {
+    if (!["pendente", "rejeitada", "denegada"].includes(status)) {
+      toast.error("Só é possível excluir notas não autorizadas");
+      return;
+    }
+    if (!confirm(`Excluir NFC-e ${numero}? Se este for o último número emitido da série, a numeração será devolvida.`)) return;
+    const { data, error } = await supabase.rpc("excluir_documento_nao_processado" as any, { p_tipo: "nfce", p_id: nfceId });
+    if (error) { toast.error(`Erro ao excluir: ${error.message}`); return; }
+    queryClient.invalidateQueries({ queryKey: ["nfce"] });
+    const devolvida = (data as any)?.numeracao_devolvida;
+    toast.success(`NFC-e ${numero} excluída${devolvida ? " (numeração devolvida)" : ""}`);
+  };
+
   const handleCancelar = async (justificativa: string) => {
     setCancelLoading(true);
     try {
