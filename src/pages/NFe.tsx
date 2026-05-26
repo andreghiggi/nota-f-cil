@@ -362,10 +362,26 @@ export default function NFe() {
                                 <DropdownMenuItem onSelect={() => { setTimeout(() => { setCceNfe({ id: nfe.id, numero: nfe.numero }); setCceOpen(true); }, 0); }}>
                                   <FileEdit className="h-4 w-4 mr-2" />Carta de Correção
                                 </DropdownMenuItem>
+                            {(nfe.status === "rejeitada" || nfe.status === "pendente") && (
+                              <DropdownMenuItem onSelect={() => handleReprocessar(nfe.id, nfe.numero)}>
+                                <RefreshCw className="h-4 w-4 mr-2" />Reprocessar
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            {nfe.status === "autorizada" && (
+                              <>
+                                <DropdownMenuItem onSelect={() => { setTimeout(() => { setCceNfe({ id: nfe.id, numero: nfe.numero }); setCceOpen(true); }, 0); }}>
+                                  <FileEdit className="h-4 w-4 mr-2" />Carta de Correção
+                                </DropdownMenuItem>
                                 <DropdownMenuItem className="text-destructive" onSelect={() => { setTimeout(() => { setCancelNfe({ id: nfe.id, numero: nfe.numero }); setCancelOpen(true); }, 0); }}>
                                   <XCircle className="h-4 w-4 mr-2" />Cancelar
                                 </DropdownMenuItem>
                               </>
+                            )}
+                            {["pendente", "rejeitada", "denegada"].includes(nfe.status) && (
+                              <DropdownMenuItem className="text-destructive" onSelect={() => handleExcluir(nfe.id, nfe.numero, nfe.status)}>
+                                <Trash2 className="h-4 w-4 mr-2" />Excluir (devolve numeração)
+                              </DropdownMenuItem>
                             )}
                           </DropdownMenuContent>
                         </DropdownMenu>
