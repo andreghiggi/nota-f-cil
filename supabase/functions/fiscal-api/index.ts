@@ -744,9 +744,28 @@ Deno.serve(async (req) => {
           ...(item.ind_escala ? { ind_escala: item.ind_escala, indEscala: item.ind_escala } : {}),
           ...(item.inf_ad_prod ? { inf_ad_prod: item.inf_ad_prod, infAdProd: item.inf_ad_prod } : {}),
           // ICMS: regime Simples (CRT 1/4) usa CSOSN; regime Normal (CRT 3) usa CST
+          crt: empresaCRT,
+          CRT: empresaCRT,
+          orig: item.origem ?? '0',
           ...(isSimples
-            ? { csosn: item.csosn || '102' }
-            : { cst_icms: item.cst_icms || '00' }),
+            ? {
+                csosn: item.csosn || '102',
+                CSOSN: item.csosn || '102',
+                icms: { orig: item.origem ?? '0', CSOSN: item.csosn || '102', pCredSN: item.aliquota_icms || 0, vCredICMSSN: item.valor_icms || 0 },
+              }
+            : {
+                cst_icms: item.cst_icms || '00',
+                cst: item.cst_icms || '00',
+                CST: item.cst_icms || '00',
+                icms: {
+                  orig: item.origem ?? '0',
+                  CST: item.cst_icms || '00',
+                  modBC: '0',
+                  vBC: item.base_calculo_icms || item.valor_total || 0,
+                  pICMS: item.aliquota_icms || 0,
+                  vICMS: item.valor_icms || +(((item.base_calculo_icms || item.valor_total || 0) * (item.aliquota_icms || 0)) / 100).toFixed(2),
+                },
+              }),
           aliquota_icms: item.aliquota_icms,
           base_calculo_icms: item.base_calculo_icms || item.valor_total || 0,
           aliquota_fcp: item.aliquota_fcp || 0,
@@ -977,6 +996,9 @@ Deno.serve(async (req) => {
         ind_sinc: 1,
         modelo: 55,
         tipo_pessoa: isPF ? 'PF' : 'PJ',
+        crt: empresaCRT,
+        CRT: empresaCRT,
+        regime_tributario: empresa.regime_tributario,
         cMun: empresa.codigo_municipio || '',
         xMun: empresa.municipio || '',
         codigo_municipio: empresa.codigo_municipio || '',
@@ -984,6 +1006,8 @@ Deno.serve(async (req) => {
         nota: {
           numero: parseInt(nfe.numero, 10).toString(),
           serie: parseInt(nfe.serie, 10).toString(),
+          crt: empresaCRT,
+          CRT: empresaCRT,
           valor_total: nfe.valor_total,
           natureza_operacao: nfe.natureza_operacao || 'VENDA',
           finalidade: nfe.finalidade || '1',
@@ -1060,6 +1084,8 @@ Deno.serve(async (req) => {
         ...(respTecPayload ? { infRespTec: respTecPayload, resp_tec: respTecPayload, responsavel_tecnico: respTecPayload } : {}),
         ...ideExtras,
         emitente: {
+          CRT: empresaCRT,
+          crt: empresaCRT,
           cMun: empresa.codigo_municipio || '',
           xMun: empresa.municipio || '',
           UF: empresa.uf || '',

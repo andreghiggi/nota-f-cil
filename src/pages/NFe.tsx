@@ -134,14 +134,21 @@ export default function NFe() {
   };
 
   const handleReprocessar = async (nfeId: string, numero: string) => {
-    const { error } = await supabase.from("nfe").update({ status: "pendente" as any, tentativas: 0, erro_processamento: null }).eq("id", nfeId);
+    const { error } = await supabase.from("nfe").update({ status: "pendente" as any, tentativas: 0, erro_processamento: null, motivo_retorno: null, codigo_retorno: null }).eq("id", nfeId);
     if (error) { toast.error("Erro ao reprocessar"); return; }
-    await supabase.from("fila_processamento_nfe").upsert(
-      { nfe_id: nfeId, tentativas: 0, proximo_processamento: new Date().toISOString(), erro_ultimo: null } as any,
-      { onConflict: "nfe_id" }
-    );
+    toast.info(`Reenviando NF-e ${numero} à SEFAZ...`);
+    const { data, error: invokeError } = await supabase.functions.invoke("fiscal-api", {
+      body: { action: "emit_nfe", nfe_id: nfeId },
+    });
     queryClient.invalidateQueries({ queryKey: ["nfe"] });
-    toast.success(`NF-e ${numero} enviada para reprocessamento`);
+    if (invokeError || (data as any)?.error) {
+      toast.error(`Falha no reprocessamento: ${invokeError?.message || (data as any)?.error}`);
+      return;
+    }
+    const status = (data as any)?.data?.status || (data as any)?.status;
+    if (status === "autorizada") toast.success(`NF-e ${numero} autorizada`);
+    else if (status === "rejeitada") toast.error(`NF-e ${numero} rejeitada — veja o motivo na lista`);
+    else toast.success(`NF-e ${numero} processada (status: ${status || "pendente"})`);
   };
 
   const handleExcluir = async (nfeId: string, numero: string, status: string) => {
