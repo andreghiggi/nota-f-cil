@@ -1,0 +1,2 @@
+UPDATE public.empresas SET serie_nfe='001', numero_nfe_atual=16133 WHERE id='4c37e0fe-39d5-4f30-bbc3-5261e051f207';
+DELETE FROM public.series_fiscais WHERE empresa_id='4c37e0fe-39d5-4f30-bbc3-5261e051f207' AND tipo='nfe' AND serie='002';
