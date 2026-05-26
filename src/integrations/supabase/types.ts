@@ -855,12 +855,16 @@ export type Database = {
           cst_pis: string | null
           descricao: string
           id: string
+          mod_bc: string | null
           ncm: string | null
           nfce_id: string
           numero_item: number
+          p_cred_sn: number | null
+          p_red_bc: number | null
           quantidade: number
           unidade: string
           valor_cofins: number | null
+          valor_cred_icms_sn: number | null
           valor_icms: number | null
           valor_pis: number | null
           valor_total: number
@@ -879,12 +883,16 @@ export type Database = {
           cst_pis?: string | null
           descricao: string
           id?: string
+          mod_bc?: string | null
           ncm?: string | null
           nfce_id: string
           numero_item: number
+          p_cred_sn?: number | null
+          p_red_bc?: number | null
           quantidade: number
           unidade: string
           valor_cofins?: number | null
+          valor_cred_icms_sn?: number | null
           valor_icms?: number | null
           valor_pis?: number | null
           valor_total: number
@@ -903,12 +911,16 @@ export type Database = {
           cst_pis?: string | null
           descricao?: string
           id?: string
+          mod_bc?: string | null
           ncm?: string | null
           nfce_id?: string
           numero_item?: number
+          p_cred_sn?: number | null
+          p_red_bc?: number | null
           quantidade?: number
           unidade?: string
           valor_cofins?: number | null
+          valor_cred_icms_sn?: number | null
           valor_icms?: number | null
           valor_pis?: number | null
           valor_total?: number
@@ -1276,6 +1288,9 @@ export type Database = {
           ind_doacao: number | null
           ind_escala: string | null
           inf_ad_prod: string | null
+          mod_bc: string | null
+          mod_bc_st: string | null
+          motivo_desoneracao: string | null
           mva_icms_st: number | null
           ncm: string | null
           nfe_id: string
@@ -1283,13 +1298,18 @@ export type Database = {
           p_aliq_efet_cbs: number | null
           p_aliq_efet_ibs_mun: number | null
           p_aliq_efet_ibs_uf: number | null
+          p_cred_sn: number | null
+          p_diferimento: number | null
           p_red_aliq_cbs: number | null
           p_red_aliq_ibs_mun: number | null
           p_red_aliq_ibs_uf: number | null
+          p_red_bc: number | null
+          p_red_bc_st: number | null
           quantidade: number
           unidade: string
           valor_cbs: number | null
           valor_cofins: number | null
+          valor_cred_icms_sn: number | null
           valor_dev_trib_cbs: number | null
           valor_dev_trib_ibs_mun: number | null
           valor_dev_trib_ibs_uf: number | null
@@ -1300,6 +1320,9 @@ export type Database = {
           valor_ibs_mun: number | null
           valor_ibs_uf: number | null
           valor_icms: number | null
+          valor_icms_desonerado: number | null
+          valor_icms_dif: number | null
+          valor_icms_op: number | null
           valor_icms_st: number | null
           valor_ipi: number | null
           valor_is: number | null
@@ -1349,6 +1372,9 @@ export type Database = {
           ind_doacao?: number | null
           ind_escala?: string | null
           inf_ad_prod?: string | null
+          mod_bc?: string | null
+          mod_bc_st?: string | null
+          motivo_desoneracao?: string | null
           mva_icms_st?: number | null
           ncm?: string | null
           nfe_id: string
@@ -1356,13 +1382,18 @@ export type Database = {
           p_aliq_efet_cbs?: number | null
           p_aliq_efet_ibs_mun?: number | null
           p_aliq_efet_ibs_uf?: number | null
+          p_cred_sn?: number | null
+          p_diferimento?: number | null
           p_red_aliq_cbs?: number | null
           p_red_aliq_ibs_mun?: number | null
           p_red_aliq_ibs_uf?: number | null
+          p_red_bc?: number | null
+          p_red_bc_st?: number | null
           quantidade: number
           unidade: string
           valor_cbs?: number | null
           valor_cofins?: number | null
+          valor_cred_icms_sn?: number | null
           valor_dev_trib_cbs?: number | null
           valor_dev_trib_ibs_mun?: number | null
           valor_dev_trib_ibs_uf?: number | null
@@ -1373,6 +1404,9 @@ export type Database = {
           valor_ibs_mun?: number | null
           valor_ibs_uf?: number | null
           valor_icms?: number | null
+          valor_icms_desonerado?: number | null
+          valor_icms_dif?: number | null
+          valor_icms_op?: number | null
           valor_icms_st?: number | null
           valor_ipi?: number | null
           valor_is?: number | null
@@ -1422,6 +1456,9 @@ export type Database = {
           ind_doacao?: number | null
           ind_escala?: string | null
           inf_ad_prod?: string | null
+          mod_bc?: string | null
+          mod_bc_st?: string | null
+          motivo_desoneracao?: string | null
           mva_icms_st?: number | null
           ncm?: string | null
           nfe_id?: string
@@ -1429,13 +1466,18 @@ export type Database = {
           p_aliq_efet_cbs?: number | null
           p_aliq_efet_ibs_mun?: number | null
           p_aliq_efet_ibs_uf?: number | null
+          p_cred_sn?: number | null
+          p_diferimento?: number | null
           p_red_aliq_cbs?: number | null
           p_red_aliq_ibs_mun?: number | null
           p_red_aliq_ibs_uf?: number | null
+          p_red_bc?: number | null
+          p_red_bc_st?: number | null
           quantidade?: number
           unidade?: string
           valor_cbs?: number | null
           valor_cofins?: number | null
+          valor_cred_icms_sn?: number | null
           valor_dev_trib_cbs?: number | null
           valor_dev_trib_ibs_mun?: number | null
           valor_dev_trib_ibs_uf?: number | null
@@ -1446,6 +1488,9 @@ export type Database = {
           valor_ibs_mun?: number | null
           valor_ibs_uf?: number | null
           valor_icms?: number | null
+          valor_icms_desonerado?: number | null
+          valor_icms_dif?: number | null
+          valor_icms_op?: number | null
           valor_icms_st?: number | null
           valor_ipi?: number | null
           valor_is?: number | null
