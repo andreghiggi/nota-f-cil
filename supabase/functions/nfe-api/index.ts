@@ -545,9 +545,69 @@ Deno.serve(async (req) => {
 
       const { data: empresaData } = await supabase
         .from('empresas')
-        .select('serie_nfe, uf')
+        .select('serie_nfe, uf, regime_tributario')
         .eq('id', empresa_id)
         .single();
+
+      // ===== Validação prévia por item (CST/CSOSN) =====
+      const isSimples = empresaData?.regime_tributario === 'simples_nacional' || empresaData?.regime_tributario === 'simples_excesso';
+      const erros: Array<{ item: number; campo: string; mensagem: string }> = [];
+      payload.itens.forEach((it, idx) => {
+        const n = idx + 1;
+        const req = (cond: boolean, campo: string, msg: string) => {
+          if (!cond) erros.push({ item: n, campo, mensagem: msg });
+        };
+        // Campos básicos universais
+        req(!!it.cfop, 'cfop', 'CFOP é obrigatório');
+        req(!!it.unidade, 'unidade', 'Unidade comercial é obrigatória');
+        req((it.quantidade ?? 0) > 0, 'quantidade', 'Quantidade deve ser > 0');
+        req((it.valor_unitario ?? 0) >= 0, 'valor_unitario', 'Valor unitário inválido');
+
+        if (isSimples) {
+          if (it.cst_icms) erros.push({ item: n, campo: 'cst_icms', mensagem: 'Empresa do Simples deve usar CSOSN, não CST' });
+          req(!!it.csosn, 'csosn', 'CSOSN é obrigatório para Simples Nacional');
+          const csosn = String(it.csosn || '');
+          if (['101','201','900'].includes(csosn)) {
+            req((it.p_cred_sn ?? 0) > 0, 'p_cred_sn', `CSOSN ${csosn} exige p_cred_sn (% crédito SN)`);
+          }
+          if (['201','202','203'].includes(csosn)) {
+            req((it.base_calculo_icms_st ?? 0) > 0, 'base_calculo_icms_st', `CSOSN ${csosn} exige base de cálculo ST`);
+            req((it.aliquota_icms_st ?? 0) > 0, 'aliquota_icms_st', `CSOSN ${csosn} exige alíquota ICMS-ST`);
+          }
+        } else {
+          if (it.csosn) erros.push({ item: n, campo: 'csosn', mensagem: 'Regime Normal deve usar CST, não CSOSN' });
+          req(!!it.cst_icms, 'cst_icms', 'CST ICMS é obrigatório para Regime Normal');
+          const cst = String(it.cst_icms || '');
+          if (['00','10','20','51','70','90'].includes(cst)) {
+            req((it.base_calculo_icms ?? 0) > 0 || (it.aliquota_icms ?? 0) === 0, 'base_calculo_icms', `CST ${cst} exige base de cálculo ICMS`);
+            req((it.aliquota_icms ?? 0) > 0, 'aliquota_icms', `CST ${cst} exige alíquota ICMS`);
+          }
+          if (['20','70'].includes(cst)) {
+            req((it.p_red_bc ?? 0) > 0, 'p_red_bc', `CST ${cst} exige % redução de BC (p_red_bc)`);
+          }
+          if (cst === '51') {
+            req((it.p_diferimento ?? 0) > 0, 'p_diferimento', 'CST 51 exige % de diferimento (p_diferimento)');
+          }
+          if (['10','30','70','90'].includes(cst) && ((it as any).base_calculo_icms_st ?? 0) > 0) {
+            req((it.aliquota_icms_st ?? 0) > 0, 'aliquota_icms_st', `CST ${cst} com ST exige alíquota ICMS-ST`);
+          }
+        }
+        // PIS/COFINS
+        const cstPis = String(it.cst_pis || '');
+        if (['01','02','03','04','05'].includes(cstPis)) {
+          req((it.aliquota_pis ?? 0) > 0, 'aliquota_pis', `CST PIS ${cstPis} exige alíquota PIS`);
+        }
+        const cstCof = String(it.cst_cofins || '');
+        if (['01','02','03','04','05'].includes(cstCof)) {
+          req((it.aliquota_cofins ?? 0) > 0, 'aliquota_cofins', `CST COFINS ${cstCof} exige alíquota COFINS`);
+        }
+      });
+      if (erros.length > 0) {
+        return new Response(
+          JSON.stringify({ error: 'Validação prévia falhou', code: 'VALIDATION_ERROR', erros }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       // Use serie from payload if provided, otherwise use empresa default
       const serieNfe = payload.serie || empresaData?.serie_nfe || '001';
@@ -822,6 +882,8 @@ Deno.serve(async (req) => {
           data_emissao, valor_total, protocolo, codigo_retorno,
           motivo_retorno, data_autorizacao, external_id,
           natureza_operacao, dest_nome, dest_cpf_cnpj,
+          valor_produtos, valor_desconto, valor_frete, valor_seguro, valor_outras_despesas,
+          valor_icms, valor_ipi, valor_pis, valor_cofins,
           created_at, updated_at
         `)
         .eq('id', nfeId)
@@ -835,8 +897,15 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Carrega itens com todos os campos fiscais (incluindo CST/CSOSN extras)
+      const { data: itensData } = await supabase
+        .from('nfe_itens')
+        .select('*')
+        .eq('nfe_id', nfeId)
+        .order('numero_item', { ascending: true });
+
       return new Response(
-        JSON.stringify({ success: true, data: nfeData }),
+        JSON.stringify({ success: true, data: { ...nfeData, itens: itensData || [] } }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
