@@ -744,9 +744,28 @@ Deno.serve(async (req) => {
           ...(item.ind_escala ? { ind_escala: item.ind_escala, indEscala: item.ind_escala } : {}),
           ...(item.inf_ad_prod ? { inf_ad_prod: item.inf_ad_prod, infAdProd: item.inf_ad_prod } : {}),
           // ICMS: regime Simples (CRT 1/4) usa CSOSN; regime Normal (CRT 3) usa CST
+          crt: empresaCRT,
+          CRT: empresaCRT,
+          orig: item.origem ?? '0',
           ...(isSimples
-            ? { csosn: item.csosn || '102' }
-            : { cst_icms: item.cst_icms || '00' }),
+            ? {
+                csosn: item.csosn || '102',
+                CSOSN: item.csosn || '102',
+                icms: { orig: item.origem ?? '0', CSOSN: item.csosn || '102', pCredSN: item.aliquota_icms || 0, vCredICMSSN: item.valor_icms || 0 },
+              }
+            : {
+                cst_icms: item.cst_icms || '00',
+                cst: item.cst_icms || '00',
+                CST: item.cst_icms || '00',
+                icms: {
+                  orig: item.origem ?? '0',
+                  CST: item.cst_icms || '00',
+                  modBC: '0',
+                  vBC: item.base_calculo_icms || item.valor_total || 0,
+                  pICMS: item.aliquota_icms || 0,
+                  vICMS: item.valor_icms || +(((item.base_calculo_icms || item.valor_total || 0) * (item.aliquota_icms || 0)) / 100).toFixed(2),
+                },
+              }),
           aliquota_icms: item.aliquota_icms,
           base_calculo_icms: item.base_calculo_icms || item.valor_total || 0,
           aliquota_fcp: item.aliquota_fcp || 0,
