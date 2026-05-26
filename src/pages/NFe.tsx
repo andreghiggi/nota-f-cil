@@ -13,6 +13,7 @@ import {
   Inbox,
   Printer,
   FileEdit,
+  Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
