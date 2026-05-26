@@ -1,0 +1,2 @@
+UPDATE public.nfe SET status='pendente', tentativas=0, erro_processamento=NULL, codigo_retorno=NULL, motivo_retorno=NULL, processado_em=NULL WHERE id='5d986a5f-39ae-4371-aa00-8fd4be196855';
+INSERT INTO public.fila_processamento_nfe (nfe_id, tentativas, proximo_processamento) VALUES ('5d986a5f-39ae-4371-aa00-8fd4be196855', 0, now()) ON CONFLICT DO NOTHING;
