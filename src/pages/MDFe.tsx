@@ -442,6 +442,18 @@ export default function MDFe() {
                                 </DropdownMenuItem>
                               </>
                             )}
+                            {["pendente", "rejeitada", "denegada"].includes(m.status) && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem
+                                  className="text-destructive"
+                                  onSelect={() => handleExcluir(m.id, m.numero, m.status)}
+                                >
+                                  <Trash2 className="h-4 w-4 mr-2" />
+                                  Excluir (devolve numeração)
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </td>
