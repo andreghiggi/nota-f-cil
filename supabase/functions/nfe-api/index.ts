@@ -53,6 +53,18 @@ interface NFePayload {
     base_calculo_icms_st?: number;
     aliquota_icms_st?: number;
     mva_icms_st?: number;
+    // Campos opcionais para CSTs específicos
+    p_red_bc?: number;          // CST 20, 70 (redução de BC)
+    p_red_bc_st?: number;       // CST 10, 70 (redução de BC do ST)
+    p_diferimento?: number;     // CST 51 (% diferimento)
+    valor_icms_op?: number;     // CST 51 (ICMS da operação)
+    valor_icms_dif?: number;    // CST 51 (ICMS diferido)
+    mod_bc?: string;            // Modalidade BC ICMS (0,1,2,3)
+    mod_bc_st?: string;         // Modalidade BC ICMS-ST (0..6)
+    motivo_desoneracao?: string; // CST 40, 41, 50 desoneradas
+    valor_icms_desonerado?: number;
+    p_cred_sn?: number;         // CSOSN 101, 201, 900
+    valor_cred_icms_sn?: number;
     cst_ipi?: string;
     aliquota_ipi?: number;
     base_calculo_ipi?: number;
