@@ -144,6 +144,19 @@ export default function NFe() {
     toast.success(`NF-e ${numero} enviada para reprocessamento`);
   };
 
+  const handleExcluir = async (nfeId: string, numero: string, status: string) => {
+    if (!["pendente", "rejeitada", "denegada"].includes(status)) {
+      toast.error("Só é possível excluir notas não autorizadas");
+      return;
+    }
+    if (!confirm(`Excluir NF-e ${numero}? Se este for o último número emitido da série, a numeração será devolvida.`)) return;
+    const { data, error } = await supabase.rpc("excluir_documento_nao_processado" as any, { p_tipo: "nfe", p_id: nfeId });
+    if (error) { toast.error(`Erro ao excluir: ${error.message}`); return; }
+    queryClient.invalidateQueries({ queryKey: ["nfe"] });
+    const devolvida = (data as any)?.numeracao_devolvida;
+    toast.success(`NF-e ${numero} excluída${devolvida ? " (numeração devolvida)" : ""}`);
+  };
+
   const handleCancelar = async (justificativa: string) => {
     setCancelLoading(true);
     try {
