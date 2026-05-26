@@ -882,6 +882,8 @@ Deno.serve(async (req) => {
           data_emissao, valor_total, protocolo, codigo_retorno,
           motivo_retorno, data_autorizacao, external_id,
           natureza_operacao, dest_nome, dest_cpf_cnpj,
+          valor_produtos, valor_desconto, valor_frete, valor_seguro, valor_outras_despesas,
+          valor_icms, valor_ipi, valor_pis, valor_cofins,
           created_at, updated_at
         `)
         .eq('id', nfeId)
@@ -895,8 +897,15 @@ Deno.serve(async (req) => {
         );
       }
 
+      // Carrega itens com todos os campos fiscais (incluindo CST/CSOSN extras)
+      const { data: itensData } = await supabase
+        .from('nfe_itens')
+        .select('*')
+        .eq('nfe_id', nfeId)
+        .order('numero_item', { ascending: true });
+
       return new Response(
-        JSON.stringify({ success: true, data: nfeData }),
+        JSON.stringify({ success: true, data: { ...nfeData, itens: itensData || [] } }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
