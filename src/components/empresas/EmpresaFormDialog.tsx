@@ -435,9 +435,6 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         codigo_municipio: data.codigo_municipio || null,
         regime_tributario: data.regime_tributario,
         ambiente: data.ambiente,
-        serie_nfce: data.serie_nfce,
-        serie_nfe: data.serie_nfe,
-        serie_mdfe: data.serie_mdfe,
         rntrc: data.rntrc?.replace(/\D/g, '') || null,
         csc_id: data.csc_id || null,
         csc_token: data.csc_token || null,
@@ -449,10 +446,17 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       };
 
       if (isEditing && empresa) {
+        // Não reenvia serie_nfe/nfce/mdfe ao editar — séries são gerenciadas pelo SeriesFiscaisManager
         await updateEmpresa.mutateAsync({ id: empresa.id, ...empresaData });
         toast.success("Empresa atualizada com sucesso!");
       } else {
-        await createEmpresa.mutateAsync(empresaData);
+        // No cadastro inicial, envia as séries padrão (o trigger cria entrada em series_fiscais)
+        await createEmpresa.mutateAsync({
+          ...empresaData,
+          serie_nfe: data.serie_nfe,
+          serie_nfce: data.serie_nfce,
+          serie_mdfe: data.serie_mdfe,
+        } as any);
         toast.success("Empresa cadastrada com sucesso!");
       }
       
