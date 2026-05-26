@@ -1065,6 +1065,8 @@ Deno.serve(async (req) => {
         ...(respTecPayload ? { infRespTec: respTecPayload, resp_tec: respTecPayload, responsavel_tecnico: respTecPayload } : {}),
         ...ideExtras,
         emitente: {
+          CRT: empresaCRT,
+          crt: empresaCRT,
           cMun: empresa.codigo_municipio || '',
           xMun: empresa.municipio || '',
           UF: empresa.uf || '',
