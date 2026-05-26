@@ -743,7 +743,6 @@ Deno.serve(async (req) => {
           ...(item.cnpj_fab ? { cnpj_fab: item.cnpj_fab, CNPJFab: item.cnpj_fab } : {}),
           ...(item.ind_escala ? { ind_escala: item.ind_escala, indEscala: item.ind_escala } : {}),
           ...(item.inf_ad_prod ? { inf_ad_prod: item.inf_ad_prod, infAdProd: item.inf_ad_prod } : {}),
-          cst_icms: item.cst_icms,
           // ICMS: regime Simples (CRT 1/4) usa CSOSN; regime Normal (CRT 3) usa CST
           ...(isSimples
             ? { csosn: item.csosn || '102' }
