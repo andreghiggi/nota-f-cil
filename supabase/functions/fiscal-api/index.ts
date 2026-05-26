@@ -977,6 +977,9 @@ Deno.serve(async (req) => {
         ind_sinc: 1,
         modelo: 55,
         tipo_pessoa: isPF ? 'PF' : 'PJ',
+        crt: empresaCRT,
+        CRT: empresaCRT,
+        regime_tributario: empresa.regime_tributario,
         cMun: empresa.codigo_municipio || '',
         xMun: empresa.municipio || '',
         codigo_municipio: empresa.codigo_municipio || '',
@@ -984,6 +987,8 @@ Deno.serve(async (req) => {
         nota: {
           numero: parseInt(nfe.numero, 10).toString(),
           serie: parseInt(nfe.serie, 10).toString(),
+          crt: empresaCRT,
+          CRT: empresaCRT,
           valor_total: nfe.valor_total,
           natureza_operacao: nfe.natureza_operacao || 'VENDA',
           finalidade: nfe.finalidade || '1',
