@@ -718,6 +718,8 @@ Deno.serve(async (req) => {
       await supabase.from('nfe').update({ status: 'processando' }).eq('id', nfeId);
 
       const isPF = empresa.tipo_pessoa === 'PF';
+      const empresaCRT = ({ simples_nacional: 1, lucro_presumido: 3, lucro_real: 3 } as Record<string, number>)[empresa.regime_tributario] || 1;
+      const isSimples = empresaCRT === 1 || empresaCRT === 4;
 
       // Build items with full tax data
       const itensObj: Record<string, any> = {};
