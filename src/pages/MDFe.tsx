@@ -149,6 +149,19 @@ export default function MDFe() {
     toast.success("XML baixado com sucesso");
   };
 
+  const handleExcluir = async (mdfeId: string, numero: string, status: string) => {
+    if (!["pendente", "rejeitada", "denegada"].includes(status)) {
+      toast.error("Só é possível excluir manifestos não autorizados");
+      return;
+    }
+    if (!confirm(`Excluir MDF-e ${numero}? Se este for o último número emitido da série, a numeração será devolvida.`)) return;
+    const { data, error } = await supabase.rpc("excluir_documento_nao_processado" as any, { p_tipo: "mdfe", p_id: mdfeId });
+    if (error) { toast.error(`Erro ao excluir: ${error.message}`); return; }
+    queryClient.invalidateQueries({ queryKey: ["mdfe"] });
+    const devolvida = (data as any)?.numeracao_devolvida;
+    toast.success(`MDF-e ${numero} excluído${devolvida ? " (numeração devolvida)" : ""}`);
+  };
+
   const handleAction = async () => {
     if (!actionMdfe) return;
     if (actionMdfe.action === "cancelar" && justificativa.trim().length < 15) {
