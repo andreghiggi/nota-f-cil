@@ -53,6 +53,18 @@ interface NFePayload {
     base_calculo_icms_st?: number;
     aliquota_icms_st?: number;
     mva_icms_st?: number;
+    // Campos opcionais para CSTs específicos
+    p_red_bc?: number;          // CST 20, 70 (redução de BC)
+    p_red_bc_st?: number;       // CST 10, 70 (redução de BC do ST)
+    p_diferimento?: number;     // CST 51 (% diferimento)
+    valor_icms_op?: number;     // CST 51 (ICMS da operação)
+    valor_icms_dif?: number;    // CST 51 (ICMS diferido)
+    mod_bc?: string;            // Modalidade BC ICMS (0,1,2,3)
+    mod_bc_st?: string;         // Modalidade BC ICMS-ST (0..6)
+    motivo_desoneracao?: string; // CST 40, 41, 50 desoneradas
+    valor_icms_desonerado?: number;
+    p_cred_sn?: number;         // CSOSN 101, 201, 900
+    valor_cred_icms_sn?: number;
     cst_ipi?: string;
     aliquota_ipi?: number;
     base_calculo_ipi?: number;
@@ -695,6 +707,18 @@ Deno.serve(async (req) => {
           aliquota_cofins: item.aliquota_cofins || 0,
           base_calculo_cofins: item.base_calculo_cofins || valorItem,
           valor_cofins: (item.base_calculo_cofins || valorItem) * (item.aliquota_cofins || 0) / 100,
+          // Campos opcionais para CSTs específicos
+          p_red_bc: item.p_red_bc || 0,
+          p_red_bc_st: item.p_red_bc_st || 0,
+          p_diferimento: item.p_diferimento || 0,
+          valor_icms_op: item.valor_icms_op || 0,
+          valor_icms_dif: item.valor_icms_dif || 0,
+          mod_bc: item.mod_bc || null,
+          mod_bc_st: item.mod_bc_st || null,
+          motivo_desoneracao: item.motivo_desoneracao || null,
+          valor_icms_desonerado: item.valor_icms_desonerado || 0,
+          p_cred_sn: item.p_cred_sn || 0,
+          valor_cred_icms_sn: item.valor_cred_icms_sn || 0,
           // IBS/CBS
           cst_ibs_cbs: item.cst_ibs_cbs || null,
           c_class_trib: item.c_class_trib || null,
