@@ -718,6 +718,8 @@ Deno.serve(async (req) => {
       await supabase.from('nfe').update({ status: 'processando' }).eq('id', nfeId);
 
       const isPF = empresa.tipo_pessoa === 'PF';
+      const empresaCRT = ({ simples_nacional: 1, lucro_presumido: 3, lucro_real: 3 } as Record<string, number>)[empresa.regime_tributario] || 1;
+      const isSimples = empresaCRT === 1 || empresaCRT === 4;
 
       // Build items with full tax data
       const itensObj: Record<string, any> = {};
@@ -741,8 +743,10 @@ Deno.serve(async (req) => {
           ...(item.cnpj_fab ? { cnpj_fab: item.cnpj_fab, CNPJFab: item.cnpj_fab } : {}),
           ...(item.ind_escala ? { ind_escala: item.ind_escala, indEscala: item.ind_escala } : {}),
           ...(item.inf_ad_prod ? { inf_ad_prod: item.inf_ad_prod, infAdProd: item.inf_ad_prod } : {}),
-          cst_icms: item.cst_icms,
-          csosn: item.csosn,
+          // ICMS: regime Simples (CRT 1/4) usa CSOSN; regime Normal (CRT 3) usa CST
+          ...(isSimples
+            ? { csosn: item.csosn || '102' }
+            : { cst_icms: item.cst_icms || '00' }),
           aliquota_icms: item.aliquota_icms,
           base_calculo_icms: item.base_calculo_icms || item.valor_total || 0,
           aliquota_fcp: item.aliquota_fcp || 0,
