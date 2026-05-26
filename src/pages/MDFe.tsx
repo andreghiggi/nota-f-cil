@@ -10,6 +10,7 @@ import {
   Inbox,
   Truck,
   CheckCircle2,
+  Trash2,
 } from "lucide-react";
 import {
   DropdownMenu,
