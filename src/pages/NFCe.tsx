@@ -14,7 +14,8 @@ import {
   QrCode,
   FileText,
   Inbox,
-  Printer
+  Printer,
+  Trash2
 } from "lucide-react";
 import {
   DropdownMenu,
