@@ -118,11 +118,11 @@ export default function NFe() {
 
   const handleDownloadXml = async (nfeId: string, numero: string) => {
     const { data, error } = await supabase.from("nfe").select("xml_envio, xml_retorno").eq("id", nfeId).single();
-    if (error || !data?.xml_envio) {
+    const xml = data?.xml_retorno || data?.xml_envio;
+    if (error || !xml) {
       toast.error("XML não disponível para esta NF-e");
       return;
     }
-    const xml = data.xml_retorno || data.xml_envio;
     const blob = new Blob([xml], { type: "application/xml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
