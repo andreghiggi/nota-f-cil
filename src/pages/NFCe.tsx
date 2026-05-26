@@ -142,11 +142,21 @@ export default function NFCe() {
   };
 
   const handleReprocessar = async (nfceId: string, numero: string) => {
-    const { error } = await supabase.from("nfce").update({ status: "pendente", tentativas: 0, erro_processamento: null }).eq("id", nfceId);
+    const { error } = await supabase.from("nfce").update({ status: "pendente", tentativas: 0, erro_processamento: null, motivo_retorno: null, codigo_retorno: null }).eq("id", nfceId);
     if (error) { toast.error("Erro ao reprocessar"); return; }
-    await supabase.from("fila_processamento").upsert({ nfce_id: nfceId, tentativas: 0, proximo_processamento: new Date().toISOString(), erro_ultimo: null }, { onConflict: "nfce_id" });
+    toast.info(`Reenviando NFC-e ${numero} à SEFAZ...`);
+    const { data, error: invokeError } = await supabase.functions.invoke("fiscal-api", {
+      body: { action: "emit_nfce", nfce_id: nfceId },
+    });
     queryClient.invalidateQueries({ queryKey: ["nfce"] });
-    toast.success(`NFC-e ${numero} enviada para reprocessamento`);
+    if (invokeError || (data as any)?.error) {
+      toast.error(`Falha no reprocessamento: ${invokeError?.message || (data as any)?.error}`);
+      return;
+    }
+    const status = (data as any)?.data?.status || (data as any)?.status;
+    if (status === "autorizada") toast.success(`NFC-e ${numero} autorizada`);
+    else if (status === "rejeitada") toast.error(`NFC-e ${numero} rejeitada — veja o motivo na lista`);
+    else toast.success(`NFC-e ${numero} processada (status: ${status || "pendente"})`);
   };
 
   const handleExcluir = async (nfceId: string, numero: string, status: string) => {
