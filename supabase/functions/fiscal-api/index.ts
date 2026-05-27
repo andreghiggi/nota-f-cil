@@ -943,13 +943,17 @@ Deno.serve(async (req) => {
       if (nfe.tp_nf != null) ideExtras.tpNF = nfe.tp_nf;
       Object.assign(ideExtras, payloadEntrada.ide || {});
 
-      // Endereço de entrega (quando diferente do destinatário)
-      const entregaSrc = nfe.entrega || payloadEntrada.entrega || null;
-      const entregaPayload = entregaSrc && (entregaSrc.cnpj || entregaSrc.cpf || entregaSrc.CNPJ || entregaSrc.CPF)
+      // Endereço de entrega (quando diferente do destinatário) — aceita aliases ERP
+      const entregaSrc = nfe.entrega || payloadEntrada.entrega || payloadEntrada.endereco_entrega || null;
+      const _entregaHasContent = entregaSrc && (entregaSrc.logradouro || entregaSrc.xLgr || entregaSrc.municipio || entregaSrc.xMun || entregaSrc.cep || entregaSrc.CEP);
+      const _entregaRawDoc = entregaSrc ? String(entregaSrc.cnpj || entregaSrc.CNPJ || entregaSrc.cpf || entregaSrc.CPF || entregaSrc.cpf_cnpj || '').replace(/\D/g, '') : '';
+      const _destDocClean = String(nfe.dest_cpf_cnpj || '').replace(/\D/g, '');
+      const _entregaDocFinal = _entregaRawDoc || _destDocClean;
+      const entregaPayload = _entregaHasContent && _entregaDocFinal
         ? {
-            ...(entregaSrc.cnpj || entregaSrc.CNPJ ? { CNPJ: (entregaSrc.cnpj || entregaSrc.CNPJ).replace(/\D/g, '') } : {}),
-            ...(entregaSrc.cpf || entregaSrc.CPF ? { CPF: (entregaSrc.cpf || entregaSrc.CPF).replace(/\D/g, '') } : {}),
-            xNome: entregaSrc.nome || entregaSrc.xNome,
+            ...(_entregaDocFinal.length === 14 ? { CNPJ: _entregaDocFinal } : {}),
+            ...(_entregaDocFinal.length === 11 ? { CPF: _entregaDocFinal } : {}),
+            xNome: entregaSrc.nome || entregaSrc.xNome || nfe.dest_nome,
             xLgr: entregaSrc.logradouro || entregaSrc.xLgr,
             nro: entregaSrc.numero || entregaSrc.nro || 'SN',
             xCpl: entregaSrc.complemento || entregaSrc.xCpl,
@@ -957,31 +961,42 @@ Deno.serve(async (req) => {
             cMun: entregaSrc.codigo_municipio || entregaSrc.cMun,
             xMun: entregaSrc.municipio || entregaSrc.xMun,
             UF: entregaSrc.uf || entregaSrc.UF,
-            CEP: (entregaSrc.cep || entregaSrc.CEP || '').replace(/\D/g, ''),
+            CEP: String(entregaSrc.cep || entregaSrc.CEP || '').replace(/\D/g, ''),
           }
         : null;
 
-      // Transporte (transp + veicTransp + vol)
-      const transpSrc = nfe.transporte || payloadEntrada.transporte || payloadEntrada.transp || null;
+      // Transporte (transp + veicTransp + vol) — aceita aliases vindos do ERP (transportador, transportadora, flat)
+      const transpSrc = nfe.transporte || payloadEntrada.transporte || payloadEntrada.transp || payloadEntrada.transportador || payloadEntrada.transportadora || null;
       let transpPayload: any = null;
       if (transpSrc) {
-        const t: any = { modFrete: String(nfe.modalidade_frete ?? transpSrc.modFrete ?? '9') };
-        const tr = transpSrc.transportadora || transpSrc.transporta || null;
+        const t: any = { modFrete: String(nfe.modalidade_frete ?? transpSrc.modFrete ?? transpSrc.mod_frete ?? '9') };
+        // Aceita {transportadora:{...}}, {transporta:{...}} ou estrutura plana
+        const tr = transpSrc.transportadora || transpSrc.transporta || (
+          (transpSrc.cnpj || transpSrc.CNPJ || transpSrc.cpf || transpSrc.CPF || transpSrc.cnpj_cpf || transpSrc.razao_social || transpSrc.nome || transpSrc.xNome)
+            ? transpSrc
+            : null
+        );
         if (tr) {
+          const trDoc = String(tr.cnpj || tr.CNPJ || tr.cpf || tr.CPF || tr.cnpj_cpf || '').replace(/\D/g, '');
           t.transporta = {
-            ...(tr.cnpj || tr.CNPJ ? { CNPJ: (tr.cnpj || tr.CNPJ).replace(/\D/g, '') } : {}),
-            ...(tr.cpf || tr.CPF ? { CPF: (tr.cpf || tr.CPF).replace(/\D/g, '') } : {}),
-            xNome: tr.nome || tr.xNome,
-            ...(tr.ie || tr.IE ? { IE: (tr.ie || tr.IE).replace(/\D/g, '') } : {}),
+            ...(trDoc.length === 14 ? { CNPJ: trDoc } : {}),
+            ...(trDoc.length === 11 ? { CPF: trDoc } : {}),
+            xNome: tr.razao_social || tr.nome || tr.xNome,
+            ...(tr.ie || tr.IE || tr.inscricao_estadual ? { IE: String(tr.ie || tr.IE || tr.inscricao_estadual).replace(/\D/g, '') } : {}),
             xEnder: tr.endereco || tr.xEnder,
-            xMun: tr.municipio || tr.xMun,
+            xMun: tr.municipio || tr.cidade || tr.xMun,
             UF: tr.uf || tr.UF,
           };
         }
-        const veic = transpSrc.veiculo || transpSrc.veicTransp || null;
+        // Veículo — aninhado {veiculo:{}} ou flat (placa_veiculo, uf_veiculo, rntc)
+        const veic = transpSrc.veiculo || transpSrc.veicTransp || (
+          (transpSrc.placa || transpSrc.placa_veiculo)
+            ? { placa: transpSrc.placa || transpSrc.placa_veiculo, uf: transpSrc.uf_veiculo || transpSrc.uf, rntc: transpSrc.rntc || transpSrc.RNTC }
+            : null
+        );
         if (veic?.placa) {
           t.veicTransp = {
-            placa: veic.placa.replace(/[^A-Z0-9]/gi, '').toUpperCase(),
+            placa: String(veic.placa).replace(/[^A-Z0-9]/gi, '').toUpperCase(),
             UF: veic.uf || veic.UF,
             ...(veic.rntc || veic.RNTC ? { RNTC: veic.rntc || veic.RNTC } : {}),
           };
@@ -1000,12 +1015,24 @@ Deno.serve(async (req) => {
         transpPayload = t;
       }
 
-      // Informações adicionais
+      // Informações adicionais — aceita vários aliases comuns do ERP
       const infAdicPayload: any = {};
-      if (nfe.inf_cpl) infAdicPayload.infCpl = nfe.inf_cpl;
-      if (nfe.inf_ad_fisco) infAdicPayload.infAdFisco = nfe.inf_ad_fisco;
-      if (payloadEntrada.inf_cpl && !infAdicPayload.infCpl) infAdicPayload.infCpl = payloadEntrada.inf_cpl;
-      if (payloadEntrada.infCpl && !infAdicPayload.infCpl) infAdicPayload.infCpl = payloadEntrada.infCpl;
+      const _infCpl = nfe.inf_cpl
+        || payloadEntrada.inf_cpl
+        || payloadEntrada.infCpl
+        || payloadEntrada.informacoes_complementares
+        || payloadEntrada.informacoes_adicionais_contribuinte
+        || payloadEntrada.informacoes_adicionais
+        || payloadEntrada.info_adicional
+        || payloadEntrada.observacoes
+        || null;
+      const _infAdFisco = nfe.inf_ad_fisco
+        || payloadEntrada.inf_ad_fisco
+        || payloadEntrada.infAdFisco
+        || payloadEntrada.informacoes_adicionais_fisco
+        || null;
+      if (_infCpl) infAdicPayload.infCpl = String(_infCpl);
+      if (_infAdFisco) infAdicPayload.infAdFisco = String(_infAdFisco);
 
       // Responsável Técnico (RS exige) — nota > empresa > payload
       const rtSrc = nfe.resp_tec || payloadEntrada.resp_tec || payloadEntrada.infRespTec || (
