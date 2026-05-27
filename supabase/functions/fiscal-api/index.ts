@@ -1038,12 +1038,35 @@ Deno.serve(async (req) => {
           crt: empresaCRT,
           CRT: empresaCRT,
           valor_total: nfe.valor_total,
-          // vProd em <total> = somatório de vProd dos itens (SEFAZ regra W16)
-          // Sem isso, PHP usa valor_total (que inclui IPI/ST/Frete) e a SEFAZ rejeita
-          // com "Total do Produto / Servico difere do somatorio dos itens"
-          valor_total_produtos: Number(nfe.valor_produtos ?? itensObj.reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
-          valor_produtos: Number(nfe.valor_produtos ?? itensObj.reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
-          vProd: Number(nfe.valor_produtos ?? itensObj.reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
+          // vProd em <total> = somatório de vProd dos itens (SEFAZ regra W16/528)
+          valor_total_produtos: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
+          valor_produtos: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
+          vProd: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
+          // Bloco <total><ICMSTot> explícito (NFePHP)
+          total: {
+            ICMSTot: {
+              vBC: Number(nfe.valor_produtos || 0).toFixed(2),
+              vICMS: Number(nfe.valor_icms || 0).toFixed(2),
+              vICMSDeson: 0,
+              vFCP: 0,
+              vBCST: 0,
+              vST: 0,
+              vFCPST: 0,
+              vFCPSTRet: 0,
+              vProd: Number(nfe.valor_produtos || 0).toFixed(2),
+              vFrete: Number(nfe.valor_frete || 0).toFixed(2),
+              vSeg: Number(nfe.valor_seguro || 0).toFixed(2),
+              vDesc: Number(nfe.valor_desconto || 0).toFixed(2),
+              vII: 0,
+              vIPI: Number(nfe.valor_ipi || 0).toFixed(2),
+              vIPIDevol: 0,
+              vPIS: Number(nfe.valor_pis || 0).toFixed(2),
+              vCOFINS: Number(nfe.valor_cofins || 0).toFixed(2),
+              vOutro: Number(nfe.valor_outras_despesas || 0).toFixed(2),
+              vNF: Number(nfe.valor_total || 0).toFixed(2),
+              vTotTrib: 0,
+            },
+          },
           natureza_operacao: nfe.natureza_operacao || 'VENDA',
           finalidade: nfe.finalidade || '1',
           modalidade_frete: nfe.modalidade_frete || '9',
