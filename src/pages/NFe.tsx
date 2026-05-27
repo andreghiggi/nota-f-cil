@@ -204,6 +204,29 @@ export default function NFe() {
     toast.success("XML baixado com sucesso");
   };
 
+  const handleDownloadDanfePdf = async (nfeId: string, numero: string) => {
+    const toastId = toast.loading(`Gerando DANFE ${numero}...`);
+    const { data, error } = await supabase.functions.invoke("fiscal-api", {
+      body: { action: "danfe_nfe", nfe_id: nfeId },
+    });
+    if (error || !(data as any)?.pdf_base64) {
+      toast.error((data as any)?.error || error?.message || "Falha ao gerar DANFE", { id: toastId });
+      return;
+    }
+    const b64 = (data as any).pdf_base64 as string;
+    const bin = atob(b64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const blob = new Blob([bytes], { type: "application/pdf" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (data as any).filename || `DANFE-${numero}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("DANFE PDF baixado", { id: toastId });
+  };
+
   const handleReprocessar = async (nfeId: string, numero: string) => {
     const { error } = await supabase.from("nfe").update({ status: "pendente" as any, tentativas: 0, erro_processamento: null, motivo_retorno: null, codigo_retorno: null }).eq("id", nfeId);
     if (error) { toast.error("Erro ao reprocessar"); return; }
