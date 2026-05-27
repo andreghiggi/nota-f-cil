@@ -15,6 +15,7 @@ interface DANFeDialogProps {
 
 export function DANFeDialog({ open, onOpenChange, nfeId }: DANFeDialogProps) {
   const printRef = useRef<HTMLDivElement>(null);
+  const shouldAutoPrint = useRef(false);
 
   const { data: nfe, isLoading } = useQuery({
     queryKey: ["nfe-danfe", nfeId],
@@ -65,6 +66,11 @@ export function DANFeDialog({ open, onOpenChange, nfeId }: DANFeDialogProps) {
     setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
   };
 
+  const handleOpenAutoPrint = () => {
+    shouldAutoPrint.current = true;
+    setTimeout(() => handlePrint(), 100);
+  };
+
   if (!nfe && !isLoading) return null;
 
   return (
@@ -86,6 +92,11 @@ export function DANFeDialog({ open, onOpenChange, nfeId }: DANFeDialogProps) {
             <div ref={printRef}>
               <DANFePrintContent nfe={nfe} itens={itens} />
             </div>
+            {shouldAutoPrint.current && itens.length >= 0 ? (() => {
+              shouldAutoPrint.current = false;
+              setTimeout(handleOpenAutoPrint, 0);
+              return null;
+            })() : null}
           </div>
         ) : null}
       </DialogContent>
