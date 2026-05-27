@@ -1380,8 +1380,83 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ========================================================================
+    // ACTION: danfe_nfe — DANFE oficial (sped-da) a partir do XML autorizado
+    // ========================================================================
+    if (action === 'danfe_nfe') {
+      if (!nfe_id) {
+        return new Response(
+          JSON.stringify({ error: 'nfe_id é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: nfe } = await supabase
+        .from('nfe')
+        .select('id, numero, chave_acesso, xml_retorno, xml_envio, empresa_id')
+        .eq('id', nfe_id)
+        .maybeSingle();
+
+      if (!nfe) {
+        return new Response(
+          JSON.stringify({ error: 'NF-e não encontrada' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const xml = normalizeXmlForDanfe(nfe.xml_retorno) || normalizeXmlForDanfe(nfe.xml_envio);
+      if (!xml) {
+        return new Response(
+          JSON.stringify({ error: 'XML autorizado indisponível para esta NF-e' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let phpResponse: Response;
+      let phpText = '';
+      try {
+        phpResponse = await fetch(`${FISCAL_API_BASE_URL}/nfe/danfe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ xml, tipo: 'base64', orientacao: 'P', tamanho: 'A4', mostrar_canhoto: true }),
+        });
+        phpText = await phpResponse.text();
+      } catch (err: any) {
+        return new Response(
+          JSON.stringify({ error: 'Falha ao contatar gerador DANFE', details: err?.message }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let phpData: any;
+      try { phpData = JSON.parse(phpText); } catch { phpData = { raw: phpText }; }
+
+      if (!phpResponse.ok || !phpData?.pdf_base64) {
+        console.error('❌ DANFE PHP error', phpResponse.status, phpText.substring(0, 400));
+        return new Response(
+          JSON.stringify({
+            error: phpData?.erro || 'Gerador DANFE indisponível (endpoint /nfe/danfe não publicado no api2)',
+            status: phpResponse.status,
+            details: phpText.substring(0, 500),
+          }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          sucesso: true,
+          pdf_base64: phpData.pdf_base64,
+          chave: nfe.chave_acesso,
+          numero: nfe.numero,
+          filename: `DANFE-${nfe.numero || nfe.chave_acesso || nfe.id}.pdf`,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe, inutilizar_nfe, emit_mdfe, encerrar_mdfe, cancel_mdfe' }),
+      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe, inutilizar_nfe, danfe_nfe, emit_mdfe, encerrar_mdfe, cancel_mdfe' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
