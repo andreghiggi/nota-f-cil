@@ -71,6 +71,7 @@ export default function NFe() {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cceOpen, setCceOpen] = useState(false);
   const [cceNfe, setCceNfe] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
+  const [inutOpen, setInutOpen] = useState(false);
   const queryClient = useQueryClient();
   const { ambiente } = useEnvironment();
   const { data: empresas = [] } = useEmpresas();
