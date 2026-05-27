@@ -14,6 +14,7 @@ import {
   Printer,
   FileEdit,
   Trash2,
+  Ban,
 } from "lucide-react";
 import {
   DropdownMenu,
