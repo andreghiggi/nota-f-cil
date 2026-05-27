@@ -419,6 +419,7 @@ export default function NFe() {
           nfeId={cceNfe.id || null}
           nfeNumero={cceNfe.numero}
         />
+        <InutilizacoesDialog open={inutOpen} onOpenChange={setInutOpen} />
       </div>
     </AppLayout>
   );
