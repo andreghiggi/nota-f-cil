@@ -1316,10 +1316,25 @@ Deno.serve(async (req) => {
       return await handleMdfeCancelar(supabase, mdfe_id);
     }
 
+    // ========================================================================
+    // ACTION: inutilizar_nfe (inutilização de numeração NF-e modelo 55)
+    // ========================================================================
+    if (action === 'inutilizar_nfe') {
+      return await handleInutilizar(
+        supabase,
+        empresa_id,
+        body.serie,
+        body.numero_inicial,
+        body.numero_final ?? body.numero_inicial,
+        body.justificativa,
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe, emit_mdfe, encerrar_mdfe, cancel_mdfe' }),
+      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe, inutilizar_nfe, emit_mdfe, encerrar_mdfe, cancel_mdfe' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
 
   } catch (error: any) {
     console.error('❌ Fiscal API error:', error);
@@ -1849,3 +1864,87 @@ async function handleMdfeCancelar(supabase: any, mdfeId: string) {
   return new Response(JSON.stringify({ error: 'Erro ao cancelar MDF-e na SEFAZ', details: data }),
     { status: resp.status || 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
+
+// ============================================================================
+// SHARED: Inutilização de numeração NF-e (modelo 55)
+// ============================================================================
+async function handleInutilizar(
+  supabase: any,
+  empresaId: string,
+  serie: any,
+  numeroInicial: any,
+  numeroFinal: any,
+  justificativa: string,
+) {
+  if (!empresaId) {
+    return new Response(JSON.stringify({ error: 'empresa_id é obrigatório' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const nSerie = parseInt(String(serie ?? '1'), 10);
+  const nIni = parseInt(String(numeroInicial ?? ''), 10);
+  const nFin = parseInt(String(numeroFinal ?? numeroInicial ?? ''), 10);
+  if (!nIni || !nFin || nFin < nIni) {
+    return new Response(JSON.stringify({ error: 'numero_inicial / numero_final inválidos' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const just = String(justificativa || '').trim();
+  if (just.length < 15 || just.length > 255) {
+    return new Response(JSON.stringify({ error: 'justificativa deve ter entre 15 e 255 caracteres' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const { empresa, certificate, error: regError } = await ensureRegistered(supabase, empresaId);
+  if (regError || !empresa?.api_key_fiscal) {
+    return new Response(JSON.stringify({ error: 'Empresa não registrada na API fiscal' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const payload: any = {
+    api_key: empresa.api_key_fiscal,
+    serie: nSerie,
+    numero_inicial: nIni,
+    numero_final: nFin,
+    justificativa: just,
+  };
+  if (certificate) {
+    payload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
+  }
+
+  console.log(`📡 Inutilizando NF-e série ${nSerie} ${nIni}-${nFin} (empresa ${empresaId})...`);
+  const { response, text: responseText, data: responseData } = await postWithRetry(
+    `${FISCAL_API_BASE_URL}/nfe/inutilizar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`,
+    payload,
+    { label: `Inutilizar NF-e ${nIni}-${nFin}` }
+  );
+  console.log(`📡 Inutilizar response (${response.status}):`, responseText.substring(0, 500));
+
+  const ok = response.ok && (responseData?.sucesso || responseData?.status === 'inutilizada' || String(responseData?.cStat) === '102');
+
+  await supabase.from('logs_fiscais').insert({
+    empresa_id: empresaId,
+    tipo: ok ? 'sucesso' : 'erro',
+    categoria: 'inutilizacao_nfe',
+    mensagem: ok
+      ? `NF-e série ${nSerie} ${nIni}-${nFin} inutilizada (cStat ${responseData?.cStat})`
+      : `Falha ao inutilizar NF-e série ${nSerie} ${nIni}-${nFin}`,
+    detalhes: responseData,
+  });
+
+  if (ok) {
+    // Remove eventuais registros pendentes na faixa inutilizada
+    await supabase.from('nfe')
+      .delete()
+      .eq('empresa_id', empresaId)
+      .eq('serie', String(nSerie).padStart(3, '0'))
+      .in('status', ['pendente', 'rejeitada', 'denegada'])
+      .gte('numero', String(nIni).padStart(9, '0'))
+      .lte('numero', String(nFin).padStart(9, '0'));
+
+    return new Response(JSON.stringify({ success: true, data: responseData }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  return new Response(JSON.stringify({ error: 'Erro ao inutilizar NF-e na SEFAZ', details: responseData }),
+    { status: response.status || 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+

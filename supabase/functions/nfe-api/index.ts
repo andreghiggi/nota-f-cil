@@ -1058,7 +1058,57 @@ Deno.serve(async (req) => {
       );
     }
 
+    // POST /nfe-api/inutilizar - Inutilização de numeração NF-e (modelo 55)
+    if (method === 'POST' && pathParts.length === 2 && pathParts[0] === 'nfe-api' && pathParts[1] === 'inutilizar') {
+      if (!permissoes.includes('cancelar') && !permissoes.includes('gerenciar')) {
+        return new Response(
+          JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const inutPayload = await req.json().catch(() => ({}));
+      const serie = inutPayload.serie ?? inutPayload.nSerie ?? 1;
+      const numero_inicial = inutPayload.numero_inicial ?? inutPayload.nIni;
+      const numero_final = inutPayload.numero_final ?? inutPayload.nFin ?? numero_inicial;
+      const justificativa = (inutPayload.justificativa || '').toString().trim();
+
+      if (!numero_inicial || !numero_final) {
+        return new Response(
+          JSON.stringify({ error: 'numero_inicial e numero_final são obrigatórios', code: 'VALIDATION_ERROR' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (justificativa.length < 15 || justificativa.length > 255) {
+        return new Response(
+          JSON.stringify({ error: 'Justificativa deve ter entre 15 e 255 caracteres', code: 'VALIDATION_ERROR' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'inutilizar_nfe', empresa_id, serie, numero_inicial, numero_final, justificativa }
+        });
+        if (fiscalError || !fiscalResult?.success) {
+          return new Response(
+            JSON.stringify({ error: 'Erro ao inutilizar NF-e na SEFAZ', code: 'SEFAZ_ERROR', details: fiscalResult?.error || fiscalError?.message }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ success: true, data: fiscalResult.data }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (e: any) {
+        return new Response(
+          JSON.stringify({ error: 'Erro interno ao inutilizar', code: 'INTERNAL_ERROR', details: e?.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // POST /nfe-api/:id/cce - Carta de Correção Eletrônica
+
     if (method === 'POST' && pathParts.length === 3 && pathParts[0] === 'nfe-api' && pathParts[2] === 'cce') {
       if (!permissoes.includes('cancelar') && !permissoes.includes('gerenciar') && !permissoes.includes('emitir')) {
         return new Response(
