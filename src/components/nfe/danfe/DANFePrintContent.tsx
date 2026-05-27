@@ -613,6 +613,30 @@ function calcICMSST(itens: any[]) {
 
 function buildInfoComplementar(nfe: any) {
   const parts: string[] = [];
+  const p = nfe.payload_entrada || {};
+  const infCpl = nfe.inf_cpl
+    || p.inf_cpl || p.infCpl
+    || p.informacoes_complementares
+    || p.informacoes_adicionais_contribuinte
+    || p.informacoes_adicionais
+    || p.info_adicional
+    || p.observacoes;
+  if (infCpl) parts.push(String(infCpl));
+
+  // Endereço de entrega (quando diferente do destinatário)
+  const ent = nfe.entrega || p.entrega || p.endereco_entrega;
+  if (ent && (ent.logradouro || ent.xLgr || ent.municipio || ent.xMun)) {
+    const linha = [
+      ent.nome || ent.xNome,
+      [ent.logradouro || ent.xLgr, ent.numero || ent.nro].filter(Boolean).join(", "),
+      ent.complemento || ent.xCpl,
+      ent.bairro || ent.xBairro,
+      [ent.municipio || ent.xMun, ent.uf || ent.UF].filter(Boolean).join("/"),
+      (ent.cep || ent.CEP) ? `CEP ${formatCEP(String(ent.cep || ent.CEP))}` : "",
+    ].filter(Boolean).join(" - ");
+    if (linha) parts.push(`ENTREGA: ${linha}`);
+  }
+
   if (nfe.valor_pis) parts.push(`PIS: R$ ${fc(nfe.valor_pis)}`);
   if (nfe.valor_cofins) parts.push(`COFINS: R$ ${fc(nfe.valor_cofins)}`);
   if (nfe.dest_email) parts.push(`Email destinatário: ${nfe.dest_email}`);
