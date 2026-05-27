@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { DANFePrintContent } from "./danfe/DANFePrintContent";
@@ -11,10 +11,13 @@ interface DANFeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   nfeId: string | null;
+  autoPrint?: boolean;
+  onAutoPrintHandled?: () => void;
 }
 
-export function DANFeDialog({ open, onOpenChange, nfeId }: DANFeDialogProps) {
+export function DANFeDialog({ open, onOpenChange, nfeId, autoPrint = false, onAutoPrintHandled }: DANFeDialogProps) {
   const printRef = useRef<HTMLDivElement>(null);
+  const autoPrintedFor = useRef<string | null>(null);
 
   const { data: nfe, isLoading } = useQuery({
     queryKey: ["nfe-danfe", nfeId],
@@ -30,7 +33,7 @@ export function DANFeDialog({ open, onOpenChange, nfeId }: DANFeDialogProps) {
     },
   });
 
-  const { data: itens = [] } = useQuery({
+  const { data: itens = [], isLoading: isLoadingItens } = useQuery({
     queryKey: ["nfe-itens-danfe", nfeId],
     enabled: !!nfeId && open,
     queryFn: async () => {
@@ -64,6 +67,18 @@ export function DANFeDialog({ open, onOpenChange, nfeId }: DANFeDialogProps) {
     printWindow.focus();
     setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
   };
+
+  useEffect(() => {
+    if (!autoPrint) autoPrintedFor.current = null;
+    if (!open || !autoPrint || isLoading || isLoadingItens || !nfe || autoPrintedFor.current === nfe.id) return;
+
+    autoPrintedFor.current = nfe.id;
+    const timer = window.setTimeout(() => {
+      handlePrint();
+      onAutoPrintHandled?.();
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [autoPrint, open, isLoading, isLoadingItens, nfe, itens.length, onAutoPrintHandled]);
 
   if (!nfe && !isLoading) return null;
 

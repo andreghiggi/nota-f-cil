@@ -123,6 +123,57 @@ async function hashToken(token: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+function extractXmlCandidate(value: any): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object') return '';
+
+  for (const key of ['xml_retorno', 'xml', 'xmlRetorno', 'procNFe', 'nfeProc', 'xml_envio']) {
+    const found = extractXmlCandidate(value[key]);
+    if (found) return found;
+  }
+  for (const nested of Object.values(value)) {
+    const found = extractXmlCandidate(nested);
+    if (found) return found;
+  }
+  return '';
+}
+
+function normalizeXmlResponse(raw: any): string | null {
+  let xml = extractXmlCandidate(raw).trim();
+  if (!xml) return null;
+
+  if (xml.startsWith('{') || xml.startsWith('[')) {
+    try { xml = extractXmlCandidate(JSON.parse(xml)).trim() || xml; } catch {}
+  }
+
+  if (xml.includes('&lt;') && !xml.includes('<NFe') && !xml.includes('<procNFe')) {
+    xml = xml
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+
+  const compact = xml.trim().replace(/\s+/g, '');
+  if (!xml.trim().startsWith('<') && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length > 40) {
+    try {
+      const bin = atob(compact);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      xml = new TextDecoder('utf-8').decode(bytes).trim();
+    } catch {
+      return null;
+    }
+  }
+
+  const start = xml.search(/<\?xml|<procNFe|<NFe/i);
+  if (start > 0) xml = xml.slice(start);
+  xml = xml.replace(/^\uFEFF/, '').trim();
+  return xml.startsWith('<') ? xml : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -535,6 +586,14 @@ Deno.serve(async (req) => {
       }
 
       const payload: NFePayload = await req.json();
+      payload.itens = (payload.itens || []).map((item: any) => ({
+        ...item,
+        codigo: String(item.codigo ?? item.cProd ?? item.codigo_produto ?? item.cod_produto ?? '').trim(),
+        descricao: String(item.descricao ?? item.xProd ?? item.descricao_produto ?? item.nome_produto ?? item.produto ?? '').trim(),
+        unidade: String(item.unidade ?? item.uCom ?? item.uTrib ?? 'UN').trim(),
+        quantidade: Number(item.quantidade ?? item.qCom ?? item.qTrib ?? 0),
+        valor_unitario: Number(item.valor_unitario ?? item.vUnCom ?? item.vUnTrib ?? 0),
+      }));
 
       if (!payload.itens || payload.itens.length === 0) {
         return new Response(
@@ -1279,8 +1338,29 @@ Deno.serve(async (req) => {
         );
       }
 
+      const xmlRetorno = normalizeXmlResponse(nfeData.xml_retorno);
+      const xmlEnvio = normalizeXmlResponse(nfeData.xml_envio);
+      const xmlFinal = xmlRetorno || xmlEnvio;
+
+      if (url.searchParams.get('raw') === '1') {
+        if (!xmlFinal) {
+          return new Response(
+            JSON.stringify({ error: 'XML indisponível ou inválido', code: 'XML_NOT_AVAILABLE' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(xmlFinal, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/xml; charset=utf-8',
+            'Content-Disposition': `attachment; filename="nfe-${nfeId}.xml"`,
+          },
+        });
+      }
+
       return new Response(
-        JSON.stringify({ success: true, data: { xml_envio: nfeData.xml_envio, xml_retorno: nfeData.xml_retorno } }),
+        JSON.stringify({ success: true, data: { xml_envio: xmlEnvio, xml_retorno: xmlRetorno, xml: xmlFinal } }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

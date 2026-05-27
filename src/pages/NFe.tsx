@@ -61,12 +61,67 @@ const statusStyles: Record<string, string> = {
   contingencia: "status-processando",
 };
 
+const XML_FIELD_NAMES = ["xml_retorno", "xml", "xmlRetorno", "procNFe", "nfeProc", "xml_envio"];
+
+function extractXmlCandidate(value: unknown): string {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value !== "object") return "";
+
+  const obj = value as Record<string, unknown>;
+  for (const field of XML_FIELD_NAMES) {
+    const found = extractXmlCandidate(obj[field]);
+    if (found) return found;
+  }
+  for (const nested of Object.values(obj)) {
+    const found = extractXmlCandidate(nested);
+    if (found) return found;
+  }
+  return "";
+}
+
+function normalizeXmlContent(raw: unknown): string {
+  let xml = extractXmlCandidate(raw).trim();
+  if (!xml) return "";
+
+  if (xml.startsWith("{") || xml.startsWith("[")) {
+    try {
+      xml = extractXmlCandidate(JSON.parse(xml)).trim() || xml;
+    } catch {
+      // Mantém o conteúdo original caso não seja JSON válido.
+    }
+  }
+
+  if (xml.includes("&lt;") && !xml.includes("<NFe") && !xml.includes("<procNFe")) {
+    xml = xml
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, "&");
+  }
+
+  const trimmed = xml.trim();
+  const looksB64 = !trimmed.startsWith("<") && /^[A-Za-z0-9+/=\s]+$/.test(trimmed) && trimmed.replace(/\s+/g, "").length > 40;
+  if (looksB64) {
+    const bin = atob(trimmed.replace(/\s+/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    xml = new TextDecoder("utf-8").decode(bytes).trim();
+  }
+
+  const start = xml.search(/<\?xml|<procNFe|<NFe/i);
+  if (start > 0) xml = xml.slice(start);
+  return xml.replace(/^\uFEFF/, "").trim();
+}
+
 export default function NFe() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [empresaFilter, setEmpresaFilter] = useState("todas");
   const [search, setSearch] = useState("");
   const [danfeNfeId, setDanfeNfeId] = useState<string | null>(null);
   const [danfeOpen, setDanfeOpen] = useState(false);
+  const [danfeAutoPrint, setDanfeAutoPrint] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelNfe, setCancelNfe] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -121,25 +176,24 @@ export default function NFe() {
 
   const handleDownloadXml = async (nfeId: string, numero: string) => {
     const { data, error } = await supabase.from("nfe").select("xml_envio, xml_retorno").eq("id", nfeId).single();
-    let xml = data?.xml_retorno || data?.xml_envio;
-    if (error || !xml) {
+    if (error || (!data?.xml_retorno && !data?.xml_envio)) {
       toast.error("XML não disponível para esta NF-e");
       return;
     }
-    // XMLs vindos do PHP api2 chegam codificados em base64. Decodificamos se necessário.
-    const trimmed = xml.trim();
-    const looksB64 = !trimmed.startsWith("<") && /^[A-Za-z0-9+/=\s]+$/.test(trimmed);
-    if (looksB64) {
-      try {
-        const bin = atob(trimmed.replace(/\s+/g, ""));
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        xml = new TextDecoder("utf-8").decode(bytes);
-      } catch {
-        toast.error("Falha ao decodificar XML (base64 inválido)");
-        return;
-      }
+
+    let xml = "";
+    try {
+      xml = normalizeXmlContent(data.xml_retorno || data.xml_envio);
+    } catch {
+      toast.error("Falha ao decodificar XML retornado pela API fiscal");
+      return;
     }
+
+    if (!xml.startsWith("<")) {
+      toast.error("XML retornado pela API fiscal está inválido");
+      return;
+    }
+
     const blob = new Blob([xml], { type: "application/xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -372,10 +426,10 @@ export default function NFe() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfeNfeId(nfe.id); setDanfeOpen(true); }, 0); }}>
+                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfeAutoPrint(false); setDanfeNfeId(nfe.id); setDanfeOpen(true); }, 0); }}>
                               <Eye className="h-4 w-4 mr-2" />Visualizar DANFE
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfeNfeId(nfe.id); setDanfeOpen(true); }, 0); }}>
+                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfeAutoPrint(true); setDanfeNfeId(nfe.id); setDanfeOpen(true); }, 0); }}>
                               <Printer className="h-4 w-4 mr-2" />Imprimir DANFE
                             </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => handleDownloadXml(nfe.id, nfe.numero)}>
@@ -415,8 +469,10 @@ export default function NFe() {
 
         <DANFeDialog
           open={danfeOpen}
-          onOpenChange={setDanfeOpen}
+          onOpenChange={(open) => { setDanfeOpen(open); if (!open) setDanfeAutoPrint(false); }}
           nfeId={danfeNfeId}
+          autoPrint={danfeAutoPrint}
+          onAutoPrintHandled={() => setDanfeAutoPrint(false)}
         />
 
         <CancelNFeDialog
