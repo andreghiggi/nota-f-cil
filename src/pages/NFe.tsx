@@ -121,6 +121,7 @@ export default function NFe() {
   const [search, setSearch] = useState("");
   const [danfeNfeId, setDanfeNfeId] = useState<string | null>(null);
   const [danfeOpen, setDanfeOpen] = useState(false);
+  const [danfeAutoPrint, setDanfeAutoPrint] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelNfe, setCancelNfe] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
   const [cancelLoading, setCancelLoading] = useState(false);
@@ -425,10 +426,10 @@ export default function NFe() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfeNfeId(nfe.id); setDanfeOpen(true); }, 0); }}>
+                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfeAutoPrint(false); setDanfeNfeId(nfe.id); setDanfeOpen(true); }, 0); }}>
                               <Eye className="h-4 w-4 mr-2" />Visualizar DANFE
                             </DropdownMenuItem>
-                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfeNfeId(nfe.id); setDanfeOpen(true); }, 0); }}>
+                            <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfeAutoPrint(true); setDanfeNfeId(nfe.id); setDanfeOpen(true); }, 0); }}>
                               <Printer className="h-4 w-4 mr-2" />Imprimir DANFE
                             </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => handleDownloadXml(nfe.id, nfe.numero)}>
@@ -468,8 +469,10 @@ export default function NFe() {
 
         <DANFeDialog
           open={danfeOpen}
-          onOpenChange={setDanfeOpen}
+          onOpenChange={(open) => { setDanfeOpen(open); if (!open) setDanfeAutoPrint(false); }}
           nfeId={danfeNfeId}
+          autoPrint={danfeAutoPrint}
+          onAutoPrintHandled={() => setDanfeAutoPrint(false)}
         />
 
         <CancelNFeDialog
