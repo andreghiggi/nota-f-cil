@@ -14,6 +14,7 @@ import {
   Printer,
   FileEdit,
   Trash2,
+  Ban,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -35,6 +36,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DANFeDialog } from "@/components/nfe/DANFeDialog";
 import { CancelNFeDialog } from "@/components/nfe/CancelNFeDialog";
 import { CartaCorrecaoDialog } from "@/components/nfe/CartaCorrecaoDialog";
+import { InutilizacoesDialog } from "@/components/nfe/InutilizacoesDialog";
 import { toast } from "sonner";
 import { useEmpresas } from "@/hooks/useSupabaseData";
 import { useEnvironment } from "@/contexts/EnvironmentContext";
@@ -70,6 +72,7 @@ export default function NFe() {
   const [cancelLoading, setCancelLoading] = useState(false);
   const [cceOpen, setCceOpen] = useState(false);
   const [cceNfe, setCceNfe] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
+  const [inutOpen, setInutOpen] = useState(false);
   const queryClient = useQueryClient();
   const { ambiente } = useEnvironment();
   const { data: empresas = [] } = useEmpresas();
@@ -235,10 +238,16 @@ export default function NFe() {
             <p className="text-sm text-muted-foreground">
               Exibindo <span className="font-medium text-foreground">{nfeList.length}</span> notas fiscais
             </p>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              Exportar
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setInutOpen(true)}>
+                <Ban className="h-4 w-4 mr-2" />
+                Inutilizações
+              </Button>
+              <Button variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Exportar
+              </Button>
+            </div>
           </div>
 
           {isLoading ? (
@@ -410,6 +419,7 @@ export default function NFe() {
           nfeId={cceNfe.id || null}
           nfeNumero={cceNfe.numero}
         />
+        <InutilizacoesDialog open={inutOpen} onOpenChange={setInutOpen} />
       </div>
     </AppLayout>
   );
