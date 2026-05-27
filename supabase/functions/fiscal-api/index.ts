@@ -1316,10 +1316,25 @@ Deno.serve(async (req) => {
       return await handleMdfeCancelar(supabase, mdfe_id);
     }
 
+    // ========================================================================
+    // ACTION: inutilizar_nfe (inutilização de numeração NF-e modelo 55)
+    // ========================================================================
+    if (action === 'inutilizar_nfe') {
+      return await handleInutilizar(
+        supabase,
+        empresa_id,
+        body.serie,
+        body.numero_inicial,
+        body.numero_final ?? body.numero_inicial,
+        body.justificativa,
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe, emit_mdfe, encerrar_mdfe, cancel_mdfe' }),
+      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe, inutilizar_nfe, emit_mdfe, encerrar_mdfe, cancel_mdfe' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
 
   } catch (error: any) {
     console.error('❌ Fiscal API error:', error);
