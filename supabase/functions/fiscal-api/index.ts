@@ -69,6 +69,55 @@ async function postWithRetry(
 }
 
 /**
+ * Normaliza o conteúdo XML salvo em xml_retorno/xml_envio. Aceita:
+ *  - string XML pura
+ *  - JSON com {xml|xml_retorno|procNFe|nfeProc}
+ *  - Base64 com XML dentro
+ *  - HTML-encoded (&lt;)
+ * Retorna XML cru pronto para o sped-da, ou string vazia.
+ */
+function normalizeXmlForDanfe(raw: any): string {
+  if (!raw) return '';
+  let xml = '';
+  if (typeof raw === 'string') {
+    xml = raw.trim();
+  } else if (typeof raw === 'object') {
+    xml = String(raw.xml || raw.xml_retorno || raw.procNFe || raw.nfeProc || raw.NFe || '').trim();
+  }
+  if (!xml) return '';
+
+  if (xml.startsWith('{') || xml.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(xml);
+      xml = String(parsed.xml || parsed.xml_retorno || parsed.procNFe || parsed.nfeProc || parsed.NFe || '').trim();
+    } catch { /* mantém */ }
+  }
+
+  if (xml.includes('&lt;') && !xml.includes('<NFe') && !xml.includes('<procNFe')) {
+    xml = xml
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+
+  const compact = xml.replace(/\s+/g, '');
+  if (!xml.startsWith('<') && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length > 40) {
+    try {
+      const bin = atob(compact);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      xml = new TextDecoder('utf-8').decode(bytes).trim();
+    } catch { return ''; }
+  }
+
+  const start = xml.search(/<\?xml|<nfeProc|<procNFe|<NFe/i);
+  if (start > 0) xml = xml.slice(start);
+  return xml.replace(/^\uFEFF/, '').trim();
+}
+
+/**
  * Load certificate (PFX) from Supabase Storage and return base64 + decoded password.
  * Returns null if no certificate is configured.
  */
@@ -1380,8 +1429,83 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ========================================================================
+    // ACTION: danfe_nfe — DANFE oficial (sped-da) a partir do XML autorizado
+    // ========================================================================
+    if (action === 'danfe_nfe') {
+      if (!nfe_id) {
+        return new Response(
+          JSON.stringify({ error: 'nfe_id é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const { data: nfe } = await supabase
+        .from('nfe')
+        .select('id, numero, chave_acesso, xml_retorno, xml_envio, empresa_id')
+        .eq('id', nfe_id)
+        .maybeSingle();
+
+      if (!nfe) {
+        return new Response(
+          JSON.stringify({ error: 'NF-e não encontrada' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const xml = normalizeXmlForDanfe(nfe.xml_retorno) || normalizeXmlForDanfe(nfe.xml_envio);
+      if (!xml) {
+        return new Response(
+          JSON.stringify({ error: 'XML autorizado indisponível para esta NF-e' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let phpResponse: Response;
+      let phpText = '';
+      try {
+        phpResponse = await fetch(`${FISCAL_API_BASE_URL}/nfe/danfe`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ xml, tipo: 'base64', orientacao: 'P', tamanho: 'A4', mostrar_canhoto: true }),
+        });
+        phpText = await phpResponse.text();
+      } catch (err: any) {
+        return new Response(
+          JSON.stringify({ error: 'Falha ao contatar gerador DANFE', details: err?.message }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let phpData: any;
+      try { phpData = JSON.parse(phpText); } catch { phpData = { raw: phpText }; }
+
+      if (!phpResponse.ok || !phpData?.pdf_base64) {
+        console.error('❌ DANFE PHP error', phpResponse.status, phpText.substring(0, 400));
+        return new Response(
+          JSON.stringify({
+            error: phpData?.erro || 'Gerador DANFE indisponível (endpoint /nfe/danfe não publicado no api2)',
+            status: phpResponse.status,
+            details: phpText.substring(0, 500),
+          }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({
+          sucesso: true,
+          pdf_base64: phpData.pdf_base64,
+          chave: nfe.chave_acesso,
+          numero: nfe.numero,
+          filename: `DANFE-${nfe.numero || nfe.chave_acesso || nfe.id}.pdf`,
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe, inutilizar_nfe, emit_mdfe, encerrar_mdfe, cancel_mdfe' }),
+      JSON.stringify({ error: 'Ação inválida. Use: register_empresa, emit_nfce, emit_nfe, cancel_nfce, cancel_nfe, cce_nfe, inutilizar_nfe, danfe_nfe, emit_mdfe, encerrar_mdfe, cancel_mdfe' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 

@@ -1,35 +1,92 @@
 
-## Plano de Correção — Pontos de Atenção
+## Problema
 
-### 1️⃣ fiscal-api crash em GET sem body (Severidade: Baixa)
-**Problema**: A fiscal-api faz `await req.json()` na linha 20 sem verificar se há body, causando crash 500 em qualquer request GET (health checks, monitoring).
-**Solução**: Adicionar verificação de method GET antes do `req.json()` retornando `{ status: "ok" }`.
-**Impacto**: Permite health checks e monitoramento.
+O DANFE atual é gerado em React/HTML dentro do app e fica fora do padrão nacional. O download de XML também sai inconsistente. A biblioteca correta (`nfephp-org/sped-da`) já está disponível no projeto sped-nfe rodando no api2 (`api2.agilizeerp.com.br`) e gera a DANFE oficial em PDF.
 
-### 2️⃣ NF-e Produtor Rural CPF — Rejeição 253 (Severidade: Média)
-**Problema**: Bug conhecido da SEFAZ RS em homologação para emitentes CPF. O DV é calculado corretamente com padding 14 dígitos + timezone -03:00, mas a SEFAZ rejeita.
-**Solução**: Não há correção de código possível — é bug da SEFAZ. **Ação**: Documentar o cenário e preparar teste em produção quando autorizado pelo cliente. Verificar se o PHP está montando a chave corretamente via log de debug.
-**Impacto**: Nenhuma alteração de código necessária agora.
+A api2 hoje não tem endpoint de DANFE — precisa ser adicionado.
 
-### 3️⃣ Extensão pg_net no schema public (Severidade: Baixa)
-**Problema**: A extensão `pg_net` está instalada no schema `public` em vez de `extensions`. É um warning de segurança do linter.
-**Solução**: Migração SQL para mover a extensão: `ALTER EXTENSION pg_net SET SCHEMA extensions;`
-**Impacto**: Melhora a postura de segurança.
+## Solução
 
-### 4️⃣ Leaked Password Protection desabilitada (Severidade: Baixa)
-**Problema**: A proteção contra senhas vazadas (HaveIBeenPwned) está desativada no auth.
-**Solução**: Habilitar via configuração de auth.
-**Impacto**: Usuários não poderão usar senhas que apareceram em vazamentos conhecidos.
+Toda renderização da DANFE e do XML autorizado passa a vir do PHP (sped-da), o app só faz proxy e exibe o PDF.
 
-### 5️⃣ Verificação do PHP/VPS para produtor rural (Severidade: Média)
-**Problema**: Precisamos confirmar se o backend PHP está gerando a chave de acesso corretamente para CPF.
-**Solução**: Acessar a VPS e verificar o log de debug (`/tmp/fiscal_debug.log`) da última tentativa de emissão do produtor rural, validando campo por campo da chave de 44 dígitos.
-**Impacto**: Diagnóstico definitivo se é bug SEFAZ ou nosso.
+### 1. PHP no api2 (`public/index.php`) — novos endpoints
 
----
+`POST /nfe/danfe`
+- Recebe `{ xml, logo_base64?, orientacao?, tamanho?, mostrar_canhoto?, tipo? }`
+- `tipo`: `pdf` (default) ou `base64`
+- Usa `NFePHP\DA\NFe\Danfe`:
+  ```php
+  $danfe = new Danfe($xml);
+  $danfe->debugMode(false);
+  $danfe->creditsIntegratorFooter('Agilize ERP');
+  if ($logo) $danfe->logoParameters($logo, 'C', false);
+  $pdf = $danfe->render();
+  ```
+- Retorna `application/pdf` direto ou JSON `{ pdf_base64 }`.
 
-**Resumo**: 
-- Itens 1 e 3: correções rápidas de código/migração
-- Item 4: configuração de auth
-- Itens 2 e 5: diagnóstico via VPS (sem mudança de ambiente)
-- **Nenhuma alteração para produção será feita**
+`POST /nfe/danfe-simples` (fallback)
+- Mesmo contrato; renderiza retrato A4 sem logo (para chaves sem certificado).
+
+`POST /nfce/danfe` (mesmo, usando `NFePHP\DA\NFCe\Danfce`) — fica preparado para NFC-e.
+
+Vou entregar o snippet PHP pronto pra colar no `public/index.php` do servidor (não tenho SSH para implantar).
+
+### 2. Edge Function `fiscal-api`
+
+- Nova action `danfe_nfe`: recebe `nfe_id`, busca `xml_retorno` (normalizado), envia para `POST /nfe/danfe` no api2 com `tipo=base64`, devolve `{ pdf_base64, chave, numero }`.
+- Mesma normalização já existente (`extractXmlCandidate` / decodificação Base64 / strip de `&lt;`).
+- Cache opcional em memória por `chave_acesso` (TTL curto) para evitar regenerar.
+
+### 3. Edge Function `nfe-api`
+
+- `GET /nfe/{id}/danfe.pdf` → retorna `application/pdf` (binário) usando o `fiscal-api`.
+- `GET /nfe/{id}/xml` → retorna o XML autorizado já normalizado (UTF-8 puro, com `<nfeProc>` quando existir), `Content-Type: application/xml`, `Content-Disposition: attachment`.
+- Mantém endpoints atuais para retrocompatibilidade.
+
+### 4. Frontend (`src/pages/NFe.tsx` + `DANFeDialog.tsx`)
+
+- `DANFeDialog` deixa de renderizar HTML próprio. Passa a:
+  1. Chamar `fiscal-api` action `danfe_nfe`.
+  2. Receber `pdf_base64`, montar Blob `application/pdf` e exibir em `<iframe>` ocupando o dialog inteiro.
+  3. Em modo `autoPrint`, abrir o blob em nova aba e disparar `print()` direto.
+- Download XML: chama `nfe-api` (`/nfe/{id}/xml`) e salva o blob diretamente — fim das tentativas de “consertar” XML no frontend.
+- Botão extra “Baixar PDF” ao lado de “Visualizar/Imprimir”.
+
+### 5. Limpeza
+
+- Remove a montagem manual de DANFE/HTML que está em `DANFeDialog.tsx` e qualquer normalização duplicada no client.
+- Memory: atualizar `mem://funcionalidades/danfe-impressao` para registrar que DANFE é sempre PHP/sped-da.
+
+## Detalhes técnicos
+
+```text
+React  ──► nfe-api /nfe/:id/danfe.pdf ──► fiscal-api action danfe_nfe ──► PHP /nfe/danfe (sped-da) ──► PDF
+React  ──► nfe-api /nfe/:id/xml       ──► xml_retorno normalizado (UTF-8) ──► download
+```
+
+Contrato `POST /nfe/danfe` (PHP):
+```json
+{
+  "xml": "<nfeProc ...>...</nfeProc>",
+  "logo_base64": "data:image/png;base64,...",
+  "orientacao": "P",
+  "tamanho": "A4",
+  "mostrar_canhoto": true,
+  "tipo": "base64"
+}
+```
+Resposta:
+```json
+{ "sucesso": true, "pdf_base64": "JVBERi0xLjQK..." }
+```
+
+## Entregáveis
+
+1. Snippet PHP pronto pra colar (com handler `/nfe/danfe`, `/nfe/danfe-simples`, `/nfce/danfe`).
+2. Edge functions `fiscal-api` (nova action) e `nfe-api` (rotas pdf/xml) atualizadas.
+3. `DANFeDialog.tsx` simplificado pra usar iframe PDF.
+4. Atualização de menu na página `/nfe` (Visualizar/Imprimir/Baixar PDF/Baixar XML).
+
+## Confirmação necessária
+
+Você consegue colar o snippet PHP no `public/index.php` do api2 e reiniciar o php-fpm? Sem esse deploy o `/nfe/danfe` não vai existir e o app não tem como gerar a DANFE nacional.
