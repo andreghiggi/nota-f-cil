@@ -455,6 +455,9 @@ export default function NFe() {
                             <DropdownMenuItem onSelect={() => { setTimeout(() => { setDanfeAutoPrint(true); setDanfeNfeId(nfe.id); setDanfeOpen(true); }, 0); }}>
                               <Printer className="h-4 w-4 mr-2" />Imprimir DANFE
                             </DropdownMenuItem>
+                            <DropdownMenuItem onSelect={() => handleDownloadDanfePdf(nfe.id, nfe.numero)}>
+                              <Download className="h-4 w-4 mr-2" />Baixar DANFE (PDF)
+                            </DropdownMenuItem>
                             <DropdownMenuItem onSelect={() => handleDownloadXml(nfe.id, nfe.numero)}>
                               <Download className="h-4 w-4 mr-2" />Download XML
                             </DropdownMenuItem>
