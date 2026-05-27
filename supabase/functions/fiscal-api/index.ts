@@ -1176,6 +1176,7 @@ Deno.serve(async (req) => {
       }
 
       console.log(`📡 Emitting NF-e ${nfe.numero} via fiscal API (modelo 55, ${isPF ? 'PF' : 'PJ'})...`);
+      console.log(`💰 vProd=${payload.nota.valor_total_produtos} vNF=${payload.nota.valor_total} total.ICMSTot.vProd=${payload.nota.total?.ICMSTot?.vProd}`);
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfe/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
 
