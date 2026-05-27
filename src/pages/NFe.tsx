@@ -35,6 +35,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DANFeDialog } from "@/components/nfe/DANFeDialog";
 import { CancelNFeDialog } from "@/components/nfe/CancelNFeDialog";
 import { CartaCorrecaoDialog } from "@/components/nfe/CartaCorrecaoDialog";
+import { InutilizacoesDialog } from "@/components/nfe/InutilizacoesDialog";
 import { toast } from "sonner";
 import { useEmpresas } from "@/hooks/useSupabaseData";
 import { useEnvironment } from "@/contexts/EnvironmentContext";
