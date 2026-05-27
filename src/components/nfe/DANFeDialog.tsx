@@ -1,7 +1,7 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Printer } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { DANFePrintContent } from "./danfe/DANFePrintContent";
@@ -11,11 +11,13 @@ interface DANFeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   nfeId: string | null;
+  autoPrint?: boolean;
+  onAutoPrintHandled?: () => void;
 }
 
-export function DANFeDialog({ open, onOpenChange, nfeId }: DANFeDialogProps) {
+export function DANFeDialog({ open, onOpenChange, nfeId, autoPrint = false, onAutoPrintHandled }: DANFeDialogProps) {
   const printRef = useRef<HTMLDivElement>(null);
-  const shouldAutoPrint = useRef(false);
+  const autoPrintedFor = useRef<string | null>(null);
 
   const { data: nfe, isLoading } = useQuery({
     queryKey: ["nfe-danfe", nfeId],
@@ -66,10 +68,17 @@ export function DANFeDialog({ open, onOpenChange, nfeId }: DANFeDialogProps) {
     setTimeout(() => { printWindow.print(); printWindow.close(); }, 500);
   };
 
-  const handleOpenAutoPrint = () => {
-    shouldAutoPrint.current = true;
-    setTimeout(() => handlePrint(), 100);
-  };
+  useEffect(() => {
+    if (!autoPrint) autoPrintedFor.current = null;
+    if (!open || !autoPrint || isLoading || !nfe || autoPrintedFor.current === nfe.id) return;
+
+    autoPrintedFor.current = nfe.id;
+    const timer = window.setTimeout(() => {
+      handlePrint();
+      onAutoPrintHandled?.();
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [autoPrint, open, isLoading, nfe, itens.length, onAutoPrintHandled]);
 
   if (!nfe && !isLoading) return null;
 
@@ -92,11 +101,6 @@ export function DANFeDialog({ open, onOpenChange, nfeId }: DANFeDialogProps) {
             <div ref={printRef}>
               <DANFePrintContent nfe={nfe} itens={itens} />
             </div>
-            {shouldAutoPrint.current && itens.length >= 0 ? (() => {
-              shouldAutoPrint.current = false;
-              setTimeout(handleOpenAutoPrint, 0);
-              return null;
-            })() : null}
           </div>
         ) : null}
       </DialogContent>
