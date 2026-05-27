@@ -299,81 +299,95 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
       </table>
 
       {/* ========== TRANSPORTADOR ========== */}
-      <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
-        <tbody>
-          <tr>
-            <td rowSpan={3} className="black-label">TRANSPORTADOR / VOLUMES TRANSPORTADOS</td>
-            <td style={{ width: "30%" }}>
-              <span className="nf-label">RAZÃO SOCIAL</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td style={{ width: "15%" }}>
-              <span className="nf-label">FRETE POR CONTA</span>
-              <span className="nf-info">{freteLabel(nfe.modalidade_frete)}</span>
-            </td>
-            <td style={{ width: "10%" }}>
-              <span className="nf-label">CÓDIGO ANTT</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td style={{ width: "10%" }}>
-              <span className="nf-label">PLACA VEÍCULO</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td style={{ width: "5%" }}>
-              <span className="nf-label">UF</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td>
-              <span className="nf-label">CNPJ/CPF</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-          </tr>
-          <tr>
-            <td colSpan={2}>
-              <span className="nf-label">ENDEREÇO</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td colSpan={2}>
-              <span className="nf-label">MUNICÍPIO</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td>
-              <span className="nf-label">UF</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td>
-              <span className="nf-label">INSC. ESTADUAL</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <span className="nf-label">QUANTIDADE</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td>
-              <span className="nf-label">ESPÉCIE</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td>
-              <span className="nf-label">MARCA</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td>
-              <span className="nf-label">NUMERAÇÃO</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td>
-              <span className="nf-label">PESO BRUTO</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-            <td>
-              <span className="nf-label">PESO LÍQUIDO</span>
-              <span className="nf-info">&nbsp;</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      {(() => {
+        const p = nfe.payload_entrada || {};
+        const tSrc = nfe.transporte || p.transporte || p.transp || p.transportador || p.transportadora || {};
+        const tr = tSrc.transportadora || tSrc.transporta || tSrc || {};
+        const veic = tSrc.veiculo || tSrc.veicTransp || tSrc || {};
+        const vol = Array.isArray(tSrc.volumes) ? (tSrc.volumes[0] || {}) : (tSrc.vol || {});
+        const trDoc = String(tr.cnpj || tr.CNPJ || tr.cpf || tr.CPF || tr.cnpj_cpf || "").replace(/\D/g, "");
+        const trIE = String(tr.ie || tr.IE || tr.inscricao_estadual || "").replace(/\D/g, "");
+        const placa = String(veic.placa || veic.placa_veiculo || "").toUpperCase();
+        const ufVeic = veic.uf_veiculo || veic.UF || veic.uf || "";
+        const rntc = veic.rntc || veic.RNTC || "";
+        return (
+          <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
+            <tbody>
+              <tr>
+                <td rowSpan={3} className="black-label">TRANSPORTADOR / VOLUMES TRANSPORTADOS</td>
+                <td style={{ width: "30%" }}>
+                  <span className="nf-label">RAZÃO SOCIAL</span>
+                  <span className="nf-info">{tr.razao_social || tr.nome || tr.xNome || ""}</span>
+                </td>
+                <td style={{ width: "15%" }}>
+                  <span className="nf-label">FRETE POR CONTA</span>
+                  <span className="nf-info">{freteLabel(nfe.modalidade_frete)}</span>
+                </td>
+                <td style={{ width: "10%" }}>
+                  <span className="nf-label">CÓDIGO ANTT</span>
+                  <span className="nf-info">{rntc}</span>
+                </td>
+                <td style={{ width: "10%" }}>
+                  <span className="nf-label">PLACA VEÍCULO</span>
+                  <span className="nf-info">{placa}</span>
+                </td>
+                <td style={{ width: "5%" }}>
+                  <span className="nf-label">UF</span>
+                  <span className="nf-info">{ufVeic}</span>
+                </td>
+                <td>
+                  <span className="nf-label">CNPJ/CPF</span>
+                  <span className="nf-info">{formatCPFCNPJ(trDoc)}</span>
+                </td>
+              </tr>
+              <tr>
+                <td colSpan={2}>
+                  <span className="nf-label">ENDEREÇO</span>
+                  <span className="nf-info">{tr.endereco || tr.xEnder || ""}</span>
+                </td>
+                <td colSpan={2}>
+                  <span className="nf-label">MUNICÍPIO</span>
+                  <span className="nf-info">{tr.municipio || tr.cidade || tr.xMun || ""}</span>
+                </td>
+                <td>
+                  <span className="nf-label">UF</span>
+                  <span className="nf-info">{tr.uf || tr.UF || ""}</span>
+                </td>
+                <td>
+                  <span className="nf-label">INSC. ESTADUAL</span>
+                  <span className="nf-info">{trIE}</span>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <span className="nf-label">QUANTIDADE</span>
+                  <span className="nf-info">{vol.qVol || vol.quantidade || ""}</span>
+                </td>
+                <td>
+                  <span className="nf-label">ESPÉCIE</span>
+                  <span className="nf-info">{vol.esp || vol.especie || ""}</span>
+                </td>
+                <td>
+                  <span className="nf-label">MARCA</span>
+                  <span className="nf-info">{vol.marca || ""}</span>
+                </td>
+                <td>
+                  <span className="nf-label">NUMERAÇÃO</span>
+                  <span className="nf-info">{vol.nVol || vol.numeracao || ""}</span>
+                </td>
+                <td>
+                  <span className="nf-label">PESO BRUTO</span>
+                  <span className="nf-info">{vol.pesoB || vol.peso_bruto || ""}</span>
+                </td>
+                <td>
+                  <span className="nf-label">PESO LÍQUIDO</span>
+                  <span className="nf-info">{vol.pesoL || vol.peso_liquido || ""}</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        );
+      })()}
 
       {/* ========== DADOS DO PRODUTO ========== */}
       <table cellPadding={0} cellSpacing={0} className="danfe-section no-top">
