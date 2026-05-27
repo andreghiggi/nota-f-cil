@@ -724,15 +724,40 @@ Deno.serve(async (req) => {
       // Build items with full tax data
       const itensObj: Record<string, any> = {};
       (nfe.nfe_itens || []).forEach((item: any, idx: number) => {
+        const descProduto = String(item.descricao ?? '').trim();
+        const codProduto = String(item.codigo_produto ?? item.codigo ?? '').trim();
+        if (!descProduto || !codProduto) {
+          throw new Error(`NF-e ${nfe.numero}: item ${idx + 1} sem código ou descrição do produto no payload original`);
+        }
+        const quantidade = Number(item.quantidade) || 0;
+        const valorUnitario = Number(item.valor_unitario) || 0;
+        const valorTotal = Number(item.valor_total ?? quantidade * valorUnitario);
+        const unidade = String(item.unidade || 'UN').trim();
         const itemData: any = {
-          descricao: item.descricao,
-          quantidade: item.quantidade,
-          valor_unitario: item.valor_unitario,
-          valor_total: item.valor_total || (item.quantidade * item.valor_unitario),
-          codigo_produto: item.codigo_produto,
+          descricao: descProduto,
+          descricao_produto: descProduto,
+          nome_produto: descProduto,
+          produto: descProduto,
+          xProd: descProduto,
+          quantidade,
+          qCom: quantidade,
+          qTrib: quantidade,
+          valor_unitario: valorUnitario,
+          vUnCom: valorUnitario,
+          vUnTrib: valorUnitario,
+          valor_total: valorTotal,
+          vProd: valorTotal,
+          codigo: codProduto,
+          codigo_produto: codProduto,
+          cod_produto: codProduto,
+          cProd: codProduto,
           ncm: item.ncm,
+          NCM: item.ncm,
           cfop: item.cfop,
-          unidade: item.unidade,
+          CFOP: item.cfop,
+          unidade,
+          uCom: unidade,
+          uTrib: unidade,
           // Códigos de barras (cEAN/cEANTrib): "SEM" quando ausente (exigência NT 2016)
           cean: item.cean || 'SEM',
           cEAN: item.cean || 'SEM',
@@ -815,14 +840,13 @@ Deno.serve(async (req) => {
           aliquota_cofins: item.aliquota_cofins ?? 0,
           base_calculo_cofins: item.base_calculo_cofins || item.valor_total || 0,
           // PHP NFePHP field names
-          vBC_pis: item.base_calculo_pis || item.valor_total || 0,
+          vBC_pis: item.base_calculo_pis || valorTotal || 0,
           pPIS: item.aliquota_pis ?? 0,
           vPIS: item.valor_pis ?? 0,
-          vBC_cofins: item.base_calculo_cofins || item.valor_total || 0,
+          vBC_cofins: item.base_calculo_cofins || valorTotal || 0,
           pCOFINS: item.aliquota_cofins ?? 0,
           vCOFINS: item.valor_cofins ?? 0,
-          vBC_icms: item.base_calculo_icms || item.valor_total || 0,
-          vProd: item.valor_total || 0,
+          vBC_icms: item.base_calculo_icms || valorTotal || 0,
         };
 
         // IBS/CBS (Reforma Tributária)
