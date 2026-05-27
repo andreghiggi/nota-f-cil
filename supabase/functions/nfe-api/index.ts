@@ -586,6 +586,14 @@ Deno.serve(async (req) => {
       }
 
       const payload: NFePayload = await req.json();
+      payload.itens = (payload.itens || []).map((item: any) => ({
+        ...item,
+        codigo: String(item.codigo ?? item.cProd ?? item.codigo_produto ?? item.cod_produto ?? '').trim(),
+        descricao: String(item.descricao ?? item.xProd ?? item.descricao_produto ?? item.nome_produto ?? item.produto ?? '').trim(),
+        unidade: String(item.unidade ?? item.uCom ?? item.uTrib ?? 'UN').trim(),
+        quantidade: Number(item.quantidade ?? item.qCom ?? item.qTrib ?? 0),
+        valor_unitario: Number(item.valor_unitario ?? item.vUnCom ?? item.vUnTrib ?? 0),
+      }));
 
       if (!payload.itens || payload.itens.length === 0) {
         return new Response(
