@@ -1038,6 +1038,12 @@ Deno.serve(async (req) => {
           crt: empresaCRT,
           CRT: empresaCRT,
           valor_total: nfe.valor_total,
+          // vProd em <total> = somatório de vProd dos itens (SEFAZ regra W16)
+          // Sem isso, PHP usa valor_total (que inclui IPI/ST/Frete) e a SEFAZ rejeita
+          // com "Total do Produto / Servico difere do somatorio dos itens"
+          valor_total_produtos: Number(nfe.valor_produtos ?? itensObj.reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
+          valor_produtos: Number(nfe.valor_produtos ?? itensObj.reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
+          vProd: Number(nfe.valor_produtos ?? itensObj.reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
           natureza_operacao: nfe.natureza_operacao || 'VENDA',
           finalidade: nfe.finalidade || '1',
           modalidade_frete: nfe.modalidade_frete || '9',
