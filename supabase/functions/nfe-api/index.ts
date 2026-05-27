@@ -558,6 +558,8 @@ Deno.serve(async (req) => {
           if (!cond) erros.push({ item: n, campo, mensagem: msg });
         };
         // Campos básicos universais
+        req(!!String(it.codigo || '').trim(), 'codigo', 'Código do produto é obrigatório');
+        req(!!String(it.descricao || '').trim(), 'descricao', 'Descrição do produto é obrigatória');
         req(!!it.cfop, 'cfop', 'CFOP é obrigatório');
         req(!!it.unidade, 'unidade', 'Unidade comercial é obrigatória');
         req((it.quantidade ?? 0) > 0, 'quantidade', 'Quantidade deve ser > 0');
