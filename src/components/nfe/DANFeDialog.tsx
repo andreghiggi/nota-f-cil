@@ -33,7 +33,7 @@ export function DANFeDialog({ open, onOpenChange, nfeId, autoPrint = false, onAu
     },
   });
 
-  const { data: itens = [] } = useQuery({
+  const { data: itens = [], isLoading: isLoadingItens } = useQuery({
     queryKey: ["nfe-itens-danfe", nfeId],
     enabled: !!nfeId && open,
     queryFn: async () => {
@@ -70,7 +70,7 @@ export function DANFeDialog({ open, onOpenChange, nfeId, autoPrint = false, onAu
 
   useEffect(() => {
     if (!autoPrint) autoPrintedFor.current = null;
-    if (!open || !autoPrint || isLoading || !nfe || autoPrintedFor.current === nfe.id) return;
+    if (!open || !autoPrint || isLoading || isLoadingItens || !nfe || autoPrintedFor.current === nfe.id) return;
 
     autoPrintedFor.current = nfe.id;
     const timer = window.setTimeout(() => {
@@ -78,7 +78,7 @@ export function DANFeDialog({ open, onOpenChange, nfeId, autoPrint = false, onAu
       onAutoPrintHandled?.();
     }, 150);
     return () => window.clearTimeout(timer);
-  }, [autoPrint, open, isLoading, nfe, itens.length, onAutoPrintHandled]);
+  }, [autoPrint, open, isLoading, isLoadingItens, nfe, itens.length, onAutoPrintHandled]);
 
   if (!nfe && !isLoading) return null;
 
