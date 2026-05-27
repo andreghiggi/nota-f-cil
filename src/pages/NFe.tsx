@@ -238,10 +238,16 @@ export default function NFe() {
             <p className="text-sm text-muted-foreground">
               Exibindo <span className="font-medium text-foreground">{nfeList.length}</span> notas fiscais
             </p>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              Exportar
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setInutOpen(true)}>
+                <Ban className="h-4 w-4 mr-2" />
+                Inutilizações
+              </Button>
+              <Button variant="outline" size="sm">
+                <Download className="h-4 w-4 mr-2" />
+                Exportar
+              </Button>
+            </div>
           </div>
 
           {isLoading ? (
