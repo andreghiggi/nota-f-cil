@@ -1330,8 +1330,29 @@ Deno.serve(async (req) => {
         );
       }
 
+      const xmlRetorno = normalizeXmlResponse(nfeData.xml_retorno);
+      const xmlEnvio = normalizeXmlResponse(nfeData.xml_envio);
+      const xmlFinal = xmlRetorno || xmlEnvio;
+
+      if (url.searchParams.get('raw') === '1') {
+        if (!xmlFinal) {
+          return new Response(
+            JSON.stringify({ error: 'XML indisponível ou inválido', code: 'XML_NOT_AVAILABLE' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(xmlFinal, {
+          status: 200,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/xml; charset=utf-8',
+            'Content-Disposition': `attachment; filename="nfe-${nfeId}.xml"`,
+          },
+        });
+      }
+
       return new Response(
-        JSON.stringify({ success: true, data: { xml_envio: nfeData.xml_envio, xml_retorno: nfeData.xml_retorno } }),
+        JSON.stringify({ success: true, data: { xml_envio: xmlEnvio, xml_retorno: xmlRetorno, xml: xmlFinal } }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
