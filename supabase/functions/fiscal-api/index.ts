@@ -1411,7 +1411,7 @@ function buildNfUpdateData(responseData: any): any {
   const protocolo = responseData.protocolo || responseData.nProt || responseData.protocol;
   const codigoRetorno = responseData.codigo_retorno || responseData.cStat || responseData.code;
   const motivoRetorno = responseData.motivo_retorno || responseData.xMotivo || responseData.motivo || responseData.message;
-  const xmlRetorno = responseData.xml_retorno || responseData.xml || responseData.xmlRetorno;
+  const xmlRetorno = normalizeFiscalXml(responseData.xml_retorno || responseData.xml || responseData.xmlRetorno || responseData.procNFe || responseData.nfeProc);
   const qrcodeUrl = responseData.qrcode_url || responseData.qrcode || responseData.urlQRCode || responseData.qr_code || responseData.qrCode || responseData.url_qrcode;
   const dataAutorizacao = responseData.data_autorizacao || responseData.dhRecbto || responseData.data_recebimento;
 
@@ -1424,6 +1424,59 @@ function buildNfUpdateData(responseData: any): any {
   if (dataAutorizacao) updateData.data_autorizacao = dataAutorizacao;
 
   return updateData;
+}
+
+function extractXmlCandidate(value: any): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object') return '';
+
+  const preferred = ['xml_retorno', 'xml', 'xmlRetorno', 'procNFe', 'nfeProc', 'xml_envio'];
+  for (const key of preferred) {
+    const found = extractXmlCandidate(value[key]);
+    if (found) return found;
+  }
+  for (const nested of Object.values(value)) {
+    const found = extractXmlCandidate(nested);
+    if (found) return found;
+  }
+  return '';
+}
+
+function normalizeFiscalXml(raw: any): string {
+  let xml = extractXmlCandidate(raw).trim();
+  if (!xml) return '';
+
+  if (xml.startsWith('{') || xml.startsWith('[')) {
+    try { xml = extractXmlCandidate(JSON.parse(xml)).trim() || xml; } catch {}
+  }
+
+  if (xml.includes('&lt;') && !xml.includes('<NFe') && !xml.includes('<procNFe')) {
+    xml = xml
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+
+  const trimmed = xml.trim();
+  const compact = trimmed.replace(/\s+/g, '');
+  if (!trimmed.startsWith('<') && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length > 40) {
+    try {
+      const bin = atob(compact);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      xml = new TextDecoder('utf-8').decode(bytes).trim();
+    } catch {
+      return '';
+    }
+  }
+
+  const start = xml.search(/<\?xml|<procNFe|<NFe/i);
+  if (start > 0) xml = xml.slice(start);
+  xml = xml.replace(/^\uFEFF/, '').trim();
+  return xml.startsWith('<') ? xml : '';
 }
 
 // ============================================================================
