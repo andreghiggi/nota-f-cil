@@ -121,12 +121,26 @@ export default function NFe() {
 
   const handleDownloadXml = async (nfeId: string, numero: string) => {
     const { data, error } = await supabase.from("nfe").select("xml_envio, xml_retorno").eq("id", nfeId).single();
-    const xml = data?.xml_retorno || data?.xml_envio;
+    let xml = data?.xml_retorno || data?.xml_envio;
     if (error || !xml) {
       toast.error("XML não disponível para esta NF-e");
       return;
     }
-    const blob = new Blob([xml], { type: "application/xml" });
+    // XMLs vindos do PHP api2 chegam codificados em base64. Decodificamos se necessário.
+    const trimmed = xml.trim();
+    const looksB64 = !trimmed.startsWith("<") && /^[A-Za-z0-9+/=\s]+$/.test(trimmed);
+    if (looksB64) {
+      try {
+        const bin = atob(trimmed.replace(/\s+/g, ""));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        xml = new TextDecoder("utf-8").decode(bytes);
+      } catch {
+        toast.error("Falha ao decodificar XML (base64 inválido)");
+        return;
+      }
+    }
+    const blob = new Blob([xml], { type: "application/xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
