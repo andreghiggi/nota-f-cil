@@ -1141,10 +1141,9 @@ Deno.serve(async (req) => {
         ...(Object.keys(infAdicPayload).length ? { infAdic: infAdicPayload, ...infAdicPayload } : {}),
         ...(respTecPayload ? { infRespTec: respTecPayload, resp_tec: respTecPayload, responsavel_tecnico: respTecPayload } : {}),
         ...ideExtras,
-        // vProd no root também (PHP legado pode ler do topo)
-        valor_total_produtos: Number(nfe.valor_produtos ?? itensObj.reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
-        valor_produtos: Number(nfe.valor_produtos ?? itensObj.reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
-        vProd: Number(nfe.valor_produtos ?? itensObj.reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
+        valor_total_produtos: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
+        valor_produtos: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
+        vProd: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
         emitente: {
           CRT: empresaCRT,
           crt: empresaCRT,
