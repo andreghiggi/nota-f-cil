@@ -123,6 +123,57 @@ async function hashToken(token: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+function extractXmlCandidate(value: any): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  if (typeof value !== 'object') return '';
+
+  for (const key of ['xml_retorno', 'xml', 'xmlRetorno', 'procNFe', 'nfeProc', 'xml_envio']) {
+    const found = extractXmlCandidate(value[key]);
+    if (found) return found;
+  }
+  for (const nested of Object.values(value)) {
+    const found = extractXmlCandidate(nested);
+    if (found) return found;
+  }
+  return '';
+}
+
+function normalizeXmlResponse(raw: any): string | null {
+  let xml = extractXmlCandidate(raw).trim();
+  if (!xml) return null;
+
+  if (xml.startsWith('{') || xml.startsWith('[')) {
+    try { xml = extractXmlCandidate(JSON.parse(xml)).trim() || xml; } catch {}
+  }
+
+  if (xml.includes('&lt;') && !xml.includes('<NFe') && !xml.includes('<procNFe')) {
+    xml = xml
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+
+  const compact = xml.trim().replace(/\s+/g, '');
+  if (!xml.trim().startsWith('<') && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length > 40) {
+    try {
+      const bin = atob(compact);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      xml = new TextDecoder('utf-8').decode(bytes).trim();
+    } catch {
+      return null;
+    }
+  }
+
+  const start = xml.search(/<\?xml|<procNFe|<NFe/i);
+  if (start > 0) xml = xml.slice(start);
+  xml = xml.replace(/^\uFEFF/, '').trim();
+  return xml.startsWith('<') ? xml : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
