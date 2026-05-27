@@ -69,6 +69,55 @@ async function postWithRetry(
 }
 
 /**
+ * Normaliza o conteúdo XML salvo em xml_retorno/xml_envio. Aceita:
+ *  - string XML pura
+ *  - JSON com {xml|xml_retorno|procNFe|nfeProc}
+ *  - Base64 com XML dentro
+ *  - HTML-encoded (&lt;)
+ * Retorna XML cru pronto para o sped-da, ou string vazia.
+ */
+function normalizeXmlForDanfe(raw: any): string {
+  if (!raw) return '';
+  let xml = '';
+  if (typeof raw === 'string') {
+    xml = raw.trim();
+  } else if (typeof raw === 'object') {
+    xml = String(raw.xml || raw.xml_retorno || raw.procNFe || raw.nfeProc || raw.NFe || '').trim();
+  }
+  if (!xml) return '';
+
+  if (xml.startsWith('{') || xml.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(xml);
+      xml = String(parsed.xml || parsed.xml_retorno || parsed.procNFe || parsed.nfeProc || parsed.NFe || '').trim();
+    } catch { /* mantém */ }
+  }
+
+  if (xml.includes('&lt;') && !xml.includes('<NFe') && !xml.includes('<procNFe')) {
+    xml = xml
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&amp;/g, '&');
+  }
+
+  const compact = xml.replace(/\s+/g, '');
+  if (!xml.startsWith('<') && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length > 40) {
+    try {
+      const bin = atob(compact);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      xml = new TextDecoder('utf-8').decode(bytes).trim();
+    } catch { return ''; }
+  }
+
+  const start = xml.search(/<\?xml|<nfeProc|<procNFe|<NFe/i);
+  if (start > 0) xml = xml.slice(start);
+  return xml.replace(/^\uFEFF/, '').trim();
+}
+
+/**
  * Load certificate (PFX) from Supabase Storage and return base64 + decoded password.
  * Returns null if no certificate is configured.
  */
