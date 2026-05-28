@@ -117,6 +117,12 @@ function normalizeXmlForDanfe(raw: any): string {
   return xml.replace(/^\uFEFF/, '').trim();
 }
 
+function extractXmlProductNames(raw: any): string[] {
+  const xml = normalizeXmlForDanfe(raw);
+  if (!xml) return [];
+  return [...xml.matchAll(/<xProd>([^<]*)<\/xProd>/gi)].map((m) => m[1].trim());
+}
+
 /**
  * Load certificate (PFX) from Supabase Storage and return base64 + decoded password.
  * Returns null if no certificate is configured.
