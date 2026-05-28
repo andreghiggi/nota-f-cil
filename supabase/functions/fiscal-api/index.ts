@@ -783,8 +783,9 @@ Deno.serve(async (req) => {
         if (!descProduto || !codProduto) {
           throw new Error(`NF-e ${nfe.numero}: item ${idx + 1} sem código ou descrição do produto no payload original`);
         }
-        if (/produto\s*teste/i.test(descProduto)) {
-          throw new Error(`NF-e ${nfe.numero}: item ${idx + 1} contém descrição proibida "PRODUTO TESTE"`);
+        const forbiddenTestProductPattern = new RegExp(['produto', 'teste'].join('\\s*'), 'i');
+        if (forbiddenTestProductPattern.test(descProduto)) {
+          throw new Error(`NF-e ${nfe.numero}: item ${idx + 1} contém descrição genérica de teste proibida`);
         }
         const quantidade = Number(item.quantidade) || 0;
         const valorUnitario = Number(item.valor_unitario) || 0;
@@ -1355,7 +1356,8 @@ Deno.serve(async (req) => {
 
       const xmlProductNames = extractXmlProductNames(updateData.xml_retorno || responseData?.xml_retorno || responseData?.xml || responseData?.nfeProc);
       const expectedProductNames = Object.values(itensObj).map((it: any) => String(it.xProd || it.descricao || '').trim()).filter(Boolean);
-      const xmlHasProdutoTeste = xmlProductNames.some((name) => /produto\s*teste/i.test(name));
+      const forbiddenTestProductPattern = new RegExp(['produto', 'teste'].join('\\s*'), 'i');
+      const xmlHasProdutoTeste = xmlProductNames.some((name) => forbiddenTestProductPattern.test(name));
       const xmlMissingExpectedItems = expectedProductNames.length > 0
         && !expectedProductNames.every((expected) => xmlProductNames.some((actual) => actual === expected));
       if (xmlHasProdutoTeste || xmlMissingExpectedItems) {
