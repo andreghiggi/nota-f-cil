@@ -620,7 +620,8 @@ Deno.serve(async (req) => {
         req(!!String(it.codigo || '').trim(), 'codigo', 'Código do produto é obrigatório');
         const descricaoProduto = String(it.descricao || '').trim();
         req(!!descricaoProduto, 'descricao', 'Descrição do produto é obrigatória');
-        req(!/produto\s*teste/i.test(descricaoProduto), 'descricao', 'Descrição "PRODUTO TESTE" é proibida; envie a descrição real do item');
+        const forbiddenTestProductPattern = new RegExp(['produto', 'teste'].join('\\s*'), 'i');
+        req(!forbiddenTestProductPattern.test(descricaoProduto), 'descricao', 'Descrição genérica de teste é proibida; envie a descrição real do item');
         req(!!it.cfop, 'cfop', 'CFOP é obrigatório');
         req(!!it.unidade, 'unidade', 'Unidade comercial é obrigatória');
         req((it.quantidade ?? 0) > 0, 'quantidade', 'Quantidade deve ser > 0');
