@@ -117,6 +117,12 @@ function normalizeXmlForDanfe(raw: any): string {
   return xml.replace(/^\uFEFF/, '').trim();
 }
 
+function extractXmlProductNames(raw: any): string[] {
+  const xml = normalizeXmlForDanfe(raw);
+  if (!xml) return [];
+  return [...xml.matchAll(/<xProd>([^<]*)<\/xProd>/gi)].map((m) => m[1].trim());
+}
+
 /**
  * Load certificate (PFX) from Supabase Storage and return base64 + decoded password.
  * Returns null if no certificate is configured.
@@ -777,6 +783,10 @@ Deno.serve(async (req) => {
         if (!descProduto || !codProduto) {
           throw new Error(`NF-e ${nfe.numero}: item ${idx + 1} sem código ou descrição do produto no payload original`);
         }
+        const forbiddenTestProductPattern = new RegExp(['produto', 'teste'].join('\\s*'), 'i');
+        if (forbiddenTestProductPattern.test(descProduto)) {
+          throw new Error(`NF-e ${nfe.numero}: item ${idx + 1} contém descrição genérica de teste proibida`);
+        }
         const quantidade = Number(item.quantidade) || 0;
         const valorUnitario = Number(item.valor_unitario) || 0;
         const valorTotal = Number(item.valor_total ?? quantidade * valorUnitario);
@@ -807,10 +817,10 @@ Deno.serve(async (req) => {
           uCom: unidade,
           uTrib: unidade,
           // Códigos de barras (cEAN/cEANTrib): "SEM" quando ausente (exigência NT 2016)
-          cean: item.cean || 'SEM',
-          cEAN: item.cean || 'SEM',
-          cean_trib: item.cean_trib || item.cean || 'SEM',
-          cEANTrib: item.cean_trib || item.cean || 'SEM',
+          cean: item.cean || 'SEM GTIN',
+          cEAN: item.cean || 'SEM GTIN',
+          cean_trib: item.cean_trib || item.cean || 'SEM GTIN',
+          cEANTrib: item.cean_trib || item.cean || 'SEM GTIN',
           ...(item.ex_tipi ? { ex_tipi: item.ex_tipi, EXTIPI: item.ex_tipi } : {}),
           ...(item.cest ? { cest: item.cest, CEST: item.cest } : {}),
           ...(item.cnpj_fab ? { cnpj_fab: item.cnpj_fab, CNPJFab: item.cnpj_fab } : {}),
@@ -1041,7 +1051,7 @@ Deno.serve(async (req) => {
       const transpSrc = nfe.transporte || payloadEntrada.transporte || payloadEntrada.transp || payloadEntrada.transportador || payloadEntrada.transportadora || null;
       let transpPayload: any = null;
       if (transpSrc) {
-        const t: any = { modFrete: String(nfe.modalidade_frete ?? transpSrc.modFrete ?? transpSrc.mod_frete ?? '9') };
+        const t: any = { modFrete: String(transpSrc.modFrete ?? transpSrc.mod_frete ?? nfe.modalidade_frete ?? '9') };
         // Aceita {transportadora:{...}}, {transporta:{...}} ou estrutura plana
         const tr = transpSrc.transportadora || transpSrc.transporta || (
           (transpSrc.cnpj || transpSrc.CNPJ || transpSrc.cpf || transpSrc.CPF || transpSrc.cnpj_cpf || transpSrc.razao_social || transpSrc.nome || transpSrc.xNome)
@@ -1343,6 +1353,24 @@ Deno.serve(async (req) => {
 
       // Success - update NF-e
       const updateData = buildNfUpdateData(responseData);
+
+      const xmlProductNames = extractXmlProductNames(updateData.xml_retorno || responseData?.xml_retorno || responseData?.xml || responseData?.nfeProc);
+      const expectedProductNames = Object.values(itensObj).map((it: any) => String(it.xProd || it.descricao || '').trim()).filter(Boolean);
+      const forbiddenTestProductPattern = new RegExp(['produto', 'teste'].join('\\s*'), 'i');
+      const xmlHasProdutoTeste = xmlProductNames.some((name) => forbiddenTestProductPattern.test(name));
+      const xmlMissingExpectedItems = expectedProductNames.length > 0
+        && !expectedProductNames.every((expected) => xmlProductNames.some((actual) => actual === expected));
+      if (xmlHasProdutoTeste || xmlMissingExpectedItems) {
+        await supabase.from('nfe').update({
+          status: 'rejeitada',
+          erro_processamento: 'Bloqueio de segurança: XML autorizado retornou itens divergentes do payload original',
+          motivo_retorno: JSON.stringify({ expectedProductNames, xmlProductNames }),
+        }).eq('id', nfeId);
+        return new Response(
+          JSON.stringify({ error: 'XML autorizado divergente dos itens originais; emissão bloqueada', expectedProductNames, xmlProductNames }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       // Extract data_autorizacao from XML if not present
       if (!updateData.data_autorizacao && updateData.xml_retorno) {

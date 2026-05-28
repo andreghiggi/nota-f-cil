@@ -618,7 +618,10 @@ Deno.serve(async (req) => {
         };
         // Campos básicos universais
         req(!!String(it.codigo || '').trim(), 'codigo', 'Código do produto é obrigatório');
-        req(!!String(it.descricao || '').trim(), 'descricao', 'Descrição do produto é obrigatória');
+        const descricaoProduto = String(it.descricao || '').trim();
+        req(!!descricaoProduto, 'descricao', 'Descrição do produto é obrigatória');
+        const forbiddenTestProductPattern = new RegExp(['produto', 'teste'].join('\\s*'), 'i');
+        req(!forbiddenTestProductPattern.test(descricaoProduto), 'descricao', 'Descrição genérica de teste é proibida; envie a descrição real do item');
         req(!!it.cfop, 'cfop', 'CFOP é obrigatório');
         req(!!it.unidade, 'unidade', 'Unidade comercial é obrigatória');
         req((it.quantidade ?? 0) > 0, 'quantidade', 'Quantidade deve ser > 0');
@@ -743,7 +746,7 @@ Deno.serve(async (req) => {
           external_id: payload.external_id,
           natureza_operacao: payload.natureza_operacao || 'VENDA',
           finalidade: payload.finalidade || '1',
-          modalidade_frete: payload.modalidade_frete || '9',
+          modalidade_frete: String(payload.modalidade_frete ?? '9'),
           dest_cpf_cnpj: dest.cpf_cnpj?.replace(/\D/g, '') || null,
           dest_nome: dest.nome,
           dest_ie: dest.ie?.replace(/\D/g, '') || null,
