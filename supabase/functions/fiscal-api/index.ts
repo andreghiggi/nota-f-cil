@@ -783,6 +783,9 @@ Deno.serve(async (req) => {
         if (!descProduto || !codProduto) {
           throw new Error(`NF-e ${nfe.numero}: item ${idx + 1} sem código ou descrição do produto no payload original`);
         }
+        if (/produto\s*teste/i.test(descProduto)) {
+          throw new Error(`NF-e ${nfe.numero}: item ${idx + 1} contém descrição proibida "PRODUTO TESTE"`);
+        }
         const quantidade = Number(item.quantidade) || 0;
         const valorUnitario = Number(item.valor_unitario) || 0;
         const valorTotal = Number(item.valor_total ?? quantidade * valorUnitario);
@@ -1047,7 +1050,7 @@ Deno.serve(async (req) => {
       const transpSrc = nfe.transporte || payloadEntrada.transporte || payloadEntrada.transp || payloadEntrada.transportador || payloadEntrada.transportadora || null;
       let transpPayload: any = null;
       if (transpSrc) {
-        const t: any = { modFrete: String(nfe.modalidade_frete ?? transpSrc.modFrete ?? transpSrc.mod_frete ?? '9') };
+        const t: any = { modFrete: String(transpSrc.modFrete ?? transpSrc.mod_frete ?? nfe.modalidade_frete ?? '9') };
         // Aceita {transportadora:{...}}, {transporta:{...}} ou estrutura plana
         const tr = transpSrc.transportadora || transpSrc.transporta || (
           (transpSrc.cnpj || transpSrc.CNPJ || transpSrc.cpf || transpSrc.CPF || transpSrc.cnpj_cpf || transpSrc.razao_social || transpSrc.nome || transpSrc.xNome)
