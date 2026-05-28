@@ -1353,6 +1353,23 @@ Deno.serve(async (req) => {
       // Success - update NF-e
       const updateData = buildNfUpdateData(responseData);
 
+      const xmlProductNames = extractXmlProductNames(updateData.xml_retorno || responseData?.xml_retorno || responseData?.xml || responseData?.nfeProc);
+      const expectedProductNames = Object.values(itensObj).map((it: any) => String(it.xProd || it.descricao || '').trim()).filter(Boolean);
+      const xmlHasProdutoTeste = xmlProductNames.some((name) => /produto\s*teste/i.test(name));
+      const xmlMissingExpectedItems = expectedProductNames.length > 0
+        && !expectedProductNames.every((expected) => xmlProductNames.some((actual) => actual === expected));
+      if (xmlHasProdutoTeste || xmlMissingExpectedItems) {
+        await supabase.from('nfe').update({
+          status: 'rejeitada',
+          erro_processamento: 'Bloqueio de segurança: XML autorizado retornou itens divergentes do payload original',
+          motivo_retorno: JSON.stringify({ expectedProductNames, xmlProductNames }),
+        }).eq('id', nfeId);
+        return new Response(
+          JSON.stringify({ error: 'XML autorizado divergente dos itens originais; emissão bloqueada', expectedProductNames, xmlProductNames }),
+          { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       // Extract data_autorizacao from XML if not present
       if (!updateData.data_autorizacao && updateData.xml_retorno) {
         try {
