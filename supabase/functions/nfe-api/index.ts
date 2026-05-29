@@ -115,6 +115,62 @@ interface CancelPayload {
   justificativa: string;
 }
 
+/**
+ * Mapeia aliases do emit-smart / nfe-proxy (cst_cbs, cst_ibs, base_calculo_*)
+ * para o formato nativo da API (cst_ibs_cbs, vbc_ibs_cbs, aliquota_ibs_uf).
+ */
+function normalizeReformaPayloadItem(item: Record<string, unknown>): Record<string, unknown> {
+  const aliqCbs = Number(item.aliquota_cbs ?? 0);
+  const aliqIbsUf = Number(item.aliquota_ibs_uf ?? item.aliquota_ibs ?? 0);
+  const aliqIbsMun = Number(item.aliquota_ibs_mun ?? 0);
+  const hasReforma = Boolean(
+    item.cst_ibs_cbs || item.cst_cbs || item.cst_ibs || item.g_trib_fed || item.ibscbs
+    || aliqCbs > 0 || aliqIbsUf > 0 || aliqIbsMun > 0,
+  );
+  if (!hasReforma) return item;
+
+  const qty = Number(item.quantidade ?? 0);
+  const vUnit = Number(item.valor_unitario ?? 0);
+  const valorItem = Number(item.valor_total ?? qty * vUnit);
+  const vbc = Number(
+    item.vbc_ibs_cbs ?? item.base_calculo_cbs ?? item.base_calculo_ibs ?? valorItem,
+  );
+  const cst = String(item.cst_ibs_cbs ?? item.cst_cbs ?? item.cst_ibs ?? '000').trim() || '000';
+
+  return {
+    ...item,
+    cst_ibs_cbs: cst,
+    vbc_ibs_cbs: vbc > 0 ? vbc : valorItem,
+    aliquota_cbs: aliqCbs,
+    aliquota_ibs_uf: aliqIbsUf,
+    aliquota_ibs_mun: aliqIbsMun,
+    base_calculo_cbs: Number(item.base_calculo_cbs ?? vbc),
+    base_calculo_ibs: Number(item.base_calculo_ibs ?? vbc),
+  };
+}
+
+function shouldDeferTransmit(payload: NFePayload): boolean {
+  const p = payload as Record<string, unknown>;
+  return p.transmitir === false
+    || p.transmitir_sefaz === false
+    || p.auto_transmitir === false
+    || p.somente_gerar === true
+    || p.validar_apenas === true
+    || p.preview === true;
+}
+
+function decodeXmlBodyField(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const s = raw.trim();
+  if (!s) return null;
+  if (s.startsWith('<')) return s;
+  try {
+    const dec = atob(s);
+    if (dec.includes('<')) return dec;
+  } catch { /* ignore */ }
+  return null;
+}
+
 async function hashToken(token: string): Promise<string> {
   const encoder = new TextEncoder();
   const data = encoder.encode(token);
@@ -586,14 +642,14 @@ Deno.serve(async (req) => {
       }
 
       const payload: NFePayload = await req.json();
-      payload.itens = (payload.itens || []).map((item: any) => ({
+      payload.itens = (payload.itens || []).map((item: any) => normalizeReformaPayloadItem({
         ...item,
         codigo: String(item.codigo ?? item.cProd ?? item.codigo_produto ?? item.cod_produto ?? '').trim(),
         descricao: String(item.descricao ?? item.xProd ?? item.descricao_produto ?? item.nome_produto ?? item.produto ?? '').trim(),
         unidade: String(item.unidade ?? item.uCom ?? item.uTrib ?? 'UN').trim(),
         quantidade: Number(item.quantidade ?? item.qCom ?? item.qTrib ?? 0),
         valor_unitario: Number(item.valor_unitario ?? item.vUnCom ?? item.vUnTrib ?? 0),
-      }));
+      })) as NFePayload['itens'];
 
       if (!payload.itens || payload.itens.length === 0) {
         return new Response(
@@ -896,21 +952,27 @@ Deno.serve(async (req) => {
         p_ip_origem: req.headers.get('x-forwarded-for')
       });
 
-      // Emit synchronously via fiscal-api
-      let emitResult: any = null;
-      try {
-        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
-          body: { action: 'emit_nfe', nfe_id: nfeData.id }
-        });
+      const deferTransmit = shouldDeferTransmit(payload);
 
-        if (!fiscalError && fiscalResult?.success) {
-          emitResult = fiscalResult.data;
-          await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeData.id);
-        } else {
-          console.warn('Sync emit NF-e failed, queue will retry:', fiscalError?.message || fiscalResult?.error);
+      // Emit synchronously via fiscal-api (omitido quando cliente pede só gerar XML / transmitir depois)
+      let emitResult: any = null;
+      if (!deferTransmit) {
+        try {
+          const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+            body: { action: 'emit_nfe', nfe_id: nfeData.id },
+          });
+
+          if (!fiscalError && fiscalResult?.success) {
+            emitResult = fiscalResult.data;
+            await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeData.id);
+          } else {
+            console.warn('Sync emit NF-e failed, queue will retry:', fiscalError?.message || fiscalResult?.error);
+          }
+        } catch (emitErr: any) {
+          console.warn('Sync emit NF-e exception, queue will retry:', emitErr.message);
         }
-      } catch (emitErr: any) {
-        console.warn('Sync emit NF-e exception, queue will retry:', emitErr.message);
+      } else {
+        console.log(`[nfe-api] Emissão adiada (pendente) NF-e ${nfeData.numero} — aguardando reprocessar/transmitir`);
       }
 
       const responseData = emitResult || {
@@ -1274,6 +1336,12 @@ Deno.serve(async (req) => {
       }
 
       const nfeId = pathParts[1];
+      let reprocessBody: Record<string, unknown> = {};
+      try {
+        const raw = await req.text();
+        if (raw?.trim()) reprocessBody = JSON.parse(raw);
+      } catch { /* body opcional */ }
+
       const { data: nfeData } = await supabase
         .from('nfe')
         .select('id, numero, status')
@@ -1288,18 +1356,46 @@ Deno.serve(async (req) => {
         );
       }
 
-      if (!['rejeitada', 'pendente'].includes(nfeData.status)) {
+      if (!['rejeitada', 'pendente', 'processando', 'erro'].includes(nfeData.status)) {
         return new Response(
-          JSON.stringify({ error: 'Only rejected or pending NF-e can be reprocessed', code: 'INVALID_STATUS' }),
+          JSON.stringify({ error: 'NF-e não pode ser reprocessada neste status', code: 'INVALID_STATUS', status: nfeData.status }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      await supabase.from('nfe').update({ status: 'pendente', tentativas: 0, erro_processamento: null }).eq('id', nfeId);
+      const xmlFromBody = decodeXmlBodyField(
+        reprocessBody.xml_envio ?? reprocessBody.xml ?? reprocessBody.nfe_xml ?? reprocessBody.xml_base64,
+      );
+      const updateFields: Record<string, unknown> = {
+        status: 'pendente',
+        tentativas: 0,
+        erro_processamento: null,
+      };
+      if (xmlFromBody) {
+        updateFields.xml_envio = xmlFromBody;
+        console.log(`[nfe-api][reprocessar] xml_envio recebido (${xmlFromBody.length} chars) NF-e ${nfeData.numero}`);
+      }
+
+      await supabase.from('nfe').update(updateFields).eq('id', nfeId);
       await supabase.from('fila_processamento_nfe').upsert(
         { nfe_id: nfeId, tentativas: 0, proximo_processamento: new Date().toISOString(), erro_ultimo: null },
-        { onConflict: 'nfe_id' }
+        { onConflict: 'nfe_id' },
       );
+
+      let emitStatus = 'pendente';
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'emit_nfe', nfe_id: nfeId },
+        });
+        if (!fiscalError && fiscalResult?.success) {
+          emitStatus = fiscalResult.data?.status || 'processando';
+          await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeId);
+        } else {
+          console.warn('[nfe-api][reprocessar] fiscal-api:', fiscalError?.message || fiscalResult?.error);
+        }
+      } catch (e) {
+        console.warn('[nfe-api][reprocessar] invoke fiscal-api:', (e as Error).message);
+      }
 
       await supabase.rpc('registrar_log', {
         p_empresa_id: empresa_id,
@@ -1307,12 +1403,12 @@ Deno.serve(async (req) => {
         p_token_api_id: token_id,
         p_tipo: 'info',
         p_categoria: 'api',
-        p_mensagem: `Reprocessamento solicitado para NF-e ${nfeData.numero}`,
-        p_ip_origem: req.headers.get('x-forwarded-for')
+        p_mensagem: `Reprocessamento NF-e ${nfeData.numero}${xmlFromBody ? ' (XML enriquecido)' : ''}`,
+        p_ip_origem: req.headers.get('x-forwarded-for'),
       });
 
       return new Response(
-        JSON.stringify({ success: true, data: { id: nfeId, status: 'pendente' } }),
+        JSON.stringify({ success: true, data: { id: nfeId, status: emitStatus, xml_atualizado: Boolean(xmlFromBody) } }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

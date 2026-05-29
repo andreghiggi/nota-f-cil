@@ -907,30 +907,38 @@ Deno.serve(async (req) => {
           vBC_icms: item.base_calculo_icms || valorTotal || 0,
         };
 
-        // IBS/CBS (Reforma Tributária)
-        if (item.cst_ibs_cbs) {
+        // IBS/CBS (Reforma Tributária) — Grupo UB oficial NFe 4.00
+        const cstIbsCbs = item.cst_ibs_cbs || item.cst_cbs || item.cst_ibs;
+        const aliqCbs = Number(item.aliquota_cbs || 0);
+        const aliqIbsUf = Number(item.aliquota_ibs_uf ?? item.aliquota_ibs ?? 0);
+        const aliqIbsMun = Number(item.aliquota_ibs_mun || 0);
+        const vbcIbsCbs = Number(item.vbc_ibs_cbs ?? item.base_calculo_cbs ?? item.base_calculo_ibs ?? valorTotal ?? 0);
+        if (cstIbsCbs || aliqCbs > 0 || aliqIbsUf > 0 || aliqIbsMun > 0) {
+          const vIbsUf = item.valor_ibs_uf ?? +(vbcIbsCbs * aliqIbsUf / 100).toFixed(2);
+          const vIbsMun = item.valor_ibs_mun ?? +(vbcIbsCbs * aliqIbsMun / 100).toFixed(2);
+          const vCbs = item.valor_cbs ?? +(vbcIbsCbs * aliqCbs / 100).toFixed(2);
           itemData.ibs_cbs = {
-            CST: item.cst_ibs_cbs,
+            CST: String(cstIbsCbs || '000'),
             cClassTrib: item.c_class_trib || '',
-            vBC: item.vbc_ibs_cbs || item.valor_total || 0,
+            vBC: vbcIbsCbs,
             indDoacao: item.ind_doacao ?? undefined,
             gIBSUF: {
-              pIBSUF: item.aliquota_ibs_uf || 0,
-              vIBSUF: item.valor_ibs_uf || 0,
+              pIBSUF: aliqIbsUf,
+              vIBSUF: vIbsUf,
               ...(item.p_red_aliq_ibs_uf ? { gRed: { pRedAliq: item.p_red_aliq_ibs_uf, pAliqEfet: item.p_aliq_efet_ibs_uf || 0 } } : {}),
               ...(item.valor_dif_ibs_uf ? { gDif: { vDif: item.valor_dif_ibs_uf } } : {}),
               ...(item.valor_dev_trib_ibs_uf ? { gDevTrib: { vDevTrib: item.valor_dev_trib_ibs_uf } } : {}),
             },
             gIBSMun: {
-              pIBSMun: item.aliquota_ibs_mun || 0,
-              vIBSMun: item.valor_ibs_mun || 0,
+              pIBSMun: aliqIbsMun,
+              vIBSMun: vIbsMun,
               ...(item.p_red_aliq_ibs_mun ? { gRed: { pRedAliq: item.p_red_aliq_ibs_mun, pAliqEfet: item.p_aliq_efet_ibs_mun || 0 } } : {}),
               ...(item.valor_dif_ibs_mun ? { gDif: { vDif: item.valor_dif_ibs_mun } } : {}),
               ...(item.valor_dev_trib_ibs_mun ? { gDevTrib: { vDevTrib: item.valor_dev_trib_ibs_mun } } : {}),
             },
             gCBS: {
-              pCBS: item.aliquota_cbs || 0,
-              vCBS: item.valor_cbs || 0,
+              pCBS: aliqCbs,
+              vCBS: vCbs,
               ...(item.p_red_aliq_cbs ? { gRed: { pRedAliq: item.p_red_aliq_cbs, pAliqEfet: item.p_aliq_efet_cbs || 0 } } : {}),
               ...(item.valor_dif_cbs ? { gDif: { vDif: item.valor_dif_cbs } } : {}),
               ...(item.valor_dev_trib_cbs ? { gDevTrib: { vDevTrib: item.valor_dev_trib_cbs } } : {}),
