@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
+/** Conferir deploy: GET .../nfe-api?build=1 */
+const NFE_API_BUILD_ID = 'd484ce0-sync-ibscbs';
+
 interface NFePayload {
   external_id?: string;
   natureza_operacao?: string;
@@ -310,6 +313,14 @@ function normalizeXmlResponse(raw: any): string | null {
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  const urlBuild = new URL(req.url);
+  if (req.method === 'GET' && urlBuild.searchParams.get('build') === '1') {
+    return new Response(
+      JSON.stringify({ build: NFE_API_BUILD_ID, function: 'nfe-api' }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Nfe-Api-Build': NFE_API_BUILD_ID } },
+    );
   }
 
   const supabaseUrl = Deno.env.get('SUPABASE_URL')!;

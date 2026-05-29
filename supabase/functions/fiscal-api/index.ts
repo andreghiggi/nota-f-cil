@@ -7,6 +7,9 @@ const corsHeaders = {
 
 const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
+/** Conferir deploy: GET .../fiscal-api?build=1 */
+const FISCAL_API_BUILD_ID = 'd484ce0-sync-ibscbs';
+
 /** Grupo UB (NT 2025.002) — estrutura compatível com NFePHP / api2 legado. */
 function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Record<string, unknown> | null {
   const cstIbsCbs = item.cst_ibs_cbs || item.cst_cbs || item.cst_ibs;
@@ -541,11 +544,23 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  // Health check
+  // Health / build check
   if (req.method === 'GET') {
+    const urlHealth = new URL(req.url);
+    if (urlHealth.searchParams.get('build') === '1') {
+      return new Response(
+        JSON.stringify({ build: FISCAL_API_BUILD_ID, function: 'fiscal-api' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Fiscal-Api-Build': FISCAL_API_BUILD_ID } },
+      );
+    }
     return new Response(
-      JSON.stringify({ status: 'ok', service: 'fiscal-api', timestamp: new Date().toISOString() }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({
+        status: 'ok',
+        service: 'fiscal-api',
+        build: FISCAL_API_BUILD_ID,
+        timestamp: new Date().toISOString(),
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json', 'X-Fiscal-Api-Build': FISCAL_API_BUILD_ID } },
     );
   }
 
