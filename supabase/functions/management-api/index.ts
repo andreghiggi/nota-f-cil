@@ -21,6 +21,116 @@ function jsonResponse(data: any, status = 200) {
   });
 }
 
+/** Série fiscal canônica: "0001", "001" e "1" → "1" (evita contadores paralelos). */
+function normalizeSerieFiscal(serie: string | null | undefined): string {
+  const t = String(serie ?? '').trim();
+  if (!t) return '1';
+  if (/^\d+$/.test(t)) return String(parseInt(t, 10));
+  return t;
+}
+
+function serieAliases(serie: string): string[] {
+  const t = String(serie).trim();
+  const canon = normalizeSerieFiscal(t);
+  const set = new Set<string>([t, canon]);
+  if (/^\d+$/.test(canon)) {
+    const n = parseInt(canon, 10);
+    for (const width of [1, 2, 3, 4]) {
+      set.add(String(n).padStart(width, '0'));
+    }
+  }
+  return [...set];
+}
+
+async function resolveUltimoNumeroSerie(
+  supabase: ReturnType<typeof createClient>,
+  empresaId: string,
+  tipo: string,
+  serieInput: string,
+): Promise<{ canon: string; ultimo: number; ativo: boolean }> {
+  const canon = normalizeSerieFiscal(serieInput);
+  const aliases = serieAliases(serieInput);
+
+  const { data: nfes } = await supabase
+    .from('nfe')
+    .select('numero, serie')
+    .eq('empresa_id', empresaId)
+    .in('serie', aliases)
+    .in('status', ['autorizada', 'autorizado', 'cancelada']);
+
+  let maxNfe = 0;
+  for (const row of nfes || []) {
+    const n = parseInt(String(row.numero || '').replace(/\D/g, '') || '0', 10);
+    if (n > maxNfe) maxNfe = n;
+  }
+
+  const { data: rows } = await supabase
+    .from('series_fiscais')
+    .select('id, serie, numero_atual, ativo')
+    .eq('empresa_id', empresaId)
+    .eq('tipo', tipo)
+    .in('serie', aliases);
+
+  let maxSerie = 0;
+  let ativo = false;
+  for (const row of rows || []) {
+    maxSerie = Math.max(maxSerie, row.numero_atual ?? 0);
+    if (row.ativo) ativo = true;
+  }
+
+  const ultimo = Math.max(maxNfe, maxSerie);
+
+  if (ultimo > 0) {
+    const { data: canonRow } = await supabase
+      .from('series_fiscais')
+      .select('id, numero_atual, ativo')
+      .eq('empresa_id', empresaId)
+      .eq('tipo', tipo)
+      .eq('serie', canon)
+      .maybeSingle();
+
+    if (!canonRow) {
+      await supabase.from('series_fiscais').insert({
+        empresa_id: empresaId,
+        tipo,
+        serie: canon,
+        numero_atual: ultimo,
+        ativo: true,
+      });
+      ativo = true;
+    } else if ((canonRow.numero_atual ?? 0) < ultimo || !canonRow.ativo) {
+      await supabase
+        .from('series_fiscais')
+        .update({
+          numero_atual: Math.max(canonRow.numero_atual ?? 0, ultimo),
+          ativo: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', canonRow.id);
+      ativo = true;
+    }
+
+    for (const alias of aliases) {
+      if (alias === canon) continue;
+      const { data: aliasRow } = await supabase
+        .from('series_fiscais')
+        .select('id, numero_atual')
+        .eq('empresa_id', empresaId)
+        .eq('tipo', tipo)
+        .eq('serie', alias)
+        .maybeSingle();
+      if (aliasRow && (aliasRow.numero_atual ?? 0) < ultimo) {
+        await supabase
+          .from('series_fiscais')
+          .update({ numero_atual: ultimo, updated_at: new Date().toISOString() })
+          .eq('id', aliasRow.id);
+      }
+    }
+  }
+
+  return { canon, ultimo, ativo };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -264,26 +374,61 @@ Deno.serve(async (req) => {
 
       const tipoToModelo = (t: string) => t === 'nfe' ? '55' : t === 'nfce' ? '65' : '58';
 
-      const mapped = (series || []).map(s => ({
-        serie: s.serie,
-        modelo: tipoToModelo(s.tipo),
-        tipo: s.tipo,
-        ultimo_numero: s.numero_atual,
-        proximo_numero: s.numero_atual + 1,
-        ativa: s.ativo,
-        padrao_empresa:
-          (s.tipo === 'nfe' && s.serie === empDef?.serie_nfe) ||
-          (s.tipo === 'nfce' && s.serie === empDef?.serie_nfce) ||
-          (s.tipo === 'mdfe' && s.serie === empDef?.serie_mdfe),
-      }));
+      const modeloFiltro = url.searchParams.get('modelo') || '';
+      const byCanon = new Map<string, {
+        tipo: string;
+        ultimo: number;
+        ativa: boolean;
+      }>();
+
+      for (const s of series || []) {
+        const mod = tipoToModelo(s.tipo);
+        if (modeloFiltro && mod !== modeloFiltro) continue;
+        const canon = normalizeSerieFiscal(s.serie);
+        const cur = byCanon.get(`${s.tipo}:${canon}`);
+        const num = s.numero_atual ?? 0;
+        if (!cur || num > cur.ultimo) {
+          byCanon.set(`${s.tipo}:${canon}`, {
+            tipo: s.tipo,
+            ultimo: num,
+            ativa: !!s.ativo,
+          });
+        } else if (cur && s.ativo) {
+          cur.ativa = true;
+        }
+      }
+
+      const padraoNfe = normalizeSerieFiscal(empDef?.serie_nfe || '1');
+      const padraoNfce = normalizeSerieFiscal(empDef?.serie_nfce || '1');
+      const padraoMdfe = normalizeSerieFiscal(empDef?.serie_mdfe || '1');
+
+      const mapped: Array<Record<string, unknown>> = [];
+      for (const [key, val] of byCanon.entries()) {
+        const canon = key.split(':')[1] || key;
+        const resolved = await resolveUltimoNumeroSerie(supabase, empresa_id, val.tipo, canon);
+        mapped.push({
+          serie: resolved.canon,
+          modelo: tipoToModelo(val.tipo),
+          tipo: val.tipo,
+          ultimo_numero: resolved.ultimo,
+          proximo_numero: resolved.ultimo + 1,
+          ativa: resolved.ativo || val.ativa,
+          padrao_empresa:
+            (val.tipo === 'nfe' && resolved.canon === padraoNfe)
+            || (val.tipo === 'nfce' && resolved.canon === padraoNfce)
+            || (val.tipo === 'mdfe' && resolved.canon === padraoMdfe),
+        });
+      }
+
+      mapped.sort((a, b) => String(a.serie).localeCompare(String(b.serie), undefined, { numeric: true }));
 
       return jsonResponse({
         success: true,
         data: mapped,
         padroes: {
-          nfe: empDef?.serie_nfe || null,
-          nfce: empDef?.serie_nfce || null,
-          mdfe: empDef?.serie_mdfe || null,
+          nfe: padraoNfe,
+          nfce: padraoNfce,
+          mdfe: padraoMdfe,
         },
       });
     }
@@ -313,25 +458,17 @@ Deno.serve(async (req) => {
         }
       }
 
-      const { data: row } = await supabase
-        .from('series_fiscais')
-        .select('numero_atual, ativo')
-        .eq('empresa_id', empresa_id)
-        .eq('tipo', tipo)
-        .eq('serie', serie)
-        .maybeSingle();
-
-      const ultimo = row?.numero_atual ?? 0;
+      const resolved = await resolveUltimoNumeroSerie(supabase, empresa_id, tipo, serie);
       return jsonResponse({
         success: true,
         data: {
           modelo,
           tipo,
-          serie,
-          ultimo_numero: ultimo,
-          proximo_numero: ultimo + 1,
-          ativa: row?.ativo ?? false,
-          existe: !!row,
+          serie: resolved.canon,
+          ultimo_numero: resolved.ultimo,
+          proximo_numero: resolved.ultimo + 1,
+          ativa: resolved.ativo,
+          existe: resolved.ultimo > 0,
         },
       });
     }
@@ -341,24 +478,28 @@ Deno.serve(async (req) => {
     // =====================================================================
     if (method === 'POST' && route === 'series') {
       const body = await req.json();
-      const { serie, modelo, ativa, ultimo_numero } = body;
+      const { serie: serieRaw, modelo, ativa, ultimo_numero } = body;
 
-      if (!serie || !modelo) {
+      if (!serieRaw || !modelo) {
         return jsonResponse({ success: false, error: 'Campos serie e modelo são obrigatórios.' }, 400);
       }
+
+      const serie = normalizeSerieFiscal(serieRaw);
 
       const tipo = modelo === '55' ? 'nfe' : modelo === '65' ? 'nfce' : modelo === '58' ? 'mdfe' : null;
       if (!tipo) {
         return jsonResponse({ success: false, error: 'Modelo inválido. Use 55, 65 ou 58.' }, 400);
       }
 
-      const { data: existing } = await supabase
+      const { data: existingRows } = await supabase
         .from('series_fiscais')
-        .select('id, numero_atual')
+        .select('id, numero_atual, serie')
         .eq('empresa_id', empresa_id)
         .eq('tipo', tipo)
-        .eq('serie', serie)
-        .maybeSingle();
+        .in('serie', serieAliases(serie));
+
+      const existing = (existingRows || []).find((r) => normalizeSerieFiscal(r.serie) === serie)
+        || (existingRows || [])[0];
 
       const patch: any = { updated_at: new Date().toISOString() };
       if (ativa !== undefined) patch.ativo = ativa;

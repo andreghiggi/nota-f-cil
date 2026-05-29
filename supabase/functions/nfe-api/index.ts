@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 /** Conferir deploy: GET .../nfe-api?build=1 */
-const NFE_API_BUILD_ID = 'd484ce0-sync-ibscbs';
+const NFE_API_BUILD_ID = 'c5e5f92-serie-canon';
 
 interface NFePayload {
   external_id?: string;
@@ -154,14 +154,23 @@ function normalizeReformaPayloadItem(item: Record<string, unknown>): Record<stri
 
 /** Série canônica: "001" e "1" passam a ser a mesma chave em series_fiscais. */
 function normalizeSerieFiscal(serie: string | null | undefined): string {
-  const t = String(serie ?? '001').trim();
+  const t = String(serie ?? '1').trim();
+  if (!t) return '1';
   if (/^\d+$/.test(t)) return String(parseInt(t, 10));
   return t;
 }
 
 function serieAliases(serie: string): string[] {
-  const canon = normalizeSerieFiscal(serie);
-  return [...new Set([String(serie).trim(), canon, canon.padStart(3, '0')])];
+  const t = String(serie).trim();
+  const canon = normalizeSerieFiscal(t);
+  const set = new Set<string>([t, canon]);
+  if (/^\d+$/.test(canon)) {
+    const n = parseInt(canon, 10);
+    for (const width of [1, 2, 3, 4]) {
+      set.add(String(n).padStart(width, '0'));
+    }
+  }
+  return [...set];
 }
 
 /** Evita reiniciar em 000000003 quando já existem NF-e autorizadas na mesma série. */
@@ -819,7 +828,7 @@ Deno.serve(async (req) => {
 
       // Série canônica (evita contador paralelo "1" vs "001")
       const serieNfe = normalizeSerieFiscal(
-        payload.serie || empresaData?.serie_nfe || '001',
+        payload.serie || empresaData?.serie_nfe || '1',
       );
       payload.serie = serieNfe;
 
