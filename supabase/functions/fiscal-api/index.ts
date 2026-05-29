@@ -8,7 +8,7 @@ const corsHeaders = {
 const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
 /** Conferir deploy: GET .../fiscal-api?build=1 */
-const FISCAL_API_BUILD_ID = 'ecca00d-serie-001';
+const FISCAL_API_BUILD_ID = '18cdd19-sefaz-retry';
 
 /** Grupo UB (NT 2025.002) — estrutura compatível com NFePHP / api2 legado. */
 function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Record<string, unknown> | null {
@@ -160,7 +160,7 @@ function xmlAutorizadoTemIbscbs(xmlRaw: string): boolean {
 async function postWithRetry(
   url: string,
   payload: any,
-  opts: { maxAttempts?: number; label?: string } = {}
+  opts: { maxAttempts?: number; label?: string; headers?: Record<string, string> } = {}
 ): Promise<{ response: Response; text: string; data: any }> {
   const maxAttempts = opts.maxAttempts ?? 3;
   const label = opts.label ?? 'request';
@@ -170,7 +170,7 @@ async function postWithRetry(
     try {
       const response = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
         body: JSON.stringify(payload),
       });
       const text = await response.text();
@@ -183,11 +183,14 @@ async function postWithRetry(
         errStr.includes('recv failure') ||
         errStr.includes('timeout') ||
         errStr.includes('timed out') ||
+        errStr.includes('resolving timed out') ||
         errStr.includes('could not resolve host') ||
+        errStr.includes('ssl connect') ||
+        errStr.includes('empty reply from server') ||
         (response.status >= 502 && response.status <= 504);
 
       if (transient && attempt < maxAttempts) {
-        const wait = 800 * attempt;
+        const wait = 1500 * attempt;
         console.log(`⚠️ ${label} attempt ${attempt} transient (${response.status}): ${errStr.substring(0, 120)} — retrying in ${wait}ms`);
         await new Promise((r) => setTimeout(r, wait));
         continue;
@@ -1449,39 +1452,23 @@ Deno.serve(async (req) => {
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfe/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
 
-      // Retry automático em caso de instabilidade SEFAZ (Connection reset / Recv failure / timeout)
-      const MAX_EMIT_RETRIES = 3;
-      let response!: Response;
-      let responseText = '';
-      let lastTransient = '';
-      for (let attempt = 1; attempt <= MAX_EMIT_RETRIES; attempt++) {
-        response = await fetch(emitUrl, {
-          method: 'POST',
+      const { response, text: responseText, data: responseDataParsed } = await postWithRetry(
+        emitUrl,
+        payload,
+        {
+          maxAttempts: 5,
+          label: `NF-e ${nfe.numero} emit`,
           headers: {
-            'Content-Type': 'application/json',
             'X-Api-Key': empresa.api_key_fiscal,
             'Authorization': `Bearer ${empresa.api_key_fiscal}`,
           },
-          body: JSON.stringify(payload),
-        });
-        responseText = await response.text();
-        console.log(`📡 NF-e emit response (try ${attempt}/${MAX_EMIT_RETRIES}, status ${response.status}):`, responseText.substring(0, 500));
+        },
+      );
+      console.log(`📡 NF-e emit response (status ${response.status}):`, responseText.substring(0, 500));
 
-        const isTransient = /Connection reset by peer|Recv failure|Operation timed out|Could not resolve host|SSL connect error|getaddrinfo|Empty reply from server/i.test(responseText);
-        if (!isTransient || attempt === MAX_EMIT_RETRIES) break;
-        lastTransient = responseText.substring(0, 200);
-        const delayMs = 800 * attempt; // 0.8s, 1.6s
-        console.log(`⏳ Erro transitório SEFAZ; aguardando ${delayMs}ms e retry...`);
-        await new Promise(r => setTimeout(r, delayMs));
-      }
-      if (lastTransient && response.ok) {
-        console.log(`✅ Recuperado após retry de erro transitório: ${lastTransient}`);
-      }
-
-
-      let responseData: any;
+      let responseData: any = responseDataParsed;
       try {
-        responseData = JSON.parse(responseText);
+        if (!responseData && responseText) responseData = JSON.parse(responseText);
       } catch {
         await supabase.from('nfe').update({
           status: 'rejeitada',
