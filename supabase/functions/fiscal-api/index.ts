@@ -8,7 +8,7 @@ const corsHeaders = {
 const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
 /** Conferir deploy: GET .../fiscal-api?build=1 */
-const FISCAL_API_BUILD_ID = 'c5e5f92-serie-canon';
+const FISCAL_API_BUILD_ID = 'ecca00d-serie-001';
 
 /** Grupo UB (NT 2025.002) — estrutura compatível com NFePHP / api2 legado. */
 function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Record<string, unknown> | null {

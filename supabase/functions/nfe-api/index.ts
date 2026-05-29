@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 /** Conferir deploy: GET .../nfe-api?build=1 */
-const NFE_API_BUILD_ID = 'c5e5f92-serie-canon';
+const NFE_API_BUILD_ID = 'ecca00d-serie-001';
 
 interface NFePayload {
   external_id?: string;
@@ -152,11 +152,11 @@ function normalizeReformaPayloadItem(item: Record<string, unknown>): Record<stri
   };
 }
 
-/** Série canônica: "001" e "1" passam a ser a mesma chave em series_fiscais. */
+/** NF-e: série canônica em 3 dígitos — "1", "001" e "0001" → "001". */
 function normalizeSerieFiscal(serie: string | null | undefined): string {
-  const t = String(serie ?? '1').trim();
-  if (!t) return '1';
-  if (/^\d+$/.test(t)) return String(parseInt(t, 10));
+  const t = String(serie ?? '001').trim();
+  if (!t) return '001';
+  if (/^\d+$/.test(t)) return String(parseInt(t, 10)).padStart(3, '0');
   return t;
 }
 

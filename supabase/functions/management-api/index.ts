@@ -21,12 +21,17 @@ function jsonResponse(data: any, status = 200) {
   });
 }
 
-/** Série fiscal canônica: "0001", "001" e "1" → "1" (evita contadores paralelos). */
+/** NF-e: série canônica em 3 dígitos — "1", "001" e "0001" → "001" (Basalteare usa 001). */
 function normalizeSerieFiscal(serie: string | null | undefined): string {
   const t = String(serie ?? '').trim();
-  if (!t) return '1';
-  if (/^\d+$/.test(t)) return String(parseInt(t, 10));
+  if (!t) return '001';
+  if (/^\d+$/.test(t)) return String(parseInt(t, 10)).padStart(3, '0');
   return t;
+}
+
+function formatNumeroNfe(numero: number): string {
+  if (!Number.isFinite(numero) || numero <= 0) return '';
+  return String(numero).padStart(9, '0');
 }
 
 function serieAliases(serie: string): string[] {
@@ -398,20 +403,23 @@ Deno.serve(async (req) => {
         }
       }
 
-      const padraoNfe = normalizeSerieFiscal(empDef?.serie_nfe || '1');
-      const padraoNfce = normalizeSerieFiscal(empDef?.serie_nfce || '1');
-      const padraoMdfe = normalizeSerieFiscal(empDef?.serie_mdfe || '1');
+      const padraoNfe = normalizeSerieFiscal(empDef?.serie_nfe || '001');
+      const padraoNfce = normalizeSerieFiscal(empDef?.serie_nfce || '001');
+      const padraoMdfe = normalizeSerieFiscal(empDef?.serie_mdfe || '001');
 
       const mapped: Array<Record<string, unknown>> = [];
       for (const [key, val] of byCanon.entries()) {
         const canon = key.split(':')[1] || key;
         const resolved = await resolveUltimoNumeroSerie(supabase, empresa_id, val.tipo, canon);
+        const proximo = resolved.ultimo + 1;
         mapped.push({
           serie: resolved.canon,
           modelo: tipoToModelo(val.tipo),
           tipo: val.tipo,
           ultimo_numero: resolved.ultimo,
-          proximo_numero: resolved.ultimo + 1,
+          ultimo_numero_formatado: formatNumeroNfe(resolved.ultimo),
+          proximo_numero: proximo,
+          proximo_numero_formatado: formatNumeroNfe(proximo),
           ativa: resolved.ativo || val.ativa,
           padrao_empresa:
             (val.tipo === 'nfe' && resolved.canon === padraoNfe)
@@ -459,6 +467,7 @@ Deno.serve(async (req) => {
       }
 
       const resolved = await resolveUltimoNumeroSerie(supabase, empresa_id, tipo, serie);
+      const proximo = resolved.ultimo + 1;
       return jsonResponse({
         success: true,
         data: {
@@ -466,7 +475,9 @@ Deno.serve(async (req) => {
           tipo,
           serie: resolved.canon,
           ultimo_numero: resolved.ultimo,
-          proximo_numero: resolved.ultimo + 1,
+          ultimo_numero_formatado: formatNumeroNfe(resolved.ultimo),
+          proximo_numero: proximo,
+          proximo_numero_formatado: formatNumeroNfe(proximo),
           ativa: resolved.ativo,
           existe: resolved.ultimo > 0,
         },
