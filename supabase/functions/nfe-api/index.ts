@@ -1515,6 +1515,74 @@ Deno.serve(async (req) => {
       );
     }
 
+    // POST /nfe-api/:id/consultar-sefaz — consulta situação na SEFAZ e atualiza registro
+    if (method === 'POST' && pathParts.length === 3 && pathParts[0] === 'nfe-api' && pathParts[2] === 'consultar-sefaz') {
+      if (!permissoes.includes('consultar')) {
+        return new Response(
+          JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const nfeId = pathParts[1];
+      const { data: nfeData } = await supabase
+        .from('nfe')
+        .select('id, numero, status')
+        .eq('id', nfeId)
+        .eq('empresa_id', empresa_id)
+        .maybeSingle();
+
+      if (!nfeData) {
+        return new Response(
+          JSON.stringify({ error: 'NF-e not found', code: 'NOT_FOUND' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'consult_nfe_sefaz', nfe_id: nfeId },
+        });
+
+        if (fiscalError || !fiscalResult?.success) {
+          const errMsg = fiscalResult?.error || fiscalError?.message || 'Falha ao consultar na SEFAZ';
+          return new Response(
+            JSON.stringify({ error: errMsg, details: fiscalResult?.details, code: 'SEFAZ_CONSULT_ERROR' }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+
+        await supabase.rpc('registrar_log', {
+          p_empresa_id: empresa_id,
+          p_nfce_id: nfeId,
+          p_token_api_id: token_id,
+          p_tipo: 'info',
+          p_categoria: 'api',
+          p_mensagem: `Consulta SEFAZ NF-e ${nfeData.numero} → ${fiscalResult.data?.status || '?'}`,
+          p_detalhes: { sefaz: fiscalResult.sefaz, duplicatas: fiscalResult.duplicatas_resolvidas },
+          p_ip_origem: req.headers.get('x-forwarded-for'),
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: fiscalResult.data,
+            sefaz: fiscalResult.sefaz,
+            duplicatas_resolvidas: fiscalResult.duplicatas_resolvidas ?? 0,
+            warning: fiscalResult.warning,
+            reforma_ausente_no_xml: fiscalResult.reforma_ausente_no_xml,
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      } catch (consultErr: unknown) {
+        const msg = consultErr instanceof Error ? consultErr.message : String(consultErr);
+        return new Response(
+          JSON.stringify({ error: 'Erro interno na consulta SEFAZ', details: msg, code: 'INTERNAL_ERROR' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+    }
+
     // GET /nfe-api/:id/xml
     if (method === 'GET' && pathParts.length === 3 && pathParts[0] === 'nfe-api' && pathParts[2] === 'xml') {
       if (!permissoes.includes('consultar')) {

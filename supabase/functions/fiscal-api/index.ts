@@ -8,7 +8,7 @@ const corsHeaders = {
 const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
 /** Conferir deploy: GET .../fiscal-api?build=1 */
-const FISCAL_API_BUILD_ID = '18cdd19-sefaz-retry';
+const FISCAL_API_BUILD_ID = '29may26-consulta-sefaz';
 
 /** Grupo UB (NT 2025.002) — estrutura compatível com NFePHP / api2 legado. */
 function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Record<string, unknown> | null {
@@ -80,6 +80,16 @@ function itemTemReformaTributaria(item: Record<string, unknown>): boolean {
   );
 }
 
+function temReformaNfeFromPayload(payloadEntrada: Record<string, unknown>): boolean {
+  const raw = payloadEntrada.itens;
+  const lista: Record<string, unknown>[] = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object'
+      ? Object.values(raw as Record<string, unknown>)
+      : [];
+  return lista.some((it) => itemTemReformaTributaria(it));
+}
+
 /** Mescla item do banco com payload_entrada (emit-smart envia cst_cbs / aliquota_ibs). */
 function mergeItemComPayloadEntrada(
   dbItem: Record<string, unknown>,
@@ -147,6 +157,53 @@ function xmlAutorizadoTemIbscbs(xmlRaw: string): boolean {
   const xml = xmlRaw.trim();
   if (!xml) return false;
   return /<IBSCBS[\s>]/i.test(xml) || /<gIBSCBS[\s>]/i.test(xml);
+}
+
+function extractChaveNfeFromXml(xmlRaw: string): string {
+  const xml = (xmlRaw || '').trim();
+  if (!xml) return '';
+  let decoded = xml;
+  if (!decoded.startsWith('<')) {
+    try {
+      const bin = atob(decoded.replace(/\s+/g, ''));
+      if (bin.includes('<')) decoded = bin;
+    } catch { /* keep */ }
+  }
+  const mId = decoded.match(/Id="NFe(\d{44})"/i);
+  if (mId) return mId[1];
+  const mCh = decoded.match(/<chNFe>(\d{44})<\/chNFe>/i);
+  if (mCh) return mCh[1];
+  return '';
+}
+
+async function resolverDuplicatasNfeInternas(
+  supabase: ReturnType<typeof createClient>,
+  empresaId: string,
+  nfeId: string,
+  numero: string | number,
+  serie: string | number,
+  statusAutorizado: string,
+): Promise<number> {
+  if (statusAutorizado !== 'autorizada') return 0;
+  const { data: dupes } = await supabase
+    .from('nfe')
+    .select('id, status')
+    .eq('empresa_id', empresaId)
+    .eq('numero', numero)
+    .eq('serie', serie)
+    .neq('id', nfeId);
+  let n = 0;
+  for (const row of dupes || []) {
+    if (!['processando', 'pendente', 'rejeitada', 'erro', 'enviada'].includes(String(row.status || ''))) continue;
+    await supabase.from('nfe').update({
+      status: 'rejeitada',
+      motivo_retorno: `Duplicata interna — NF-e autorizada na SEFAZ (registro ${nfeId})`,
+      erro_processamento: 'duplicata_interna',
+      processado_em: new Date().toISOString(),
+    }).eq('id', row.id);
+    n += 1;
+  }
+  return n;
 }
 
 // ============================================================================
@@ -1569,6 +1626,121 @@ Deno.serve(async (req) => {
           } : {}),
         }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // ========================================================================
+    // ACTION: consult_nfe_sefaz — consulta situação na SEFAZ e atualiza o banco
+    // ========================================================================
+    if (action === 'consult_nfe_sefaz') {
+      const nfeId = nfe_id;
+      if (!nfeId) {
+        return new Response(
+          JSON.stringify({ error: 'nfe_id é obrigatório' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const { data: nfe, error: nfeError } = await supabase
+        .from('nfe')
+        .select('id, empresa_id, numero, serie, status, chave_acesso, xml_envio, xml_retorno, payload_entrada, data_emissao')
+        .eq('id', nfeId)
+        .single();
+
+      if (nfeError || !nfe) {
+        return new Response(
+          JSON.stringify({ error: 'NF-e não encontrada', details: nfeError?.message }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const { empresa, error: regError } = await ensureRegistered(supabase, nfe.empresa_id);
+      if (regError || !empresa?.api_key_fiscal) {
+        return new Response(
+          JSON.stringify({ error: regError || 'Empresa não cadastrada na API fiscal' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const xmlCand = normalizeFiscalXml(nfe.xml_retorno || nfe.xml_envio || '');
+      let chave = String(nfe.chave_acesso || '').replace(/\D/g, '');
+      if (chave.length !== 44) {
+        chave = extractChaveNfeFromXml(xmlCand);
+      }
+
+      const payloadEntrada = (nfe.payload_entrada && typeof nfe.payload_entrada === 'object')
+        ? nfe.payload_entrada as Record<string, unknown>
+        : {};
+
+      const cNfMatch = xmlCand.match(/<cNF>(\d+)<\/cNF>/i);
+      const consultBody: Record<string, unknown> = {
+        chave: chave.length === 44 ? chave : undefined,
+        numero: nfe.numero,
+        serie: nfe.serie,
+        dhEmi: payloadEntrada.dhEmi || nfe.data_emissao,
+        ...(cNfMatch ? { cNF: cNfMatch[1] } : {}),
+        ...(xmlCand ? { xml_envio: xmlCand } : {}),
+      };
+
+      const consultUrl = `${FISCAL_API_BASE_URL}/nfe/consulta-chave?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
+      const { response, data: consultData } = await postWithRetry(consultUrl, consultBody, {
+        maxAttempts: 5,
+        label: 'consult_nfe_sefaz',
+      });
+
+      if (!response.ok) {
+        const errMsg = consultData?.erro || consultData?.error || consultData?.message || 'Falha na consulta SEFAZ';
+        return new Response(
+          JSON.stringify({ error: errMsg, details: consultData }),
+          { status: response.status >= 400 ? response.status : 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      const updateData = buildNfUpdateData(consultData);
+      if (updateData.xml_retorno) {
+        const xmlStr = normalizeFiscalXml(updateData.xml_retorno);
+        if (temReformaNfeFromPayload(payloadEntrada) && updateData.status === 'autorizada' && xmlStr && !xmlAutorizadoTemIbscbs(xmlStr)) {
+          updateData.erro_processamento = 'XML autorizado sem IBSCBS — verifique api2 (tagIBSCBS)';
+          (updateData as Record<string, unknown>).reforma_ausente_no_xml = true;
+        }
+      }
+
+      await supabase.from('nfe').update(updateData).eq('id', nfeId);
+      const duplicatasResolvidas = await resolverDuplicatasNfeInternas(
+        supabase,
+        nfe.empresa_id,
+        nfeId,
+        nfe.numero,
+        nfe.serie,
+        updateData.status,
+      );
+
+      const { data: nfeAtualizada } = await supabase
+        .from('nfe')
+        .select(`
+          id, numero, serie, chave_acesso, status, ambiente,
+          data_emissao, valor_total, protocolo, codigo_retorno,
+          motivo_retorno, data_autorizacao, external_id,
+          natureza_operacao, dest_nome, dest_cpf_cnpj, created_at
+        `)
+        .eq('id', nfeId)
+        .single();
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          data: nfeAtualizada,
+          sefaz: {
+            cStat: consultData.cStat || consultData.codigo_retorno,
+            xMotivo: consultData.xMotivo || consultData.motivo_retorno,
+          },
+          duplicatas_resolvidas: duplicatasResolvidas,
+          ...(updateData.reforma_ausente_no_xml ? {
+            warning: 'XML autorizado sem IBSCBS na SEFAZ.',
+            reforma_ausente_no_xml: true,
+          } : {}),
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
 
