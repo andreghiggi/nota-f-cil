@@ -149,6 +149,83 @@ function normalizeReformaPayloadItem(item: Record<string, unknown>): Record<stri
   };
 }
 
+/** Série canônica: "001" e "1" passam a ser a mesma chave em series_fiscais. */
+function normalizeSerieFiscal(serie: string | null | undefined): string {
+  const t = String(serie ?? '001').trim();
+  if (/^\d+$/.test(t)) return String(parseInt(t, 10));
+  return t;
+}
+
+function serieAliases(serie: string): string[] {
+  const canon = normalizeSerieFiscal(serie);
+  return [...new Set([String(serie).trim(), canon, canon.padStart(3, '0')])];
+}
+
+/** Evita reiniciar em 000000003 quando já existem NF-e autorizadas na mesma série. */
+async function syncSerieNumeroAtual(
+  supabase: ReturnType<typeof createClient>,
+  empresaId: string,
+  serie: string,
+): Promise<void> {
+  const aliases = serieAliases(serie);
+  const canon = normalizeSerieFiscal(serie);
+
+  const { data: nfes } = await supabase
+    .from('nfe')
+    .select('numero, serie, status')
+    .eq('empresa_id', empresaId)
+    .in('serie', aliases)
+    .in('status', ['autorizada', 'autorizado', 'cancelada']);
+
+  let maxNum = 0;
+  for (const row of nfes || []) {
+    const digits = String(row.numero || '').replace(/\D/g, '');
+    const n = parseInt(digits || '0', 10);
+    if (n > maxNum) maxNum = n;
+  }
+  if (maxNum <= 0) return;
+
+  for (const s of aliases) {
+    const { data: row } = await supabase
+      .from('series_fiscais')
+      .select('id, numero_atual')
+      .eq('empresa_id', empresaId)
+      .eq('tipo', 'nfe')
+      .eq('serie', s)
+      .maybeSingle();
+
+    if (row && (row.numero_atual ?? 0) < maxNum) {
+      await supabase
+        .from('series_fiscais')
+        .update({ numero_atual: maxNum, updated_at: new Date().toISOString() })
+        .eq('id', row.id);
+    }
+  }
+
+  const { data: canonRow } = await supabase
+    .from('series_fiscais')
+    .select('id, numero_atual')
+    .eq('empresa_id', empresaId)
+    .eq('tipo', 'nfe')
+    .eq('serie', canon)
+    .maybeSingle();
+
+  if (!canonRow) {
+    await supabase.from('series_fiscais').insert({
+      empresa_id: empresaId,
+      tipo: 'nfe',
+      serie: canon,
+      numero_atual: maxNum,
+      ativo: true,
+    });
+  } else if ((canonRow.numero_atual ?? 0) < maxNum) {
+    await supabase
+      .from('series_fiscais')
+      .update({ numero_atual: maxNum, updated_at: new Date().toISOString() })
+      .eq('id', canonRow.id);
+  }
+}
+
 function shouldDeferTransmit(payload: NFePayload): boolean {
   const p = payload as Record<string, unknown>;
   return p.transmitir === false
@@ -729,8 +806,13 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Use serie from payload if provided, otherwise use empresa default
-      const serieNfe = payload.serie || empresaData?.serie_nfe || '001';
+      // Série canônica (evita contador paralelo "1" vs "001")
+      const serieNfe = normalizeSerieFiscal(
+        payload.serie || empresaData?.serie_nfe || '001',
+      );
+      payload.serie = serieNfe;
+
+      await syncSerieNumeroAtual(supabase, empresa_id, serieNfe);
 
       const { data: numeroData, error: numeroError } = await supabase
         .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id, p_serie: serieNfe });

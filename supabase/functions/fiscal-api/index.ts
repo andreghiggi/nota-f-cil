@@ -7,6 +7,145 @@ const corsHeaders = {
 
 const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
+/** Grupo UB (NT 2025.002) — estrutura compatível com NFePHP / api2 legado. */
+function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Record<string, unknown> | null {
+  const cstIbsCbs = item.cst_ibs_cbs || item.cst_cbs || item.cst_ibs;
+  const aliqCbs = Number(item.aliquota_cbs || 0);
+  const aliqIbsUf = Number(item.aliquota_ibs_uf ?? item.aliquota_ibs ?? 0);
+  const aliqIbsMun = Number(item.aliquota_ibs_mun || 0);
+  const vbcIbsCbs = Number(item.vbc_ibs_cbs ?? item.base_calculo_cbs ?? item.base_calculo_ibs ?? valorTotal ?? 0);
+  if (!cstIbsCbs && aliqCbs <= 0 && aliqIbsUf <= 0 && aliqIbsMun <= 0) return null;
+
+  const cst = String(cstIbsCbs || '000');
+  const cClassTrib = String(item.c_class_trib || '0000000').trim() || '0000000';
+  const vbc = +vbcIbsCbs.toFixed(2);
+  const vIbsUf = Number(item.valor_ibs_uf ?? +(vbc * aliqIbsUf / 100).toFixed(2));
+  const vIbsMun = Number(item.valor_ibs_mun ?? +(vbc * aliqIbsMun / 100).toFixed(2));
+  const vCbs = Number(item.valor_cbs ?? +(vbc * aliqCbs / 100).toFixed(2));
+
+  const gIBSUF: Record<string, unknown> = {
+    vBC: vbc,
+    pIBSUF: aliqIbsUf,
+    vIBSUF: vIbsUf,
+  };
+  const gIBSMun: Record<string, unknown> = {
+    vBC: vbc,
+    pIBSMun: aliqIbsMun,
+    vIBSMun: vIbsMun,
+  };
+  const gCBS: Record<string, unknown> = {
+    vBC: vbc,
+    pCBS: aliqCbs,
+    vCBS: vCbs,
+  };
+
+  if (item.p_red_aliq_ibs_uf) {
+    gIBSUF.gRed = { pRedAliq: item.p_red_aliq_ibs_uf, pAliqEfet: item.p_aliq_efet_ibs_uf || 0 };
+  }
+  if (item.valor_dif_ibs_uf) gIBSUF.gDif = { vDif: item.valor_dif_ibs_uf };
+  if (item.valor_dev_trib_ibs_uf) gIBSUF.gDevTrib = { vDevTrib: item.valor_dev_trib_ibs_uf };
+
+  if (item.p_red_aliq_ibs_mun) {
+    gIBSMun.gRed = { pRedAliq: item.p_red_aliq_ibs_mun, pAliqEfet: item.p_aliq_efet_ibs_mun || 0 };
+  }
+  if (item.valor_dif_ibs_mun) gIBSMun.gDif = { vDif: item.valor_dif_ibs_mun };
+  if (item.valor_dev_trib_ibs_mun) gIBSMun.gDevTrib = { vDevTrib: item.valor_dev_trib_ibs_mun };
+
+  if (item.p_red_aliq_cbs) {
+    gCBS.gRed = { pRedAliq: item.p_red_aliq_cbs, pAliqEfet: item.p_aliq_efet_cbs || 0 };
+  }
+  if (item.valor_dif_cbs) gCBS.gDif = { vDif: item.valor_dif_cbs };
+  if (item.valor_dev_trib_cbs) gCBS.gDevTrib = { vDevTrib: item.valor_dev_trib_cbs };
+
+  return {
+    CST: cst,
+    cClassTrib,
+    vBC: vbc,
+    ...(item.ind_doacao != null ? { indDoacao: item.ind_doacao } : {}),
+    gIBSUF,
+    gIBSMun,
+    gCBS,
+  };
+}
+
+function itemTemReformaTributaria(item: Record<string, unknown>): boolean {
+  return Boolean(
+    item.cst_ibs_cbs || item.cst_cbs || item.cst_ibs
+    || Number(item.aliquota_cbs || 0) > 0
+    || Number(item.aliquota_ibs_uf ?? item.aliquota_ibs ?? 0) > 0
+    || Number(item.aliquota_ibs_mun || 0) > 0,
+  );
+}
+
+/** Mescla item do banco com payload_entrada (emit-smart envia cst_cbs / aliquota_ibs). */
+function mergeItemComPayloadEntrada(
+  dbItem: Record<string, unknown>,
+  payloadEntrada: Record<string, unknown> | null | undefined,
+  numeroItem: number,
+): Record<string, unknown> {
+  const raw = payloadEntrada?.itens;
+  const lista: Record<string, unknown>[] = Array.isArray(raw)
+    ? raw
+    : raw && typeof raw === 'object'
+      ? Object.values(raw as Record<string, unknown>)
+      : [];
+
+  const codDb = String(dbItem.codigo_produto ?? dbItem.codigo ?? '').trim();
+  const ent = lista.find((x, i) => {
+    const cod = String(x.codigo ?? x.cProd ?? x.codigo_produto ?? '').trim();
+    return (cod && cod === codDb) || i + 1 === numeroItem;
+  }) || {};
+
+  const merged: Record<string, unknown> = { ...ent, ...dbItem };
+
+  if (!merged.cst_ibs_cbs && (ent.cst_cbs || ent.cst_ibs)) {
+    merged.cst_ibs_cbs = ent.cst_cbs || ent.cst_ibs;
+  }
+  if (!(Number(merged.aliquota_cbs) > 0) && Number(ent.aliquota_cbs) > 0) {
+    merged.aliquota_cbs = ent.aliquota_cbs;
+  }
+  const aliqIbsEnt = Number(ent.aliquota_ibs_uf ?? ent.aliquota_ibs ?? 0);
+  if (!(Number(merged.aliquota_ibs_uf ?? merged.aliquota_ibs) > 0) && aliqIbsEnt > 0) {
+    merged.aliquota_ibs_uf = aliqIbsEnt;
+  }
+  if (!(Number(merged.vbc_ibs_cbs) > 0)) {
+    const vbc = Number(
+      ent.vbc_ibs_cbs ?? ent.base_calculo_cbs ?? ent.base_calculo_ibs ?? merged.valor_total ?? 0,
+    );
+    if (vbc > 0) merged.vbc_ibs_cbs = vbc;
+  }
+
+  return merged;
+}
+
+function aplicarCamposReformaApi2(itemData: Record<string, unknown>, item: Record<string, unknown>): void {
+  const cst = String(item.cst_ibs_cbs ?? item.cst_cbs ?? item.cst_ibs ?? '').trim();
+  const aliqCbs = Number(item.aliquota_cbs ?? 0);
+  const aliqIbsUf = Number(item.aliquota_ibs_uf ?? item.aliquota_ibs ?? 0);
+  const aliqIbsMun = Number(item.aliquota_ibs_mun ?? 0);
+  if (!cst && aliqCbs <= 0 && aliqIbsUf <= 0 && aliqIbsMun <= 0) return;
+
+  const cstNorm = cst || '000';
+  itemData.cst_ibs_cbs = cstNorm;
+  itemData.cst_cbs = cstNorm;
+  itemData.cst_ibs = cstNorm;
+  itemData.aliquota_cbs = aliqCbs;
+  itemData.aliquota_ibs_uf = aliqIbsUf;
+  itemData.aliquota_ibs = aliqIbsUf;
+  itemData.aliquota_ibs_mun = aliqIbsMun;
+  itemData.vbc_ibs_cbs = Number(
+    item.vbc_ibs_cbs ?? item.base_calculo_cbs ?? item.base_calculo_ibs ?? item.valor_total ?? 0,
+  );
+  itemData.base_calculo_cbs = itemData.vbc_ibs_cbs;
+  itemData.base_calculo_ibs = itemData.vbc_ibs_cbs;
+}
+
+function xmlAutorizadoTemIbscbs(xmlRaw: string): boolean {
+  const xml = xmlRaw.trim();
+  if (!xml) return false;
+  return /<IBSCBS[\s>]/i.test(xml) || /<gIBSCBS[\s>]/i.test(xml);
+}
+
 // ============================================================================
 // SHARED HELPERS
 // ============================================================================
@@ -777,7 +916,9 @@ Deno.serve(async (req) => {
 
       // Build items with full tax data
       const itensObj: Record<string, any> = {};
-      (nfe.nfe_itens || []).forEach((item: any, idx: number) => {
+      const payloadEntradaItens = nfe.payload_entrada || {};
+      (nfe.nfe_itens || []).forEach((rawItem: any, idx: number) => {
+        const item = mergeItemComPayloadEntrada(rawItem, payloadEntradaItens, idx + 1);
         const descProduto = String(item.descricao ?? '').trim();
         const codProduto = String(item.codigo_produto ?? item.codigo ?? '').trim();
         if (!descProduto || !codProduto) {
@@ -908,43 +1049,14 @@ Deno.serve(async (req) => {
         };
 
         // IBS/CBS (Reforma Tributária) — Grupo UB oficial NFe 4.00
-        const cstIbsCbs = item.cst_ibs_cbs || item.cst_cbs || item.cst_ibs;
-        const aliqCbs = Number(item.aliquota_cbs || 0);
-        const aliqIbsUf = Number(item.aliquota_ibs_uf ?? item.aliquota_ibs ?? 0);
-        const aliqIbsMun = Number(item.aliquota_ibs_mun || 0);
-        const vbcIbsCbs = Number(item.vbc_ibs_cbs ?? item.base_calculo_cbs ?? item.base_calculo_ibs ?? valorTotal ?? 0);
-        if (cstIbsCbs || aliqCbs > 0 || aliqIbsUf > 0 || aliqIbsMun > 0) {
-          const vIbsUf = item.valor_ibs_uf ?? +(vbcIbsCbs * aliqIbsUf / 100).toFixed(2);
-          const vIbsMun = item.valor_ibs_mun ?? +(vbcIbsCbs * aliqIbsMun / 100).toFixed(2);
-          const vCbs = item.valor_cbs ?? +(vbcIbsCbs * aliqCbs / 100).toFixed(2);
-          itemData.ibs_cbs = {
-            CST: String(cstIbsCbs || '000'),
-            cClassTrib: item.c_class_trib || '',
-            vBC: vbcIbsCbs,
-            indDoacao: item.ind_doacao ?? undefined,
-            gIBSUF: {
-              pIBSUF: aliqIbsUf,
-              vIBSUF: vIbsUf,
-              ...(item.p_red_aliq_ibs_uf ? { gRed: { pRedAliq: item.p_red_aliq_ibs_uf, pAliqEfet: item.p_aliq_efet_ibs_uf || 0 } } : {}),
-              ...(item.valor_dif_ibs_uf ? { gDif: { vDif: item.valor_dif_ibs_uf } } : {}),
-              ...(item.valor_dev_trib_ibs_uf ? { gDevTrib: { vDevTrib: item.valor_dev_trib_ibs_uf } } : {}),
-            },
-            gIBSMun: {
-              pIBSMun: aliqIbsMun,
-              vIBSMun: vIbsMun,
-              ...(item.p_red_aliq_ibs_mun ? { gRed: { pRedAliq: item.p_red_aliq_ibs_mun, pAliqEfet: item.p_aliq_efet_ibs_mun || 0 } } : {}),
-              ...(item.valor_dif_ibs_mun ? { gDif: { vDif: item.valor_dif_ibs_mun } } : {}),
-              ...(item.valor_dev_trib_ibs_mun ? { gDevTrib: { vDevTrib: item.valor_dev_trib_ibs_mun } } : {}),
-            },
-            gCBS: {
-              pCBS: aliqCbs,
-              vCBS: vCbs,
-              ...(item.p_red_aliq_cbs ? { gRed: { pRedAliq: item.p_red_aliq_cbs, pAliqEfet: item.p_aliq_efet_cbs || 0 } } : {}),
-              ...(item.valor_dif_cbs ? { gDif: { vDif: item.valor_dif_cbs } } : {}),
-              ...(item.valor_dev_trib_cbs ? { gDevTrib: { vDevTrib: item.valor_dev_trib_cbs } } : {}),
-            },
-          };
+        const ibscbs = buildIbscbsBlock(item, valorTotal);
+        if (ibscbs) {
+          itemData.ibs_cbs = ibscbs;
+          itemData.IBSCBS = ibscbs;
+          itemData.ibscbs = ibscbs;
+          itemData.gIBSCBS = ibscbs;
         }
+        aplicarCamposReformaApi2(itemData, item);
 
         // Imposto Seletivo
         if (item.cst_is) {
@@ -1277,6 +1389,28 @@ Deno.serve(async (req) => {
         },
       };
 
+      const temReformaNfe = (nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it))
+        || Object.values(itensObj).some((it: any) => it.ibs_cbs);
+      if (temReformaNfe) {
+        payload.habilitar_ibs_cbs = true;
+        payload.reforma_tributaria = true;
+        payload.IBSCBS_habilitado = true;
+        const ibsTot = {
+          vBCIBSCBS: Number(nfe.valor_produtos || 0),
+          vIBSUF: Number(nfe.valor_ibs_uf_total || 0),
+          vIBSMun: Number(nfe.valor_ibs_mun_total || 0),
+          vCBS: Number(nfe.valor_cbs_total || 0),
+        };
+        payload.totais_ibs_cbs = payload.nota.totais_ibs_cbs;
+        payload.IBSCBSTot = ibsTot;
+        payload.nota.IBSCBSTot = ibsTot;
+        if (payload.nota.total?.ICMSTot) {
+          payload.nota.total.IBSCBSTot = ibsTot;
+        }
+        const qtdIbscbs = Object.values(itensObj).filter((it: any) => it.ibs_cbs).length;
+        console.log(`📋 Reforma tributária: ${qtdIbscbs}/${Object.keys(itensObj).length} itens com ibs_cbs → api2`);
+      }
+
       // PF: pad CPF to 14 digits for access key generation
       if (isPF) {
         const cpfClean = (empresa.cpf || '').replace(/\D/g, '');
@@ -1381,13 +1515,25 @@ Deno.serve(async (req) => {
       }
 
       // Extract data_autorizacao from XML if not present
-      if (!updateData.data_autorizacao && updateData.xml_retorno) {
+      let xmlAutorizadoStr = '';
+      if (updateData.xml_retorno) {
         try {
           let xmlStr = updateData.xml_retorno;
           if (!xmlStr.startsWith('<')) xmlStr = atob(xmlStr);
-          const dhMatch = xmlStr.match(/<dhRecbto>(.*?)<\/dhRecbto>/);
-          if (dhMatch) updateData.data_autorizacao = dhMatch[1];
+          xmlAutorizadoStr = xmlStr;
+          if (!updateData.data_autorizacao) {
+            const dhMatch = xmlStr.match(/<dhRecbto>(.*?)<\/dhRecbto>/);
+            if (dhMatch) updateData.data_autorizacao = dhMatch[1];
+          }
         } catch {}
+      }
+
+      const temReformaNfePos = (nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it));
+      if (temReformaNfePos && updateData.status === 'autorizada' && xmlAutorizadoStr && !xmlAutorizadoTemIbscbs(xmlAutorizadoStr)) {
+        const aviso = 'XML autorizado pela SEFAZ sem grupo IBSCBS — atualize o gerador XML em api2.agilizeerp.com.br (PHP).';
+        console.warn(`⚠️ NF-e ${nfe.numero}: ${aviso}`);
+        updateData.erro_processamento = aviso;
+        (updateData as any).reforma_ausente_no_xml = true;
       }
 
       await supabase.from('nfe').update(updateData).eq('id', nfeId);
@@ -1412,7 +1558,14 @@ Deno.serve(async (req) => {
       } catch {}
 
       return new Response(
-        JSON.stringify({ success: true, data: { ...updateData, id: nfeId } }),
+        JSON.stringify({
+          success: true,
+          data: { ...updateData, id: nfeId },
+          ...(updateData.reforma_ausente_no_xml ? {
+            warning: 'XML autorizado sem IBSCBS. Ajuste api2 (PHP) para gerar Reforma Tributária.',
+            reforma_ausente_no_xml: true,
+          } : {}),
+        }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
