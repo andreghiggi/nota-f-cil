@@ -1379,7 +1379,8 @@ Deno.serve(async (req) => {
           finalidade: nfe.finalidade || '1',
           modalidade_frete: nfe.modalidade_frete || '9',
           cliente: clientePayload,
-          itens: itensObj,
+          // PHP exige array (não stdClass) em fiscal_tag_ibscbs_tot — enviar como JSON array
+          itens: Object.values(itensObj),
           // Pagamentos (formatos múltiplos para compat. com PHP legado/NFePHP)
           pag: nfePagBlock,
           pagamentos: nfePagObj,
