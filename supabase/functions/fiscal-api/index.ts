@@ -816,7 +816,8 @@ Deno.serve(async (req) => {
           NSU: primaryPayment.NSU,
           nsu: primaryPayment.nsu,
           ...((clientePayload?.cpf || clientePayload?.cnpj) ? { cliente: clientePayload } : {}),
-          itens: itensObj,
+          // PHP exige array (não stdClass) em fiscal_tag_ibscbs_tot — enviar como JSON array
+          itens: Object.values(itensObj),
           // Pagamento em todos os formatos/aliases conhecidos do PHP/sped-nfe
           pag: pagBlock,
           pagamentos: pagamentosObj,
