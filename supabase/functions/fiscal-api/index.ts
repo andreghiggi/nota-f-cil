@@ -8,7 +8,7 @@ const corsHeaders = {
 const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
 /** Conferir deploy: GET .../fiscal-api?build=1 */
-const FISCAL_API_BUILD_ID = '29may26-consulta-sefaz';
+const FISCAL_API_BUILD_ID = '31may26-nfce-payment-retry';
 
 /** Grupo UB (NT 2025.002) — estrutura compatível com NFePHP / api2 legado. */
 function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Record<string, unknown> | null {
@@ -532,6 +532,11 @@ function buildNfcePaymentPayload(nfce: any) {
 function buildPaymentPayload(doc: any) {
   const entrada = doc.payload_entrada || {};
   const firstPresent = (...values: any[]) => values.find((value) => value !== undefined && value !== null && value !== '');
+  const docTotal = Number(firstPresent(doc.valor_total, entrada.valor_total, entrada.total, 0));
+  const isPaymentLike = (value: any) => value && typeof value === 'object' && [
+    'tPag', 'tpag', 'forma', 'forma_pagamento', 'tipo_pagamento', 'codigo',
+    'vPag', 'vpag', 'valor', 'valor_pagamento', 'total', 'card', 'cartao',
+  ].some((key) => value[key] !== undefined && value[key] !== null && value[key] !== '');
   const rawPag = firstPresent(
     entrada.pagamento,
     entrada.pagamentos,
@@ -541,14 +546,18 @@ function buildPaymentPayload(doc: any) {
     entrada.detPag,
     entrada.pag
   );
-  const rawList = Array.isArray(rawPag) ? rawPag : (rawPag ? [rawPag] : []);
-  const sourceList = rawList.length > 0 ? rawList : [{ tPag: '01', vPag: doc.valor_total }];
+  const rawList = Array.isArray(rawPag)
+    ? rawPag
+    : rawPag && typeof rawPag === 'object'
+      ? (isPaymentLike(rawPag) ? [rawPag] : Object.values(rawPag))
+      : (rawPag ? [rawPag] : []);
+  const sourceList = rawList.filter(Boolean).length > 0 ? rawList.filter(Boolean) : [{ tPag: '01', vPag: docTotal }];
 
   const detPag = sourceList.map((p: any) => {
     const card = p?.card ?? p?.cartao ?? p;
     const tPagRaw = firstPresent(p?.tPag, p?.tpag, p?.forma, p?.forma_pagamento, p?.tipo_pagamento, p?.codigo, '01');
     const tPag = String(tPagRaw).replace(/\D/g, '').padStart(2, '0').slice(-2) || '01';
-    const vPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, doc.valor_total)).toFixed(2);
+    const vPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, docTotal)).toFixed(2);
     const det: any = {
       indPag: Number(firstPresent(p?.indPag, p?.indpag, p?.indicador_pagamento, 0)),
       tPag,
@@ -562,9 +571,11 @@ function buildPaymentPayload(doc: any) {
     // 03/04 cartão crédito/débito, 10-13 vouchers, 17 PIX, 18 transferência bancária.
     const isCartaoReal = ['03','04','10','11','12','13'].includes(tPag);
     const isPixOuTransf = ['17','18'].includes(tPag);
-    if (isCartaoReal || isPixOuTransf) {
-      // Para PIX/transferência, default tpIntegra=2 (não integrado). Cartão default=1.
-      const tpIntegraRaw = Number(firstPresent(card?.tpIntegra, card?.tpintegra, p?.tpIntegra, p?.tipo_integracao, isPixOuTransf ? 2 : 1));
+    if (isPixOuTransf) {
+      // PIX/transferência não devem levar grupo <card>; api2 antigo interpreta isso como cartão.
+      Object.assign(det, { tpIntegra: 2, tipo_integracao: 2 });
+    } else if (isCartaoReal) {
+      const tpIntegraRaw = Number(firstPresent(card?.tpIntegra, card?.tpintegra, p?.tpIntegra, p?.tipo_integracao, 1));
       let tpIntegra = tpIntegraRaw === 2 ? 2 : 1;
       const cnpjCard = String(firstPresent(card?.CNPJ, card?.cnpj, p?.CNPJ, p?.cnpj, p?.cnpj_credenciadora, '')).replace(/\D/g, '');
       // tpIntegra=1 (integrado) exige CNPJ da credenciadora válido (14 díg). Sem CNPJ, força 2.
@@ -576,16 +587,22 @@ function buildPaymentPayload(doc: any) {
       if (tpIntegra === 1 && cnpjCard) {
         Object.assign(cardPayload, { CNPJ: cnpjCard, cnpj: cnpjCard, cnpj_credenciadora: cnpjCard });
       }
-      // tBand/cAut/NSU só valem para cartão real (03/04/10-13). PIX/Transferência não têm.
-      if (isCartaoReal) {
-        if (tBand) Object.assign(cardPayload, { tBand: String(tBand).padStart(2, '0'), bandeira_operadora: String(tBand).padStart(2, '0') });
-        if (cAut) Object.assign(cardPayload, { cAut: String(cAut), numero_autorizacao: String(cAut) });
-        if (nsu) Object.assign(cardPayload, { NSU: String(nsu), nsu: String(nsu) });
-      }
+      if (tBand) Object.assign(cardPayload, { tBand: String(tBand).padStart(2, '0'), bandeira_operadora: String(tBand).padStart(2, '0') });
+      if (cAut) Object.assign(cardPayload, { cAut: String(cAut), numero_autorizacao: String(cAut) });
+      if (nsu) Object.assign(cardPayload, { NSU: String(nsu), nsu: String(nsu) });
       Object.assign(det, cardPayload, { card: cardPayload, cartao: cardPayload });
     }
     return det;
   });
+
+  const totalPago = detPag.reduce((sum: number, pag: any) => sum + (Number(pag.vPag) || 0), 0);
+  if (docTotal > 0 && totalPago + 0.009 < docTotal && detPag.length > 0) {
+    const last = detPag[detPag.length - 1];
+    const corrected = Number(last.vPag || 0) + (docTotal - totalPago);
+    last.vPag = corrected.toFixed(2);
+    last.valor_pagamento = last.vPag;
+    last.valor = last.vPag;
+  }
 
   const primary = detPag[0];
   const pagamentosObj = Object.fromEntries(detPag.map((pag, idx) => [String(idx + 1), pag]));
@@ -842,22 +859,23 @@ Deno.serve(async (req) => {
       console.log(`   pag payload: ${JSON.stringify(pagBlock)}`);
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfce/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
-      const response = await fetch(emitUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const { response, text: responseText, data: responseDataParsed } = await postWithRetry(
+        emitUrl,
+        payload,
+        {
+          maxAttempts: 5,
+          label: `NFC-e ${nfce.numero} emit`,
+          headers: {
           'X-Api-Key': empresa.api_key_fiscal,
           'Authorization': `Bearer ${empresa.api_key_fiscal}`,
+          },
         },
-        body: JSON.stringify(payload),
-      });
-
-      const responseText = await response.text();
+      );
       console.log(`📡 NFC-e emit response (${response.status}):`, responseText.substring(0, 500));
 
-      let responseData: any;
+      let responseData: any = responseDataParsed;
       try {
-        responseData = JSON.parse(responseText);
+        if (!responseData && responseText) responseData = JSON.parse(responseText);
       } catch {
         console.error('❌ Non-JSON response:', responseText.substring(0, 300));
         await supabase.from('nfce').update({
