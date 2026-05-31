@@ -859,22 +859,23 @@ Deno.serve(async (req) => {
       console.log(`   pag payload: ${JSON.stringify(pagBlock)}`);
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfce/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
-      const response = await fetch(emitUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+      const { response, text: responseText, data: responseDataParsed } = await postWithRetry(
+        emitUrl,
+        payload,
+        {
+          maxAttempts: 5,
+          label: `NFC-e ${nfce.numero} emit`,
+          headers: {
           'X-Api-Key': empresa.api_key_fiscal,
           'Authorization': `Bearer ${empresa.api_key_fiscal}`,
+          },
         },
-        body: JSON.stringify(payload),
-      });
-
-      const responseText = await response.text();
+      );
       console.log(`📡 NFC-e emit response (${response.status}):`, responseText.substring(0, 500));
 
-      let responseData: any;
+      let responseData: any = responseDataParsed;
       try {
-        responseData = JSON.parse(responseText);
+        if (!responseData && responseText) responseData = JSON.parse(responseText);
       } catch {
         console.error('❌ Non-JSON response:', responseText.substring(0, 300));
         await supabase.from('nfce').update({
