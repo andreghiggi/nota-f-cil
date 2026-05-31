@@ -68,6 +68,12 @@ Deno.serve(async (req) => {
           throw new Error(invokeError.message || 'Erro ao invocar API fiscal');
         }
 
+        const status = result?.data?.status || result?.status;
+        const errText = JSON.stringify(result || {});
+        if (result?.error || status === 'rejeitada' || status === 'processando' || status === 'pendente') {
+          throw new Error(result?.error || result?.data?.motivo_retorno || result?.data?.erro_processamento || errText);
+        }
+
         console.log(`✅ NFC-e ${nfce.numero} processed:`, JSON.stringify(result));
 
         // Remove from queue on success
@@ -81,6 +87,17 @@ Deno.serve(async (req) => {
         const newTentativas = item.tentativas + 1;
         
         if (newTentativas >= item.max_tentativas) {
+          const transient = /timeout|timed out|resolving timed out|connection reset|recv failure|could not resolve|ssl connect|empty reply|soap/i.test(err.message || '');
+          if (transient) {
+            const nextProcessing = new Date(Date.now() + 15 * 60 * 1000);
+            await supabase
+              .from('fila_processamento')
+              .update({ tentativas: newTentativas, max_tentativas: newTentativas + 3, proximo_processamento: nextProcessing.toISOString(), erro_ultimo: err.message })
+              .eq('id', item.id);
+            await supabase.from('nfce').update({ status: 'pendente', erro_processamento: `Falha temporária SEFAZ/API2: ${err.message}` }).eq('id', nfce.id);
+            continue;
+          }
+
           // Max retries reached - mark as failed and remove from queue
           await supabase
             .from('nfce')
