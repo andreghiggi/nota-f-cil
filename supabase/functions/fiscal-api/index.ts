@@ -1487,8 +1487,8 @@ Deno.serve(async (req) => {
         },
       };
 
-      const temReformaNfe = (nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it))
-        || Object.values(itensObj).some((it: any) => it.ibs_cbs);
+      const temReformaNfe = !!(empresa as any)?.enviar_ibs_cbs && ((nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it))
+        || Object.values(itensObj).some((it: any) => it.ibs_cbs));
       if (temReformaNfe) {
         payload.habilitar_ibs_cbs = true;
         payload.reforma_tributaria = true;
