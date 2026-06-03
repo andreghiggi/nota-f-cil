@@ -1143,14 +1143,17 @@ Deno.serve(async (req) => {
         };
 
         // IBS/CBS (Reforma Tributária) — Grupo UB oficial NFe 4.00
-        const ibscbs = buildIbscbsBlock(item, valorTotal);
-        if (ibscbs) {
-          itemData.ibs_cbs = ibscbs;
-          itemData.IBSCBS = ibscbs;
-          itemData.ibscbs = ibscbs;
-          itemData.gIBSCBS = ibscbs;
+        // Gated by empresa.enviar_ibs_cbs (default false) — api2 sped-nfe ainda usa XSD 4.00 e rejeita IBSCBS
+        if ((empresa as any)?.enviar_ibs_cbs) {
+          const ibscbs = buildIbscbsBlock(item, valorTotal);
+          if (ibscbs) {
+            itemData.ibs_cbs = ibscbs;
+            itemData.IBSCBS = ibscbs;
+            itemData.ibscbs = ibscbs;
+            itemData.gIBSCBS = ibscbs;
+          }
+          aplicarCamposReformaApi2(itemData, item);
         }
-        aplicarCamposReformaApi2(itemData, item);
 
         // Imposto Seletivo
         if (item.cst_is) {
@@ -1484,8 +1487,8 @@ Deno.serve(async (req) => {
         },
       };
 
-      const temReformaNfe = (nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it))
-        || Object.values(itensObj).some((it: any) => it.ibs_cbs);
+      const temReformaNfe = !!(empresa as any)?.enviar_ibs_cbs && ((nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it))
+        || Object.values(itensObj).some((it: any) => it.ibs_cbs));
       if (temReformaNfe) {
         payload.habilitar_ibs_cbs = true;
         payload.reforma_tributaria = true;
@@ -1607,7 +1610,7 @@ Deno.serve(async (req) => {
         } catch {}
       }
 
-      const temReformaNfePos = (nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it));
+      const temReformaNfePos = !!(empresa as any)?.enviar_ibs_cbs && (nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it));
       if (temReformaNfePos && updateData.status === 'autorizada' && xmlAutorizadoStr && !xmlAutorizadoTemIbscbs(xmlAutorizadoStr)) {
         const aviso = 'XML autorizado pela SEFAZ sem grupo IBSCBS — atualize o gerador XML em api2.agilizeerp.com.br (PHP).';
         console.warn(`⚠️ NF-e ${nfe.numero}: ${aviso}`);
@@ -1719,7 +1722,7 @@ Deno.serve(async (req) => {
       const updateData = buildNfUpdateData(consultData);
       if (updateData.xml_retorno) {
         const xmlStr = normalizeFiscalXml(updateData.xml_retorno);
-        if (temReformaNfeFromPayload(payloadEntrada) && updateData.status === 'autorizada' && xmlStr && !xmlAutorizadoTemIbscbs(xmlStr)) {
+        if (!!(empresa as any)?.enviar_ibs_cbs && temReformaNfeFromPayload(payloadEntrada) && updateData.status === 'autorizada' && xmlStr && !xmlAutorizadoTemIbscbs(xmlStr)) {
           updateData.erro_processamento = 'XML autorizado sem IBSCBS — verifique api2 (tagIBSCBS)';
           (updateData as Record<string, unknown>).reforma_ausente_no_xml = true;
         }
