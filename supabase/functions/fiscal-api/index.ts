@@ -1722,7 +1722,7 @@ Deno.serve(async (req) => {
       const updateData = buildNfUpdateData(consultData);
       if (updateData.xml_retorno) {
         const xmlStr = normalizeFiscalXml(updateData.xml_retorno);
-        if (temReformaNfeFromPayload(payloadEntrada) && updateData.status === 'autorizada' && xmlStr && !xmlAutorizadoTemIbscbs(xmlStr)) {
+        if (!!(empresa as any)?.enviar_ibs_cbs && temReformaNfeFromPayload(payloadEntrada) && updateData.status === 'autorizada' && xmlStr && !xmlAutorizadoTemIbscbs(xmlStr)) {
           updateData.erro_processamento = 'XML autorizado sem IBSCBS — verifique api2 (tagIBSCBS)';
           (updateData as Record<string, unknown>).reforma_ausente_no_xml = true;
         }
