@@ -1,0 +1,1 @@
+UPDATE public.nfe SET status = 'pendente', erro_processamento = NULL, motivo_retorno = NULL, codigo_retorno = NULL, tentativas = 0, updated_at = now() WHERE id = '37b416dc-a63a-43cc-8e5f-2b3f48e6e37b';
