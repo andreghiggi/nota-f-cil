@@ -1143,14 +1143,17 @@ Deno.serve(async (req) => {
         };
 
         // IBS/CBS (Reforma Tributária) — Grupo UB oficial NFe 4.00
-        const ibscbs = buildIbscbsBlock(item, valorTotal);
-        if (ibscbs) {
-          itemData.ibs_cbs = ibscbs;
-          itemData.IBSCBS = ibscbs;
-          itemData.ibscbs = ibscbs;
-          itemData.gIBSCBS = ibscbs;
+        // Gated by empresa.enviar_ibs_cbs (default false) — api2 sped-nfe ainda usa XSD 4.00 e rejeita IBSCBS
+        if ((empresa as any)?.enviar_ibs_cbs) {
+          const ibscbs = buildIbscbsBlock(item, valorTotal);
+          if (ibscbs) {
+            itemData.ibs_cbs = ibscbs;
+            itemData.IBSCBS = ibscbs;
+            itemData.ibscbs = ibscbs;
+            itemData.gIBSCBS = ibscbs;
+          }
+          aplicarCamposReformaApi2(itemData, item);
         }
-        aplicarCamposReformaApi2(itemData, item);
 
         // Imposto Seletivo
         if (item.cst_is) {
