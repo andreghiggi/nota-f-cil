@@ -132,6 +132,7 @@ export type Database = {
           created_at: string
           csc_id: string | null
           csc_token: string | null
+          enviar_ibs_cbs: boolean
           id: string
           inscricao_estadual: string | null
           logradouro: string | null
@@ -171,6 +172,7 @@ export type Database = {
           created_at?: string
           csc_id?: string | null
           csc_token?: string | null
+          enviar_ibs_cbs?: boolean
           id?: string
           inscricao_estadual?: string | null
           logradouro?: string | null
@@ -210,6 +212,7 @@ export type Database = {
           created_at?: string
           csc_id?: string | null
           csc_token?: string | null
+          enviar_ibs_cbs?: boolean
           id?: string
           inscricao_estadual?: string | null
           logradouro?: string | null
