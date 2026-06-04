@@ -403,9 +403,26 @@ Deno.serve(async (req) => {
         }
       }
 
-      const padraoNfe = normalizeSerieFiscal(empDef?.serie_nfe || '001');
+      // Fallback: se a "série padrão" da empresa NÃO existir em series_fiscais ativas,
+      // usar a primeira série ATIVA existente. Aplicado somente para NF-e (modelo 55)
+      // para não alterar comportamento de NFC-e/MDF-e em produção.
+      const seriesAtivasPorTipo = (tipo: string) =>
+        (series || [])
+          .filter((s) => s.tipo === tipo && s.ativo)
+          .map((s) => normalizeSerieFiscal(s.serie));
+
+      const resolvePadrao = (tipo: 'nfe' | 'nfce' | 'mdfe', legacy: string | null | undefined) => {
+        const canon = normalizeSerieFiscal(legacy || '001');
+        if (tipo !== 'nfe') return canon; // NFC-e/MDF-e: mantém comportamento atual
+        const ativas = seriesAtivasPorTipo('nfe');
+        if (ativas.includes(canon)) return canon;
+        return ativas[0] || canon; // fallback para 1ª série NF-e ativa
+      };
+
+      const padraoNfe = resolvePadrao('nfe', empDef?.serie_nfe);
       const padraoNfce = normalizeSerieFiscal(empDef?.serie_nfce || '001');
       const padraoMdfe = normalizeSerieFiscal(empDef?.serie_mdfe || '001');
+
 
       const mapped: Array<Record<string, unknown>> = [];
       for (const [key, val] of byCanon.entries()) {
@@ -461,10 +478,28 @@ Deno.serve(async (req) => {
         serie = tipo === 'nfe' ? emp?.serie_nfe
               : tipo === 'nfce' ? emp?.serie_nfce
               : emp?.serie_mdfe;
+
+        // Fallback NF-e: se a série padrão da empresa não estiver ativa em series_fiscais,
+        // usar a primeira série NF-e ativa. (Não altera NFC-e/MDF-e.)
+        if (tipo === 'nfe') {
+          const { data: ativasRows } = await supabase
+            .from('series_fiscais')
+            .select('serie')
+            .eq('empresa_id', empresa_id)
+            .eq('tipo', 'nfe')
+            .eq('ativo', true);
+          const ativas = (ativasRows || []).map((r: any) => normalizeSerieFiscal(r.serie));
+          const canon = normalizeSerieFiscal(serie || '');
+          if (!canon || !ativas.includes(canon)) {
+            serie = ativas[0] || serie;
+          }
+        }
+
         if (!serie) {
           return jsonResponse({ success: false, error: 'Série padrão não configurada para a empresa.' }, 400);
         }
       }
+
 
       const resolved = await resolveUltimoNumeroSerie(supabase, empresa_id, tipo, serie);
       const proximo = resolved.ultimo + 1;
