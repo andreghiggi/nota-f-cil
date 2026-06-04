@@ -403,9 +403,26 @@ Deno.serve(async (req) => {
         }
       }
 
-      const padraoNfe = normalizeSerieFiscal(empDef?.serie_nfe || '001');
+      // Fallback: se a "série padrão" da empresa NÃO existir em series_fiscais ativas,
+      // usar a primeira série ATIVA existente. Aplicado somente para NF-e (modelo 55)
+      // para não alterar comportamento de NFC-e/MDF-e em produção.
+      const seriesAtivasPorTipo = (tipo: string) =>
+        (series || [])
+          .filter((s) => s.tipo === tipo && s.ativo)
+          .map((s) => normalizeSerieFiscal(s.serie));
+
+      const resolvePadrao = (tipo: 'nfe' | 'nfce' | 'mdfe', legacy: string | null | undefined) => {
+        const canon = normalizeSerieFiscal(legacy || '001');
+        if (tipo !== 'nfe') return canon; // NFC-e/MDF-e: mantém comportamento atual
+        const ativas = seriesAtivasPorTipo('nfe');
+        if (ativas.includes(canon)) return canon;
+        return ativas[0] || canon; // fallback para 1ª série NF-e ativa
+      };
+
+      const padraoNfe = resolvePadrao('nfe', empDef?.serie_nfe);
       const padraoNfce = normalizeSerieFiscal(empDef?.serie_nfce || '001');
       const padraoMdfe = normalizeSerieFiscal(empDef?.serie_mdfe || '001');
+
 
       const mapped: Array<Record<string, unknown>> = [];
       for (const [key, val] of byCanon.entries()) {
