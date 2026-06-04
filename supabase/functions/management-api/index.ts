@@ -478,10 +478,28 @@ Deno.serve(async (req) => {
         serie = tipo === 'nfe' ? emp?.serie_nfe
               : tipo === 'nfce' ? emp?.serie_nfce
               : emp?.serie_mdfe;
+
+        // Fallback NF-e: se a série padrão da empresa não estiver ativa em series_fiscais,
+        // usar a primeira série NF-e ativa. (Não altera NFC-e/MDF-e.)
+        if (tipo === 'nfe') {
+          const { data: ativasRows } = await supabase
+            .from('series_fiscais')
+            .select('serie')
+            .eq('empresa_id', empresa_id)
+            .eq('tipo', 'nfe')
+            .eq('ativo', true);
+          const ativas = (ativasRows || []).map((r: any) => normalizeSerieFiscal(r.serie));
+          const canon = normalizeSerieFiscal(serie || '');
+          if (!canon || !ativas.includes(canon)) {
+            serie = ativas[0] || serie;
+          }
+        }
+
         if (!serie) {
           return jsonResponse({ success: false, error: 'Série padrão não configurada para a empresa.' }, 400);
         }
       }
+
 
       const resolved = await resolveUltimoNumeroSerie(supabase, empresa_id, tipo, serie);
       const proximo = resolved.ultimo + 1;
