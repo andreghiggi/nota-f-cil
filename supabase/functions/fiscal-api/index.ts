@@ -1786,15 +1786,23 @@ Deno.serve(async (req) => {
       }
 
       const updateData = buildNfUpdateData(consultData);
+      let reformaAusenteNoXmlConsulta = false;
       if (updateData.xml_retorno) {
         const xmlStr = normalizeFiscalXml(updateData.xml_retorno);
         if (!!(empresa as any)?.enviar_ibs_cbs && temReformaNfeFromPayload(payloadEntrada) && updateData.status === 'autorizada' && xmlStr && !xmlAutorizadoTemIbscbs(xmlStr)) {
           updateData.erro_processamento = 'XML autorizado sem IBSCBS — verifique api2 (tagIBSCBS)';
-          (updateData as Record<string, unknown>).reforma_ausente_no_xml = true;
+          reformaAusenteNoXmlConsulta = true;
         }
       }
 
-      await supabase.from('nfe').update(updateData).eq('id', nfeId);
+      const { error: updateConsultaError } = await supabase.from('nfe').update(updateData).eq('id', nfeId);
+      if (updateConsultaError) {
+        console.error('❌ Erro ao atualizar NF-e consultada na SEFAZ:', updateConsultaError);
+        return new Response(
+          JSON.stringify({ error: 'Falha ao gravar consulta da NF-e', details: updateConsultaError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
       const duplicatasResolvidas = await resolverDuplicatasNfeInternas(
         supabase,
         nfe.empresa_id,
@@ -1824,7 +1832,7 @@ Deno.serve(async (req) => {
             xMotivo: consultData.xMotivo || consultData.motivo_retorno,
           },
           duplicatas_resolvidas: duplicatasResolvidas,
-          ...(updateData.reforma_ausente_no_xml ? {
+          ...(reformaAusenteNoXmlConsulta ? {
             warning: 'XML autorizado sem IBSCBS na SEFAZ.',
             reforma_ausente_no_xml: true,
           } : {}),
