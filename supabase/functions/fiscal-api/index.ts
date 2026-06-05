@@ -1631,6 +1631,9 @@ Deno.serve(async (req) => {
       }
 
       const temReformaNfePos = !!(empresa as any)?.enviar_ibs_cbs && (nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it));
+      if (updateData.status === 'autorizada') {
+        updateData.erro_processamento = null;
+      }
       if (temReformaNfePos && updateData.status === 'autorizada' && xmlAutorizadoStr && !xmlAutorizadoTemIbscbs(xmlAutorizadoStr)) {
         const aviso = 'XML autorizado pela SEFAZ sem grupo IBSCBS — atualize o gerador XML em api2.agilizeerp.com.br (PHP).';
         console.warn(`⚠️ NF-e ${nfe.numero}: ${aviso}`);
