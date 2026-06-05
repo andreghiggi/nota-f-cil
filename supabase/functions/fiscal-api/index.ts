@@ -10,6 +10,18 @@ const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 /** Conferir deploy: GET .../fiscal-api?build=1 */
 const FISCAL_API_BUILD_ID = '31may26-nfce-payment-retry';
 
+function normalizeIbsCbsCst(raw: unknown): string {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (/^\d{3}$/.test(digits)) return digits;
+  return '000';
+}
+
+function normalizeCClassTrib(raw: unknown): string {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (/^\d{6}$/.test(digits) && !/^0+$/.test(digits)) return digits;
+  return '000001';
+}
+
 /** Grupo UB (NT 2025.002) — estrutura compatível com NFePHP / api2 legado. */
 function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Record<string, unknown> | null {
   const cstIbsCbs = item.cst_ibs_cbs || item.cst_cbs || item.cst_ibs;
@@ -19,8 +31,8 @@ function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Re
   const vbcIbsCbs = Number(item.vbc_ibs_cbs ?? item.base_calculo_cbs ?? item.base_calculo_ibs ?? valorTotal ?? 0);
   if (!cstIbsCbs && aliqCbs <= 0 && aliqIbsUf <= 0 && aliqIbsMun <= 0) return null;
 
-  const cst = String(cstIbsCbs || '000');
-  const cClassTrib = String(item.c_class_trib || '0000000').trim() || '0000000';
+  const cst = normalizeIbsCbsCst(cstIbsCbs);
+  const cClassTrib = normalizeCClassTrib(item.c_class_trib ?? item.cClassTrib);
   const vbc = +vbcIbsCbs.toFixed(2);
   const vIbsUf = Number(item.valor_ibs_uf ?? +(vbc * aliqIbsUf / 100).toFixed(2));
   const vIbsMun = Number(item.valor_ibs_mun ?? +(vbc * aliqIbsMun / 100).toFixed(2));
@@ -138,10 +150,12 @@ function aplicarCamposReformaApi2(itemData: Record<string, unknown>, item: Recor
   const aliqIbsMun = Number(item.aliquota_ibs_mun ?? 0);
   if (!cst && aliqCbs <= 0 && aliqIbsUf <= 0 && aliqIbsMun <= 0) return;
 
-  const cstNorm = cst || '000';
+  const cstNorm = normalizeIbsCbsCst(cst);
   itemData.cst_ibs_cbs = cstNorm;
   itemData.cst_cbs = cstNorm;
   itemData.cst_ibs = cstNorm;
+  itemData.c_class_trib = normalizeCClassTrib(item.c_class_trib ?? item.cClassTrib);
+  itemData.cClassTrib = itemData.c_class_trib;
   itemData.aliquota_cbs = aliqCbs;
   itemData.aliquota_ibs_uf = aliqIbsUf;
   itemData.aliquota_ibs = aliqIbsUf;
