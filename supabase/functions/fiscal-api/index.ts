@@ -1799,11 +1799,13 @@ Deno.serve(async (req) => {
         delete updateData.xml_retorno;
       }
       let reformaAusenteNoXmlConsulta = false;
-      if (updateData.xml_retorno) {
-        const xmlStr = normalizeFiscalXml(updateData.xml_retorno);
-        if (!!(empresa as any)?.enviar_ibs_cbs && temReformaNfeFromPayload(payloadEntrada) && updateData.status === 'autorizada' && xmlStr && !xmlAutorizadoTemIbscbs(xmlStr)) {
+      const xmlConsultaCompleto = normalizeFiscalXml(updateData.xml_retorno || nfe.xml_retorno || nfe.xml_envio || '');
+      if (!!(empresa as any)?.enviar_ibs_cbs && temReformaNfeFromPayload(payloadEntrada) && updateData.status === 'autorizada') {
+        if (xmlContemNfeCompleta(xmlConsultaCompleto) && !xmlAutorizadoTemIbscbs(xmlConsultaCompleto)) {
           updateData.erro_processamento = 'XML autorizado sem IBSCBS — verifique api2 (tagIBSCBS)';
           reformaAusenteNoXmlConsulta = true;
+        } else {
+          updateData.erro_processamento = null;
         }
       }
 
