@@ -173,6 +173,12 @@ function xmlAutorizadoTemIbscbs(xmlRaw: string): boolean {
   return /<IBSCBS[\s>]/i.test(xml) || /<gIBSCBS[\s>]/i.test(xml);
 }
 
+function xmlContemNfeCompleta(xmlRaw: string): boolean {
+  const xml = normalizeFiscalXml(xmlRaw || '');
+  if (!xml) return false;
+  return /<nfeProc[\s>]|<procNFe[\s>]|<NFe[\s>]/i.test(xml) && /<infNFe[\s>]/i.test(xml);
+}
+
 function extractChaveNfeFromXml(xmlRaw: string): string {
   const xml = (xmlRaw || '').trim();
   if (!xml) return '';
