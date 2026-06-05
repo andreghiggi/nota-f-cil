@@ -1121,7 +1121,9 @@ Deno.serve(async (req) => {
 
           if (!fiscalError && fiscalResult?.success) {
             emitResult = fiscalResult.data;
-            await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeData.id);
+            if (!['processando', 'pendente'].includes(String(fiscalResult.data?.status || ''))) {
+              await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeData.id);
+            }
           } else {
             console.warn('Sync emit NF-e failed, queue will retry:', fiscalError?.message || fiscalResult?.error);
           }
