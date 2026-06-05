@@ -1507,13 +1507,19 @@ Deno.serve(async (req) => {
         payload.habilitar_ibs_cbs = true;
         payload.reforma_tributaria = true;
         payload.IBSCBS_habilitado = true;
+        const ibsCbsItens = Object.values(itensObj).filter((it: any) => it.ibs_cbs) as any[];
+        const vBCIBSCBS = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.vBC ?? it.vbc_ibs_cbs ?? it.valor_total ?? 0), 0);
+        const vIBSUF = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.gIBSUF?.vIBSUF ?? it.valor_ibs_uf ?? 0), 0);
+        const vIBSMun = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.gIBSMun?.vIBSMun ?? it.valor_ibs_mun ?? 0), 0);
+        const vCBS = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.gCBS?.vCBS ?? it.valor_cbs ?? 0), 0);
         const ibsTot = {
-          vBCIBSCBS: Number(nfe.valor_produtos || 0),
-          vIBSUF: Number(nfe.valor_ibs_uf_total || 0),
-          vIBSMun: Number(nfe.valor_ibs_mun_total || 0),
-          vCBS: Number(nfe.valor_cbs_total || 0),
+          vBCIBSCBS: Number(vBCIBSCBS.toFixed(2)),
+          vIBSUF: Number(vIBSUF.toFixed(2)),
+          vIBSMun: Number(vIBSMun.toFixed(2)),
+          vCBS: Number(vCBS.toFixed(2)),
         };
-        payload.totais_ibs_cbs = payload.nota.totais_ibs_cbs;
+        payload.totais_ibs_cbs = { ...payload.nota.totais_ibs_cbs, ...ibsTot };
+        payload.nota.totais_ibs_cbs = payload.totais_ibs_cbs;
         payload.IBSCBSTot = ibsTot;
         payload.nota.IBSCBSTot = ibsTot;
         if (payload.nota.total?.ICMSTot) {
