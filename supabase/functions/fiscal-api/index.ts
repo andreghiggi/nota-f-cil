@@ -173,6 +173,12 @@ function xmlAutorizadoTemIbscbs(xmlRaw: string): boolean {
   return /<IBSCBS[\s>]/i.test(xml) || /<gIBSCBS[\s>]/i.test(xml);
 }
 
+function xmlContemNfeCompleta(xmlRaw: string): boolean {
+  const xml = normalizeFiscalXml(xmlRaw || '');
+  if (!xml) return false;
+  return /<nfeProc[\s>]|<procNFe[\s>]|<NFe[\s>]/i.test(xml) && /<infNFe[\s>]/i.test(xml);
+}
+
 function extractChaveNfeFromXml(xmlRaw: string): string {
   const xml = (xmlRaw || '').trim();
   if (!xml) return '';
@@ -1632,16 +1638,62 @@ Deno.serve(async (req) => {
 
       const temReformaNfePos = !!(empresa as any)?.enviar_ibs_cbs && (nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it));
       if (updateData.status === 'autorizada') {
-        updateData.erro_processamento = null;
+        const chaveConfirmacao = String(updateData.chave_acesso || '').replace(/\D/g, '');
+        if (chaveConfirmacao.length !== 44) {
+          updateData.status = 'processando';
+          updateData.erro_processamento = 'API fiscal retornou autorização sem chave de acesso válida; aguardando confirmação SEFAZ';
+        } else {
+          const cNfMatch = xmlAutorizadoStr.match(/<cNF>(\d+)<\/cNF>/i);
+          const consultaPayload = {
+            chave: chaveConfirmacao,
+            numero: nfe.numero,
+            serie: nfe.serie,
+            dhEmi: payloadEntrada.dhEmi || nfe.data_emissao,
+            ...(cNfMatch ? { cNF: cNfMatch[1] } : {}),
+            ...(xmlAutorizadoStr ? { xml_envio: xmlAutorizadoStr } : {}),
+          };
+          const consultUrl = `${FISCAL_API_BASE_URL}/nfe/consulta-chave?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
+          const { response: consultaResponse, data: consultaData } = await postWithRetry(consultUrl, consultaPayload, {
+            maxAttempts: 5,
+            label: `NF-e ${nfe.numero} pós-emissão consulta SEFAZ`,
+          });
+          const cStatConsulta = String(consultaData?.cStat || consultaData?.codigo_retorno || '');
+          const statusConsulta = String(consultaData?.status || '');
+          if (!consultaResponse.ok || (cStatConsulta !== '100' && statusConsulta !== 'autorizada')) {
+            updateData.status = 'processando';
+            updateData.codigo_retorno = cStatConsulta || updateData.codigo_retorno || null;
+            updateData.motivo_retorno = consultaData?.xMotivo || consultaData?.motivo_retorno || consultaData?.erro || consultaData?.error || 'Autorização não confirmada na consulta SEFAZ';
+            updateData.erro_processamento = `Autorização local não confirmada na SEFAZ: ${updateData.motivo_retorno}`;
+          } else {
+            const consultaUpdate = buildNfUpdateData(consultaData);
+            if (consultaUpdate.xml_retorno && !xmlContemNfeCompleta(consultaUpdate.xml_retorno)) {
+              delete consultaUpdate.xml_retorno;
+            }
+            Object.assign(updateData, consultaUpdate, {
+              status: 'autorizada',
+              codigo_retorno: cStatConsulta || consultaUpdate.codigo_retorno || '100',
+              motivo_retorno: consultaData?.xMotivo || consultaData?.motivo_retorno || consultaUpdate.motivo_retorno || 'Autorizado o uso da NF-e',
+              erro_processamento: null,
+            });
+          }
+        }
       }
+      let reformaAusenteNoXml = false;
       if (temReformaNfePos && updateData.status === 'autorizada' && xmlAutorizadoStr && !xmlAutorizadoTemIbscbs(xmlAutorizadoStr)) {
         const aviso = 'XML autorizado pela SEFAZ sem grupo IBSCBS — atualize o gerador XML em api2.agilizeerp.com.br (PHP).';
         console.warn(`⚠️ NF-e ${nfe.numero}: ${aviso}`);
         updateData.erro_processamento = aviso;
-        (updateData as any).reforma_ausente_no_xml = true;
+        reformaAusenteNoXml = true;
       }
 
-      await supabase.from('nfe').update(updateData).eq('id', nfeId);
+      const { error: updateError } = await supabase.from('nfe').update(updateData).eq('id', nfeId);
+      if (updateError) {
+        console.error('❌ Erro ao atualizar NF-e pós-emissão:', updateError);
+        return new Response(
+          JSON.stringify({ error: 'Falha ao gravar retorno confirmado da NF-e', details: updateError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       await supabase.rpc('registrar_log', {
         p_empresa_id: nfe.empresa_id,
@@ -1666,7 +1718,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           success: true,
           data: { ...updateData, id: nfeId },
-          ...(updateData.reforma_ausente_no_xml ? {
+          ...(reformaAusenteNoXml ? {
             warning: 'XML autorizado sem IBSCBS. Ajuste api2 (PHP) para gerar Reforma Tributária.',
             reforma_ausente_no_xml: true,
           } : {}),
@@ -1743,15 +1795,28 @@ Deno.serve(async (req) => {
       }
 
       const updateData = buildNfUpdateData(consultData);
-      if (updateData.xml_retorno) {
-        const xmlStr = normalizeFiscalXml(updateData.xml_retorno);
-        if (!!(empresa as any)?.enviar_ibs_cbs && temReformaNfeFromPayload(payloadEntrada) && updateData.status === 'autorizada' && xmlStr && !xmlAutorizadoTemIbscbs(xmlStr)) {
+      if (updateData.xml_retorno && !xmlContemNfeCompleta(updateData.xml_retorno)) {
+        delete updateData.xml_retorno;
+      }
+      let reformaAusenteNoXmlConsulta = false;
+      const xmlConsultaCompleto = normalizeFiscalXml(updateData.xml_retorno || nfe.xml_retorno || nfe.xml_envio || '');
+      if (!!(empresa as any)?.enviar_ibs_cbs && temReformaNfeFromPayload(payloadEntrada) && updateData.status === 'autorizada') {
+        if (xmlContemNfeCompleta(xmlConsultaCompleto) && !xmlAutorizadoTemIbscbs(xmlConsultaCompleto)) {
           updateData.erro_processamento = 'XML autorizado sem IBSCBS — verifique api2 (tagIBSCBS)';
-          (updateData as Record<string, unknown>).reforma_ausente_no_xml = true;
+          reformaAusenteNoXmlConsulta = true;
+        } else {
+          updateData.erro_processamento = null;
         }
       }
 
-      await supabase.from('nfe').update(updateData).eq('id', nfeId);
+      const { error: updateConsultaError } = await supabase.from('nfe').update(updateData).eq('id', nfeId);
+      if (updateConsultaError) {
+        console.error('❌ Erro ao atualizar NF-e consultada na SEFAZ:', updateConsultaError);
+        return new Response(
+          JSON.stringify({ error: 'Falha ao gravar consulta da NF-e', details: updateConsultaError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
       const duplicatasResolvidas = await resolverDuplicatasNfeInternas(
         supabase,
         nfe.empresa_id,
@@ -1781,7 +1846,7 @@ Deno.serve(async (req) => {
             xMotivo: consultData.xMotivo || consultData.motivo_retorno,
           },
           duplicatas_resolvidas: duplicatasResolvidas,
-          ...(updateData.reforma_ausente_no_xml ? {
+          ...(reformaAusenteNoXmlConsulta ? {
             warning: 'XML autorizado sem IBSCBS na SEFAZ.',
             reforma_ausente_no_xml: true,
           } : {}),

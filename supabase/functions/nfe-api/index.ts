@@ -1121,7 +1121,9 @@ Deno.serve(async (req) => {
 
           if (!fiscalError && fiscalResult?.success) {
             emitResult = fiscalResult.data;
-            await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeData.id);
+            if (!['processando', 'pendente'].includes(String(fiscalResult.data?.status || ''))) {
+              await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeData.id);
+            }
           } else {
             console.warn('Sync emit NF-e failed, queue will retry:', fiscalError?.message || fiscalResult?.error);
           }
@@ -1546,7 +1548,9 @@ Deno.serve(async (req) => {
         });
         if (!fiscalError && fiscalResult?.success) {
           emitStatus = fiscalResult.data?.status || 'processando';
-          await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeId);
+          if (!['processando', 'pendente'].includes(String(emitStatus))) {
+            await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeId);
+          }
         } else {
           console.warn('[nfe-api][reprocessar] fiscal-api:', fiscalError?.message || fiscalResult?.error);
         }
@@ -1902,7 +1906,9 @@ Deno.serve(async (req) => {
         });
         if (!fe && fr?.success) {
           emitResult = fr.data;
-          await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeId);
+          if (!['processando', 'pendente'].includes(String(fr.data?.status || ''))) {
+            await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeId);
+          }
         } else {
           console.warn('[nfe-api][PUT] emit failed:', fe?.message || fr?.error);
         }
