@@ -10,6 +10,18 @@ const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 /** Conferir deploy: GET .../fiscal-api?build=1 */
 const FISCAL_API_BUILD_ID = '31may26-nfce-payment-retry';
 
+function normalizeIbsCbsCst(raw: unknown): string {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (/^\d{3}$/.test(digits)) return digits;
+  return '000';
+}
+
+function normalizeCClassTrib(raw: unknown): string {
+  const digits = String(raw ?? '').replace(/\D/g, '');
+  if (/^\d{6}$/.test(digits) && !/^0+$/.test(digits)) return digits;
+  return '000001';
+}
+
 /** Grupo UB (NT 2025.002) — estrutura compatível com NFePHP / api2 legado. */
 function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Record<string, unknown> | null {
   const cstIbsCbs = item.cst_ibs_cbs || item.cst_cbs || item.cst_ibs;
@@ -19,8 +31,8 @@ function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Re
   const vbcIbsCbs = Number(item.vbc_ibs_cbs ?? item.base_calculo_cbs ?? item.base_calculo_ibs ?? valorTotal ?? 0);
   if (!cstIbsCbs && aliqCbs <= 0 && aliqIbsUf <= 0 && aliqIbsMun <= 0) return null;
 
-  const cst = String(cstIbsCbs || '000');
-  const cClassTrib = String(item.c_class_trib || '0000000').trim() || '0000000';
+  const cst = normalizeIbsCbsCst(cstIbsCbs);
+  const cClassTrib = normalizeCClassTrib(item.c_class_trib ?? item.cClassTrib);
   const vbc = +vbcIbsCbs.toFixed(2);
   const vIbsUf = Number(item.valor_ibs_uf ?? +(vbc * aliqIbsUf / 100).toFixed(2));
   const vIbsMun = Number(item.valor_ibs_mun ?? +(vbc * aliqIbsMun / 100).toFixed(2));
@@ -138,10 +150,12 @@ function aplicarCamposReformaApi2(itemData: Record<string, unknown>, item: Recor
   const aliqIbsMun = Number(item.aliquota_ibs_mun ?? 0);
   if (!cst && aliqCbs <= 0 && aliqIbsUf <= 0 && aliqIbsMun <= 0) return;
 
-  const cstNorm = cst || '000';
+  const cstNorm = normalizeIbsCbsCst(cst);
   itemData.cst_ibs_cbs = cstNorm;
   itemData.cst_cbs = cstNorm;
   itemData.cst_ibs = cstNorm;
+  itemData.c_class_trib = normalizeCClassTrib(item.c_class_trib ?? item.cClassTrib);
+  itemData.cClassTrib = itemData.c_class_trib;
   itemData.aliquota_cbs = aliqCbs;
   itemData.aliquota_ibs_uf = aliqIbsUf;
   itemData.aliquota_ibs = aliqIbsUf;
@@ -1493,13 +1507,19 @@ Deno.serve(async (req) => {
         payload.habilitar_ibs_cbs = true;
         payload.reforma_tributaria = true;
         payload.IBSCBS_habilitado = true;
+        const ibsCbsItens = Object.values(itensObj).filter((it: any) => it.ibs_cbs) as any[];
+        const vBCIBSCBS = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.vBC ?? it.vbc_ibs_cbs ?? it.valor_total ?? 0), 0);
+        const vIBSUF = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.gIBSUF?.vIBSUF ?? it.valor_ibs_uf ?? 0), 0);
+        const vIBSMun = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.gIBSMun?.vIBSMun ?? it.valor_ibs_mun ?? 0), 0);
+        const vCBS = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.gCBS?.vCBS ?? it.valor_cbs ?? 0), 0);
         const ibsTot = {
-          vBCIBSCBS: Number(nfe.valor_produtos || 0),
-          vIBSUF: Number(nfe.valor_ibs_uf_total || 0),
-          vIBSMun: Number(nfe.valor_ibs_mun_total || 0),
-          vCBS: Number(nfe.valor_cbs_total || 0),
+          vBCIBSCBS: Number(vBCIBSCBS.toFixed(2)),
+          vIBSUF: Number(vIBSUF.toFixed(2)),
+          vIBSMun: Number(vIBSMun.toFixed(2)),
+          vCBS: Number(vCBS.toFixed(2)),
         };
-        payload.totais_ibs_cbs = payload.nota.totais_ibs_cbs;
+        payload.totais_ibs_cbs = { ...payload.nota.totais_ibs_cbs, ...ibsTot };
+        payload.nota.totais_ibs_cbs = payload.totais_ibs_cbs;
         payload.IBSCBSTot = ibsTot;
         payload.nota.IBSCBSTot = ibsTot;
         if (payload.nota.total?.ICMSTot) {
@@ -1611,6 +1631,9 @@ Deno.serve(async (req) => {
       }
 
       const temReformaNfePos = !!(empresa as any)?.enviar_ibs_cbs && (nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it));
+      if (updateData.status === 'autorizada') {
+        updateData.erro_processamento = null;
+      }
       if (temReformaNfePos && updateData.status === 'autorizada' && xmlAutorizadoStr && !xmlAutorizadoTemIbscbs(xmlAutorizadoStr)) {
         const aviso = 'XML autorizado pela SEFAZ sem grupo IBSCBS — atualize o gerador XML em api2.agilizeerp.com.br (PHP).';
         console.warn(`⚠️ NF-e ${nfe.numero}: ${aviso}`);

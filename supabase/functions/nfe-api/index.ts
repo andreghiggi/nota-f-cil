@@ -138,11 +138,17 @@ function normalizeReformaPayloadItem(item: Record<string, unknown>): Record<stri
   const vbc = Number(
     item.vbc_ibs_cbs ?? item.base_calculo_cbs ?? item.base_calculo_ibs ?? valorItem,
   );
-  const cst = String(item.cst_ibs_cbs ?? item.cst_cbs ?? item.cst_ibs ?? '000').trim() || '000';
+  const cstDigits = String(item.cst_ibs_cbs ?? item.cst_cbs ?? item.cst_ibs ?? '').replace(/\D/g, '');
+  const cst = /^\d{3}$/.test(cstDigits) ? cstDigits : '000';
+  const classDigits = String(item.c_class_trib ?? item.cClassTrib ?? '').replace(/\D/g, '');
+  const cClassTrib = /^\d{6}$/.test(classDigits) && !/^0+$/.test(classDigits) ? classDigits : '000001';
 
   return {
     ...item,
     cst_ibs_cbs: cst,
+    cst_cbs: cst,
+    cst_ibs: cst,
+    c_class_trib: cClassTrib,
     vbc_ibs_cbs: vbc > 0 ? vbc : valorItem,
     aliquota_cbs: aliqCbs,
     aliquota_ibs_uf: aliqIbsUf,
