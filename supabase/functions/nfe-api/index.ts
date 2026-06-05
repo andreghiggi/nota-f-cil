@@ -834,15 +834,64 @@ Deno.serve(async (req) => {
 
       await syncSerieNumeroAtual(supabase, empresa_id, serieNfe);
 
-      const { data: numeroData, error: numeroError } = await supabase
-        .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id, p_serie: serieNfe });
-
-      if (numeroError) {
-        console.error('gerar_numero_nfe error:', JSON.stringify(numeroError));
-        return new Response(
-          JSON.stringify({ error: 'Failed to generate NF-e number', code: 'INTERNAL_ERROR', details: numeroError.message }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      // Permite que o ERP envie body.numero explicitamente (reuso de número rejeitado).
+      // Valida que o número não está em uso por NF-e autorizada na mesma série.
+      let numeroData: string | null = null;
+      const numeroExplicitoRaw = (payload as any).numero;
+      if (numeroExplicitoRaw !== undefined && numeroExplicitoRaw !== null && String(numeroExplicitoRaw).trim() !== '') {
+        const nExp = parseInt(String(numeroExplicitoRaw).replace(/\D/g, ''), 10);
+        if (!Number.isFinite(nExp) || nExp <= 0) {
+          return new Response(
+            JSON.stringify({ error: 'numero inválido', code: 'VALIDATION_ERROR' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        // checa colisão com NF-e autorizada/cancelada na mesma série
+        const { data: collision } = await supabase
+          .from('nfe')
+          .select('id, status')
+          .eq('empresa_id', empresa_id)
+          .in('serie', serieAliases(serieNfe))
+          .eq('numero', String(nExp).padStart(9, '0'))
+          .in('status', ['autorizada', 'autorizado', 'cancelada'])
+          .maybeSingle();
+        if (collision) {
+          return new Response(
+            JSON.stringify({ error: `Número ${nExp} já consumido por NF-e ${collision.status}`, code: 'NUMERO_EM_USO' }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        numeroData = String(nExp).padStart(9, '0');
+        // Se este número estava no pool de liberados, marca como consumido
+        await supabase
+          .from('series_numeros_liberados')
+          .delete()
+          .eq('empresa_id', empresa_id)
+          .eq('tipo', 'nfe')
+          .eq('serie', serieNfe)
+          .eq('numero', nExp);
+        // Mantém series_fiscais.numero_atual >= nExp para não regredir contador
+        try {
+          const { data: sfRow } = await supabase
+            .from('series_fiscais')
+            .select('id, numero_atual')
+            .eq('empresa_id', empresa_id).eq('tipo', 'nfe').eq('serie', serieNfe)
+            .maybeSingle();
+          if (sfRow && (sfRow.numero_atual ?? 0) < nExp) {
+            await supabase.from('series_fiscais').update({ numero_atual: nExp, updated_at: new Date().toISOString() }).eq('id', sfRow.id);
+          }
+        } catch { /* não bloqueia */ }
+      } else {
+        const { data: nrData, error: numeroError } = await supabase
+          .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id, p_serie: serieNfe });
+        if (numeroError) {
+          console.error('gerar_numero_nfe error:', JSON.stringify(numeroError));
+          return new Response(
+            JSON.stringify({ error: 'Failed to generate NF-e number', code: 'INTERNAL_ERROR', details: numeroError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        numeroData = nrData as unknown as string;
       }
 
       // empresaData already fetched above
@@ -1633,6 +1682,244 @@ Deno.serve(async (req) => {
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // DELETE /nfe-api/:id — exclui NF-e não autorizada e libera o número para reuso
+    if (method === 'DELETE' && pathParts.length === 2 && pathParts[0] === 'nfe-api') {
+      if (!permissoes.includes('cancelar') && !permissoes.includes('gerenciar') && !permissoes.includes('emitir') && !permissoes.includes('emitir_nfe')) {
+        return new Response(
+          JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const nfeId = pathParts[1];
+      const { data: nfeRow } = await supabase
+        .from('nfe')
+        .select('id, numero, serie, status, empresa_id')
+        .eq('id', nfeId).eq('empresa_id', empresa_id).maybeSingle();
+      if (!nfeRow) {
+        return new Response(
+          JSON.stringify({ error: 'NF-e not found', code: 'NOT_FOUND' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (!['pendente', 'rejeitada', 'denegada', 'erro'].includes(nfeRow.status)) {
+        return new Response(
+          JSON.stringify({ error: `NF-e status=${nfeRow.status} não pode ser excluída`, code: 'INVALID_STATUS' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const { data: rpcRes, error: rpcErr } = await supabase
+        .rpc('excluir_documento_nao_processado', { p_tipo: 'nfe', p_id: nfeId });
+      if (rpcErr) {
+        return new Response(
+          JSON.stringify({ error: 'Erro ao excluir NF-e', code: 'INTERNAL_ERROR', details: rpcErr.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      await supabase.rpc('registrar_log', {
+        p_empresa_id: empresa_id,
+        p_nfce_id: nfeId,
+        p_token_api_id: token_id,
+        p_tipo: 'info',
+        p_categoria: 'api',
+        p_mensagem: `NF-e ${nfeRow.numero} excluída (status=${nfeRow.status}). Número liberado para reuso.`,
+        p_detalhes: rpcRes,
+        p_ip_origem: req.headers.get('x-forwarded-for'),
+      });
+      return new Response(
+        JSON.stringify({ success: true, data: rpcRes }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // PUT /nfe-api/:id — corrige NF-e rejeitada/erro reusando mesmo id/numero/serie.
+    // Aceita novo payload; reconstrói itens e re-transmite (PHP gera novo cNF/chave).
+    if (method === 'PUT' && pathParts.length === 2 && pathParts[0] === 'nfe-api') {
+      if (!permissoes.includes('emitir') && !permissoes.includes('emitir_nfe') && !permissoes.includes('reprocessar')) {
+        return new Response(
+          JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const nfeId = pathParts[1];
+      const { data: nfeRow } = await supabase
+        .from('nfe')
+        .select('id, numero, serie, status')
+        .eq('id', nfeId).eq('empresa_id', empresa_id).maybeSingle();
+      if (!nfeRow) {
+        return new Response(
+          JSON.stringify({ error: 'NF-e not found', code: 'NOT_FOUND' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (!['rejeitada', 'erro', 'pendente'].includes(nfeRow.status)) {
+        return new Response(
+          JSON.stringify({ error: `NF-e status=${nfeRow.status} não pode ser corrigida via PUT`, code: 'INVALID_STATUS' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      let putPayload: NFePayload;
+      try {
+        putPayload = await req.json();
+      } catch {
+        return new Response(
+          JSON.stringify({ error: 'Body JSON inválido', code: 'VALIDATION_ERROR' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      putPayload.itens = (putPayload.itens || []).map((item: any) => normalizeReformaPayloadItem({
+        ...item,
+        codigo: String(item.codigo ?? item.cProd ?? item.codigo_produto ?? '').trim(),
+        descricao: String(item.descricao ?? item.xProd ?? item.descricao_produto ?? '').trim(),
+        unidade: String(item.unidade ?? item.uCom ?? 'UN').trim(),
+        quantidade: Number(item.quantidade ?? item.qCom ?? 0),
+        valor_unitario: Number(item.valor_unitario ?? item.vUnCom ?? 0),
+      })) as NFePayload['itens'];
+
+      if (!putPayload.itens || putPayload.itens.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'Items are required', code: 'VALIDATION_ERROR' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Preserva número/série originais
+      putPayload.serie = nfeRow.serie;
+      (putPayload as any).numero = parseInt(String(nfeRow.numero).replace(/\D/g, ''), 10);
+
+      // Totais
+      let valorProdutos = 0, valorIcms = 0, valorIpi = 0, valorPis = 0, valorCofins = 0;
+      for (const item of putPayload.itens) {
+        const v = (item.quantidade || 0) * (item.valor_unitario || 0);
+        valorProdutos += v;
+        valorIcms += v * (item.aliquota_icms || 0) / 100;
+        valorIpi += v * (item.aliquota_ipi || 0) / 100;
+        valorPis += v * (item.aliquota_pis || 0) / 100;
+        valorCofins += v * (item.aliquota_cofins || 0) / 100;
+      }
+      const valorTotal = valorProdutos - (putPayload.valor_desconto || 0)
+        + (putPayload.valor_frete || 0) + (putPayload.valor_seguro || 0)
+        + (putPayload.valor_outras_despesas || 0) + valorIpi;
+
+      const dest = putPayload.destinatario || {} as any;
+
+      await supabase.from('nfe').update({
+        status: 'pendente',
+        tentativas: 0,
+        erro_processamento: null,
+        payload_entrada: putPayload,
+        valor_total: valorTotal,
+        valor_produtos: valorProdutos,
+        valor_desconto: putPayload.valor_desconto || 0,
+        valor_frete: putPayload.valor_frete || 0,
+        valor_seguro: putPayload.valor_seguro || 0,
+        valor_outras_despesas: putPayload.valor_outras_despesas || 0,
+        valor_icms: valorIcms,
+        valor_ipi: valorIpi,
+        valor_pis: valorPis,
+        valor_cofins: valorCofins,
+        natureza_operacao: putPayload.natureza_operacao || 'VENDA',
+        finalidade: putPayload.finalidade || '1',
+        modalidade_frete: String(putPayload.modalidade_frete ?? '9'),
+        dest_cpf_cnpj: dest.cpf_cnpj?.replace(/\D/g, '') || null,
+        dest_nome: dest.nome || null,
+        dest_ie: dest.ie?.replace(/\D/g, '') || null,
+        dest_email: dest.email || null,
+        dest_logradouro: dest.logradouro || null,
+        dest_numero: dest.numero || null,
+        dest_complemento: dest.complemento || null,
+        dest_bairro: dest.bairro || null,
+        dest_municipio: dest.municipio || null,
+        dest_codigo_municipio: dest.codigo_municipio || null,
+        dest_uf: dest.uf || null,
+        dest_cep: dest.cep || null,
+        dest_telefone: dest.telefone || null,
+        xml_envio: null,
+        xml_retorno: null,
+      }).eq('id', nfeId);
+
+      // Substitui itens
+      await supabase.from('nfe_itens').delete().eq('nfe_id', nfeId);
+      const itensToInsert = putPayload.itens.map((item, index) => {
+        const v = (item.quantidade || 0) * (item.valor_unitario || 0);
+        const vbcIbsCbs = item.vbc_ibs_cbs ?? v;
+        const aliqIbsUf = item.p_aliq_efet_ibs_uf || item.aliquota_ibs_uf || 0;
+        const aliqIbsMun = item.p_aliq_efet_ibs_mun || item.aliquota_ibs_mun || 0;
+        const aliqCbs = item.p_aliq_efet_cbs || item.aliquota_cbs || 0;
+        return {
+          nfe_id: nfeId,
+          numero_item: index + 1,
+          codigo_produto: item.codigo,
+          descricao: item.descricao,
+          ncm: item.ncm, cfop: item.cfop, unidade: item.unidade,
+          quantidade: item.quantidade, valor_unitario: item.valor_unitario, valor_total: v,
+          cst_icms: item.cst_icms, csosn: item.csosn,
+          aliquota_icms: item.aliquota_icms || 0,
+          base_calculo_icms: item.base_calculo_icms || v,
+          valor_icms: v * (item.aliquota_icms || 0) / 100,
+          cst_ipi: item.cst_ipi, aliquota_ipi: item.aliquota_ipi || 0,
+          base_calculo_ipi: item.base_calculo_ipi || v,
+          valor_ipi: (item.base_calculo_ipi || v) * (item.aliquota_ipi || 0) / 100,
+          cst_pis: item.cst_pis, aliquota_pis: item.aliquota_pis || 0,
+          base_calculo_pis: item.base_calculo_pis || v,
+          valor_pis: (item.base_calculo_pis || v) * (item.aliquota_pis || 0) / 100,
+          cst_cofins: item.cst_cofins, aliquota_cofins: item.aliquota_cofins || 0,
+          base_calculo_cofins: item.base_calculo_cofins || v,
+          valor_cofins: (item.base_calculo_cofins || v) * (item.aliquota_cofins || 0) / 100,
+          cst_ibs_cbs: item.cst_ibs_cbs || null,
+          c_class_trib: item.c_class_trib || null,
+          vbc_ibs_cbs: vbcIbsCbs,
+          aliquota_ibs_uf: item.aliquota_ibs_uf || 0,
+          valor_ibs_uf: vbcIbsCbs * aliqIbsUf / 100,
+          p_aliq_efet_ibs_uf: aliqIbsUf,
+          aliquota_ibs_mun: item.aliquota_ibs_mun || 0,
+          valor_ibs_mun: vbcIbsCbs * aliqIbsMun / 100,
+          p_aliq_efet_ibs_mun: aliqIbsMun,
+          aliquota_cbs: item.aliquota_cbs || 0,
+          valor_cbs: vbcIbsCbs * aliqCbs / 100,
+          p_aliq_efet_cbs: aliqCbs,
+        };
+      });
+      await supabase.from('nfe_itens').insert(itensToInsert);
+
+      await supabase.from('fila_processamento_nfe').upsert(
+        { nfe_id: nfeId, tentativas: 0, proximo_processamento: new Date().toISOString(), erro_ultimo: null },
+        { onConflict: 'nfe_id' },
+      );
+
+      let emitResult: any = null;
+      try {
+        const { data: fr, error: fe } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'emit_nfe', nfe_id: nfeId },
+        });
+        if (!fe && fr?.success) {
+          emitResult = fr.data;
+          await supabase.from('fila_processamento_nfe').delete().eq('nfe_id', nfeId);
+        } else {
+          console.warn('[nfe-api][PUT] emit failed:', fe?.message || fr?.error);
+        }
+      } catch (e: any) {
+        console.warn('[nfe-api][PUT] emit exception:', e?.message);
+      }
+
+      await supabase.rpc('registrar_log', {
+        p_empresa_id: empresa_id,
+        p_nfce_id: nfeId,
+        p_token_api_id: token_id,
+        p_tipo: 'info',
+        p_categoria: 'api',
+        p_mensagem: `PUT NF-e ${nfeRow.numero} (correção reusando número)`,
+        p_ip_origem: req.headers.get('x-forwarded-for'),
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, data: emitResult || { id: nfeId, numero: nfeRow.numero, serie: nfeRow.serie, status: 'pendente' } }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
 
     return new Response(
       JSON.stringify({ error: 'Endpoint not found', code: 'NOT_FOUND' }),

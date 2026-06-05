@@ -1554,6 +1554,50 @@ export type Database = {
           },
         ]
       }
+      series_numeros_liberados: {
+        Row: {
+          consumed_at: string | null
+          created_at: string
+          empresa_id: string
+          id: string
+          motivo: string | null
+          numero: number
+          origem_id: string | null
+          serie: string
+          tipo: string
+        }
+        Insert: {
+          consumed_at?: string | null
+          created_at?: string
+          empresa_id: string
+          id?: string
+          motivo?: string | null
+          numero: number
+          origem_id?: string | null
+          serie: string
+          tipo?: string
+        }
+        Update: {
+          consumed_at?: string | null
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          motivo?: string | null
+          numero?: number
+          origem_id?: string | null
+          serie?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "series_numeros_liberados_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tokens_api: {
         Row: {
           created_at: string
