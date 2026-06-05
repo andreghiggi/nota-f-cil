@@ -834,15 +834,64 @@ Deno.serve(async (req) => {
 
       await syncSerieNumeroAtual(supabase, empresa_id, serieNfe);
 
-      const { data: numeroData, error: numeroError } = await supabase
-        .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id, p_serie: serieNfe });
-
-      if (numeroError) {
-        console.error('gerar_numero_nfe error:', JSON.stringify(numeroError));
-        return new Response(
-          JSON.stringify({ error: 'Failed to generate NF-e number', code: 'INTERNAL_ERROR', details: numeroError.message }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+      // Permite que o ERP envie body.numero explicitamente (reuso de número rejeitado).
+      // Valida que o número não está em uso por NF-e autorizada na mesma série.
+      let numeroData: string | null = null;
+      const numeroExplicitoRaw = (payload as any).numero;
+      if (numeroExplicitoRaw !== undefined && numeroExplicitoRaw !== null && String(numeroExplicitoRaw).trim() !== '') {
+        const nExp = parseInt(String(numeroExplicitoRaw).replace(/\D/g, ''), 10);
+        if (!Number.isFinite(nExp) || nExp <= 0) {
+          return new Response(
+            JSON.stringify({ error: 'numero inválido', code: 'VALIDATION_ERROR' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        // checa colisão com NF-e autorizada/cancelada na mesma série
+        const { data: collision } = await supabase
+          .from('nfe')
+          .select('id, status')
+          .eq('empresa_id', empresa_id)
+          .in('serie', serieAliases(serieNfe))
+          .eq('numero', String(nExp).padStart(9, '0'))
+          .in('status', ['autorizada', 'autorizado', 'cancelada'])
+          .maybeSingle();
+        if (collision) {
+          return new Response(
+            JSON.stringify({ error: `Número ${nExp} já consumido por NF-e ${collision.status}`, code: 'NUMERO_EM_USO' }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        numeroData = String(nExp).padStart(9, '0');
+        // Se este número estava no pool de liberados, marca como consumido
+        await supabase
+          .from('series_numeros_liberados')
+          .delete()
+          .eq('empresa_id', empresa_id)
+          .eq('tipo', 'nfe')
+          .eq('serie', serieNfe)
+          .eq('numero', nExp);
+        // Mantém series_fiscais.numero_atual >= nExp para não regredir contador
+        try {
+          const { data: sfRow } = await supabase
+            .from('series_fiscais')
+            .select('id, numero_atual')
+            .eq('empresa_id', empresa_id).eq('tipo', 'nfe').eq('serie', serieNfe)
+            .maybeSingle();
+          if (sfRow && (sfRow.numero_atual ?? 0) < nExp) {
+            await supabase.from('series_fiscais').update({ numero_atual: nExp, updated_at: new Date().toISOString() }).eq('id', sfRow.id);
+          }
+        } catch { /* não bloqueia */ }
+      } else {
+        const { data: nrData, error: numeroError } = await supabase
+          .rpc('gerar_numero_nfe', { p_empresa_id: empresa_id, p_serie: serieNfe });
+        if (numeroError) {
+          console.error('gerar_numero_nfe error:', JSON.stringify(numeroError));
+          return new Response(
+            JSON.stringify({ error: 'Failed to generate NF-e number', code: 'INTERNAL_ERROR', details: numeroError.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        numeroData = nrData as unknown as string;
       }
 
       // empresaData already fetched above
