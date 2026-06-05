@@ -1,0 +1,1 @@
+UPDATE public.empresas SET enviar_ibs_cbs = true WHERE id = 'f1384b1f-f297-41fe-800b-4707f96f5385';
