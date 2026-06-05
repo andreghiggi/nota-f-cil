@@ -1666,6 +1666,9 @@ Deno.serve(async (req) => {
             updateData.erro_processamento = `Autorização local não confirmada na SEFAZ: ${updateData.motivo_retorno}`;
           } else {
             const consultaUpdate = buildNfUpdateData(consultaData);
+            if (consultaUpdate.xml_retorno && !xmlContemNfeCompleta(consultaUpdate.xml_retorno)) {
+              delete consultaUpdate.xml_retorno;
+            }
             Object.assign(updateData, consultaUpdate, {
               status: 'autorizada',
               codigo_retorno: cStatConsulta || consultaUpdate.codigo_retorno || '100',
@@ -1792,6 +1795,9 @@ Deno.serve(async (req) => {
       }
 
       const updateData = buildNfUpdateData(consultData);
+      if (updateData.xml_retorno && !xmlContemNfeCompleta(updateData.xml_retorno)) {
+        delete updateData.xml_retorno;
+      }
       let reformaAusenteNoXmlConsulta = false;
       if (updateData.xml_retorno) {
         const xmlStr = normalizeFiscalXml(updateData.xml_retorno);
