@@ -1823,6 +1823,7 @@ export type Database = {
         | "cancelada"
         | "denegada"
         | "contingencia"
+        | "inutilizada"
       regime_tributario: "simples_nacional" | "lucro_presumido" | "lucro_real"
       token_status: "ativo" | "inativo" | "revogado"
     }
@@ -1962,6 +1963,7 @@ export const Constants = {
         "cancelada",
         "denegada",
         "contingencia",
+        "inutilizada",
       ],
       regime_tributario: ["simples_nacional", "lucro_presumido", "lucro_real"],
       token_status: ["ativo", "inativo", "revogado"],
