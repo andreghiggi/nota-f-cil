@@ -1854,7 +1854,7 @@ Deno.serve(async (req) => {
 
       const { data: nfe, error: nfeError } = await supabase
         .from('nfe')
-        .select('id, empresa_id, numero, serie, status, chave_acesso, xml_envio, xml_retorno, payload_entrada, data_emissao')
+        .select('id, empresa_id, numero, serie, status, chave_acesso, xml_envio, xml_retorno, payload_entrada, data_emissao, motivo_retorno, erro_processamento')
         .eq('id', nfeId)
         .single();
 
@@ -1878,13 +1878,20 @@ Deno.serve(async (req) => {
       if (chave.length !== 44) {
         chave = extractChaveNfeFromXml(xmlCand);
       }
+      if (chave.length !== 44) {
+        chave = extractChaveNfeFromSefazMessage({
+          motivo_retorno: nfe.motivo_retorno,
+          erro_processamento: nfe.erro_processamento,
+          payload_entrada: nfe.payload_entrada,
+        });
+      }
 
       const payloadEntrada = (nfe.payload_entrada && typeof nfe.payload_entrada === 'object')
         ? nfe.payload_entrada as Record<string, unknown>
         : {};
 
       const cNfMatch = xmlCand.match(/<cNF>(\d+)<\/cNF>/i);
-      const consultBody: Record<string, unknown> = {
+      let consultBody: Record<string, unknown> = {
         chave: chave.length === 44 ? chave : undefined,
         numero: nfe.numero,
         serie: nfe.serie,
@@ -1894,10 +1901,23 @@ Deno.serve(async (req) => {
       };
 
       const consultUrl = `${FISCAL_API_BASE_URL}/nfe/consulta-chave?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
-      const { response, data: consultData } = await postWithRetry(consultUrl, consultBody, {
+      let { response, data: consultData } = await postWithRetry(consultUrl, consultBody, {
         maxAttempts: 5,
         label: 'consult_nfe_sefaz',
       });
+
+      const chaveExistente = extractChaveNfeFromSefazMessage(consultData);
+      const deveReconsultarChaveExistente = (!response.ok || String(consultData?.cStat || '') === '613')
+        && chaveExistente.length === 44
+        && chaveExistente !== chave;
+      if (deveReconsultarChaveExistente) {
+        console.log(`🔎 NF-e ${nfe.numero}: consulta retornou chave existente ${chaveExistente}; reconsultando por ela`);
+        consultBody = { ...consultBody, chave: chaveExistente };
+        ({ response, data: consultData } = await postWithRetry(consultUrl, consultBody, {
+          maxAttempts: 5,
+          label: 'consult_nfe_sefaz_chave_existente',
+        }));
+      }
 
       if (!response.ok) {
         const errMsg = consultData?.erro || consultData?.error || consultData?.message || 'Falha na consulta SEFAZ';
