@@ -1030,9 +1030,9 @@ Deno.serve(async (req) => {
           p_detalhes: responseData,
         });
 
-        return new Response(
-          JSON.stringify({ error: 'Erro na emissão fiscal', details: responseData }),
-          { status: response.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        return errorResponse(
+          friendlySefazError(responseData, { acao: 'emitir' }),
+          { details: responseData, sefaz: String(responseData?.erro || responseData?.xMotivo || '') }
         );
       }
 
