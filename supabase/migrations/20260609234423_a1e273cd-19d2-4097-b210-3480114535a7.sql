@@ -1,0 +1,1 @@
+ALTER TYPE public.nfce_status ADD VALUE IF NOT EXISTS 'inutilizada';

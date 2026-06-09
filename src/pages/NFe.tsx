@@ -49,6 +49,7 @@ const statusLabels: Record<string, string> = {
   cancelada: "Cancelada",
   denegada: "Denegada",
   contingencia: "Contingência",
+  inutilizada: "Inutilizada",
 };
 
 const statusStyles: Record<string, string> = {
@@ -59,6 +60,7 @@ const statusStyles: Record<string, string> = {
   cancelada: "status-cancelada",
   denegada: "status-rejeitada",
   contingencia: "status-processando",
+  inutilizada: "status-cancelada",
 };
 
 const XML_FIELD_NAMES = ["xml_retorno", "xml", "xmlRetorno", "procNFe", "nfeProc", "xml_envio"];
