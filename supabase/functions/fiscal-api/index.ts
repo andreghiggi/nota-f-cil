@@ -291,6 +291,99 @@ async function postWithRetry(
 }
 
 /**
+ * Converte a mensagem crua da SEFAZ (ou do PHP sped-nfe) em texto amigável e
+ * acionável para o usuário final. Cobre os principais cStat de rejeição de
+ * autorização, cancelamento, CC-e e inutilização. Devolve a própria mensagem
+ * caso não haja regra específica.
+ */
+function friendlySefazError(raw: any, ctx?: { acao?: 'emitir' | 'cancelar' | 'cce' | 'inutilizar' | 'consultar' | 'mdfe'; serie?: number | string; numero?: number | string; faixa?: string }): string {
+  let msg = '';
+  if (raw == null) msg = '';
+  else if (typeof raw === 'string') msg = raw;
+  else if (typeof raw === 'object') {
+    msg = String(
+      raw.erro || raw.error || raw.mensagem || raw.message ||
+      raw.xMotivo || raw.motivo || raw.details?.erro || raw.details?.error || ''
+    );
+    // sped-nfe costuma aninhar em retorno
+    if (!msg && raw.retorno) {
+      msg = String(raw.retorno.xMotivo || raw.retorno.motivo || raw.retorno.erro || '');
+    }
+  }
+  msg = msg.trim();
+  const lower = msg.toLowerCase();
+  const codeMatch = msg.match(/\[?(\d{3})\]?\s*Rejei/i) || msg.match(/cStat[:\s=]+(\d{3})/i);
+  const code = codeMatch?.[1];
+  const faixa = ctx?.faixa || (ctx?.numero != null ? String(ctx.numero) : '');
+  const serieTxt = ctx?.serie != null ? ` (série ${ctx.serie})` : '';
+
+  // ===== Inutilização =====
+  if (ctx?.acao === 'inutilizar') {
+    if (code === '241' || /j[áa]\s+foi\s+utilizad/.test(lower))
+      return `Número ${faixa}${serieTxt} já foi transmitido à SEFAZ e não pode ser inutilizado. Use Cancelamento de NF-e.`;
+    if (code === '242' || /j[áa]\s+(consta|est[aá])\s+inutilizad/.test(lower))
+      return `Faixa ${faixa}${serieTxt} já consta como inutilizada na SEFAZ.`;
+    if (code === '243' || /justificativ/.test(lower))
+      return `Justificativa inválida segundo a SEFAZ. Texto deve ter 15–255 caracteres, sem caracteres especiais.`;
+    if (code === '244' || /faixa.*inv[aá]lid/.test(lower))
+      return `Faixa de numeração inválida (${faixa}).`;
+  }
+
+  // ===== Cancelamento =====
+  if (ctx?.acao === 'cancelar') {
+    if (code === '501' || /prazo.*cancelamento.*excedido/.test(lower))
+      return `Prazo legal para cancelamento excedido (24h após autorização). Considere emitir uma NF-e de devolução.`;
+    if (code === '218' || /j[áa]\s+est[aá]\s+cancelad/.test(lower))
+      return `NF-e já está cancelada na SEFAZ.`;
+    if (code === '217' || /n[aã]o\s+consta.*base/.test(lower))
+      return `NF-e não consta na base da SEFAZ — verifique a chave de acesso e o ambiente.`;
+    if (code === '233' || /chave.*duplicad/.test(lower))
+      return `Chave de acesso duplicada ou inválida.`;
+  }
+
+  // ===== CC-e =====
+  if (ctx?.acao === 'cce') {
+    if (code === '573' || /duplicidade.*evento/.test(lower))
+      return `Esta sequência de CC-e já foi registrada. Use a próxima sequência.`;
+    if (code === '494' || /correc[aã]o.*item.*tributo|valor|quantidade|preco/.test(lower))
+      return `CC-e não pode alterar valores, quantidades ou dados que afetem o cálculo do imposto.`;
+    if (code === '478' || /sequenc/.test(lower))
+      return `Sequência de CC-e inválida (use 1 a 20, em ordem).`;
+  }
+
+  // ===== Emissão =====
+  if (ctx?.acao === 'emitir') {
+    if (code === '539' || /duplicidade.*nf-?e|chave.*nf-?e\s+existente/.test(lower))
+      return `Esta NF-e já foi transmitida (chave duplicada na SEFAZ).`;
+    if (code === '108' || code === '109' || /sefaz.*paralis|servi[çc]o.*indispon/.test(lower))
+      return `SEFAZ paralisada/indisponível no momento. Tente novamente em alguns minutos ou use contingência.`;
+  }
+
+  // ===== Falhas de conectividade genéricas =====
+  if (/connection reset|recv failure|timed out|timeout|could not resolve/.test(lower))
+    return `Falha de conexão com a SEFAZ. Tente novamente em instantes.`;
+  if (/certificad/.test(lower) && /(vencid|expirad|invalid|senh)/.test(lower))
+    return `Problema com o certificado digital (vencido, inválido ou senha incorreta). Reenvie o PFX em Certificados.`;
+
+  return msg || 'Erro desconhecido retornado pela SEFAZ.';
+}
+
+/**
+ * Resposta de erro padronizada (status 200 + success:false) para que o
+ * supabase-js do frontend não dispare "Edge Function returned non-2xx" e
+ * o toast consiga ler `data.error`.
+ */
+function errorResponse(message: string, opts: { details?: any; httpStatus?: number; sefaz?: string } = {}) {
+  const body: any = { success: false, error: message };
+  if (opts.sefaz) body.sefaz = opts.sefaz;
+  if (opts.details !== undefined) body.details = opts.details;
+  return new Response(JSON.stringify(body), {
+    status: opts.httpStatus ?? 200,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  });
+}
+
+/**
  * Normaliza o conteúdo XML salvo em xml_retorno/xml_envio. Aceita:
  *  - string XML pura
  *  - JSON com {xml|xml_retorno|procNFe|nfeProc}
