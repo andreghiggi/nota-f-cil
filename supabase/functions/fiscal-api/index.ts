@@ -2739,17 +2739,12 @@ async function handleInutilizar(
   }
 
   const sefazMsg = String(responseData?.erro || responseData?.error || responseData?.mensagem || '');
-  let friendly = sefazMsg || 'Erro ao inutilizar NF-e na SEFAZ';
-  // Tratamentos amigáveis
-  if (/\[?241\]?/.test(sefazMsg) || /j[áa]\s+foi\s+utilizad/i.test(sefazMsg)) {
-    friendly = `Número ${nIni}${nFin !== nIni ? `-${nFin}` : ''} (série ${nSerie}) já foi transmitido à SEFAZ e não pode ser inutilizado. Use Cancelamento de NF-e em vez de Inutilização.`;
-  } else if (/\[?242\]?/.test(sefazMsg)) {
-    friendly = `Faixa ${nIni}-${nFin} já consta como inutilizada na SEFAZ.`;
-  } else if (/\[?243\]?/.test(sefazMsg)) {
-    friendly = `Justificativa inválida segundo a SEFAZ. Ajuste o texto (15–255 caracteres, sem caracteres especiais).`;
-  }
-  // Status 200 com sucesso=false: devolvemos 200 para que supabase-js não jogue exception genérica
-  return new Response(JSON.stringify({ success: false, error: friendly, sefaz: sefazMsg, details: responseData }),
-    { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  const friendly = friendlySefazError(responseData, {
+    acao: 'inutilizar',
+    serie: nSerie,
+    faixa: nIni === nFin ? String(nIni) : `${nIni}-${nFin}`,
+  });
+  return errorResponse(friendly, { details: responseData, sefaz: sefazMsg });
+}
 }
 
