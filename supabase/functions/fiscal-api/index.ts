@@ -2260,9 +2260,9 @@ async function handleCancel(supabase: any, tipo: 'nfce' | 'nfe', docId: string) 
     );
   }
 
-  return new Response(
-    JSON.stringify({ error: `Erro ao cancelar ${tipo.toUpperCase()} na SEFAZ`, details: responseData }),
-    { status: response.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  return errorResponse(
+    friendlySefazError(responseData, { acao: 'cancelar' }),
+    { details: responseData, sefaz: String(responseData?.erro || responseData?.xMotivo || '') }
   );
 }
 
