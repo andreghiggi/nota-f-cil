@@ -115,10 +115,12 @@ export function InutilizacoesDialog({ open, onOpenChange, prefill, defaultTab }:
       if (error || !data?.success) {
         const msg =
           (data as any)?.error ||
+          (data as any)?.sefaz ||
+          (data as any)?.details?.erro ||
           (data as any)?.details?.error ||
           error?.message ||
           "Falha ao inutilizar";
-        toast.error(typeof msg === "string" ? msg : JSON.stringify(msg));
+        toast.error(typeof msg === "string" ? msg : JSON.stringify(msg), { duration: 8000 });
       } else {
         toast.success(
           `Numeração ${ini}${fin !== ini ? `-${fin}` : ""} inutilizada (protocolo ${data.data?.protocolo || "-"})`
