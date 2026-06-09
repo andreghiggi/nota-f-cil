@@ -2786,5 +2786,4 @@ async function handleInutilizar(
   });
   return errorResponse(friendly, { details: responseData, sefaz: sefazMsg });
 }
-}
 
