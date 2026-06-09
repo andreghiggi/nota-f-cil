@@ -196,6 +196,26 @@ function extractChaveNfeFromXml(xmlRaw: string): string {
   return '';
 }
 
+function extractChaveNfeFromSefazMessage(raw: any): string {
+  const parts: string[] = [];
+  const push = (v: any) => {
+    if (v == null) return;
+    if (typeof v === 'string' || typeof v === 'number') parts.push(String(v));
+    else if (typeof v === 'object') {
+      for (const key of ['erro', 'error', 'xMotivo', 'motivo', 'message', 'mensagem', 'chave', 'chave_acesso', 'chNFe', 'chave_nfe']) {
+        if (v[key] != null) parts.push(String(v[key]));
+      }
+      try { parts.push(JSON.stringify(v)); } catch {}
+    }
+  };
+  push(raw);
+  for (const text of parts) {
+    const matches = text.match(/\d{44}/g);
+    if (matches?.length) return matches[matches.length - 1];
+  }
+  return '';
+}
+
 async function resolverDuplicatasNfeInternas(
   supabase: ReturnType<typeof createClient>,
   empresaId: string,
@@ -1834,7 +1854,7 @@ Deno.serve(async (req) => {
 
       const { data: nfe, error: nfeError } = await supabase
         .from('nfe')
-        .select('id, empresa_id, numero, serie, status, chave_acesso, xml_envio, xml_retorno, payload_entrada, data_emissao')
+        .select('id, empresa_id, numero, serie, status, chave_acesso, xml_envio, xml_retorno, payload_entrada, data_emissao, motivo_retorno, erro_processamento')
         .eq('id', nfeId)
         .single();
 
@@ -1858,13 +1878,20 @@ Deno.serve(async (req) => {
       if (chave.length !== 44) {
         chave = extractChaveNfeFromXml(xmlCand);
       }
+      if (chave.length !== 44) {
+        chave = extractChaveNfeFromSefazMessage({
+          motivo_retorno: nfe.motivo_retorno,
+          erro_processamento: nfe.erro_processamento,
+          payload_entrada: nfe.payload_entrada,
+        });
+      }
 
       const payloadEntrada = (nfe.payload_entrada && typeof nfe.payload_entrada === 'object')
         ? nfe.payload_entrada as Record<string, unknown>
         : {};
 
       const cNfMatch = xmlCand.match(/<cNF>(\d+)<\/cNF>/i);
-      const consultBody: Record<string, unknown> = {
+      let consultBody: Record<string, unknown> = {
         chave: chave.length === 44 ? chave : undefined,
         numero: nfe.numero,
         serie: nfe.serie,
@@ -1874,10 +1901,24 @@ Deno.serve(async (req) => {
       };
 
       const consultUrl = `${FISCAL_API_BASE_URL}/nfe/consulta-chave?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
-      const { response, data: consultData } = await postWithRetry(consultUrl, consultBody, {
+      let { response, data: consultData } = await postWithRetry(consultUrl, consultBody, {
         maxAttempts: 5,
         label: 'consult_nfe_sefaz',
       });
+
+      const chaveExistente = extractChaveNfeFromSefazMessage(consultData);
+      const deveReconsultarChaveExistente = (!response.ok || String(consultData?.cStat || '') === '613')
+        && chaveExistente.length === 44
+        && chaveExistente !== chave;
+      if (deveReconsultarChaveExistente) {
+        console.log(`🔎 NF-e ${nfe.numero}: consulta retornou chave existente ${chaveExistente}; reconsultando por ela`);
+        consultBody = { ...consultBody, chave: chaveExistente };
+        delete consultBody.xml_envio;
+        ({ response, data: consultData } = await postWithRetry(consultUrl, consultBody, {
+          maxAttempts: 5,
+          label: 'consult_nfe_sefaz_chave_existente',
+        }));
+      }
 
       if (!response.ok) {
         const errMsg = consultData?.erro || consultData?.error || consultData?.message || 'Falha na consulta SEFAZ';
@@ -2745,6 +2786,5 @@ async function handleInutilizar(
     faixa: nIni === nFin ? String(nIni) : `${nIni}-${nFin}`,
   });
   return errorResponse(friendly, { details: responseData, sefaz: sefazMsg });
-}
 }
 
