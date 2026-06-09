@@ -128,6 +128,7 @@ export default function NFe() {
   const [cceOpen, setCceOpen] = useState(false);
   const [cceNfe, setCceNfe] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
   const [inutOpen, setInutOpen] = useState(false);
+  const [inutPrefill, setInutPrefill] = useState<{ empresa_id?: string; serie?: string; numero?: string; justificativa?: string } | null>(null);
   const queryClient = useQueryClient();
   const { ambiente } = useEnvironment();
   const { data: empresas = [] } = useEmpresas();
