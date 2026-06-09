@@ -531,7 +531,11 @@ export default function NFe() {
           nfeId={cceNfe.id || null}
           nfeNumero={cceNfe.numero}
         />
-        <InutilizacoesDialog open={inutOpen} onOpenChange={setInutOpen} />
+        <InutilizacoesDialog
+          open={inutOpen}
+          onOpenChange={(v) => { setInutOpen(v); if (!v) setInutPrefill(null); }}
+          prefill={inutPrefill}
+        />
       </div>
     </AppLayout>
   );
