@@ -2390,9 +2390,9 @@ async function handleCCe(supabase: any, nfeId: string, correcao: string, sequenc
     motivo_retorno: responseData.error || responseData.xMotivo || 'Erro ao registrar CC-e',
   }).eq('id', evento.id);
 
-  return new Response(
-    JSON.stringify({ error: 'Erro ao registrar CC-e na SEFAZ', details: responseData }),
-    { status: response.status || 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+  return errorResponse(
+    friendlySefazError(responseData, { acao: 'cce' }),
+    { details: responseData, sefaz: String(responseData?.erro || responseData?.xMotivo || '') }
   );
 }
 
