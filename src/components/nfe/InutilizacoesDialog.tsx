@@ -147,7 +147,7 @@ export function InutilizacoesDialog({ open, onOpenChange, prefill, defaultTab }:
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="historico" className="mt-2">
+        <Tabs value={tab} onValueChange={setTab} className="mt-2">
           <TabsList>
             <TabsTrigger value="historico">Histórico</TabsTrigger>
             <TabsTrigger value="nova">Nova inutilização</TabsTrigger>
