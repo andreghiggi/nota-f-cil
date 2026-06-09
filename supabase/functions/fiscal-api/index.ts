@@ -1913,6 +1913,7 @@ Deno.serve(async (req) => {
       if (deveReconsultarChaveExistente) {
         console.log(`🔎 NF-e ${nfe.numero}: consulta retornou chave existente ${chaveExistente}; reconsultando por ela`);
         consultBody = { ...consultBody, chave: chaveExistente };
+        delete consultBody.xml_envio;
         ({ response, data: consultData } = await postWithRetry(consultUrl, consultBody, {
           maxAttempts: 5,
           label: 'consult_nfe_sefaz_chave_existente',
