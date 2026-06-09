@@ -2766,14 +2766,67 @@ async function handleInutilizar(
   });
 
   if (ok) {
-    // Remove eventuais registros pendentes na faixa inutilizada
+    const serieStr = String(nSerie).padStart(3, '0');
+    const protocolo = String(responseData?.protocolo ?? responseData?.nProt ?? responseData?.protocol ?? '');
+    const motivoInut = `Inutilizada SEFAZ: ${just}`;
+
+    // 1) Marca registros existentes na faixa (não autorizados/cancelados) como 'inutilizada'
     await supabase.from('nfe')
-      .delete()
+      .update({
+        status: 'inutilizada' as any,
+        motivo_retorno: motivoInut,
+        codigo_retorno: '102',
+        protocolo: protocolo || null,
+        updated_at: new Date().toISOString(),
+      })
       .eq('empresa_id', empresaId)
-      .eq('serie', String(nSerie).padStart(3, '0'))
-      .in('status', ['pendente', 'rejeitada', 'denegada'])
+      .eq('serie', serieStr)
+      .in('status', ['pendente', 'rejeitada', 'denegada', 'processando', 'erro'])
       .gte('numero', String(nIni).padStart(9, '0'))
       .lte('numero', String(nFin).padStart(9, '0'));
+
+    // 2) Cria placeholders 'inutilizada' para números sem registro
+    try {
+      const { data: existentes } = await supabase
+        .from('nfe')
+        .select('numero')
+        .eq('empresa_id', empresaId)
+        .eq('serie', serieStr)
+        .gte('numero', String(nIni).padStart(9, '0'))
+        .lte('numero', String(nFin).padStart(9, '0'));
+      const existentesSet = new Set((existentes || []).map((r: any) => String(r.numero)));
+      const novos: any[] = [];
+      for (let n = nIni; n <= nFin; n++) {
+        const num = String(n).padStart(9, '0');
+        if (existentesSet.has(num)) continue;
+        novos.push({
+          empresa_id: empresaId,
+          numero: num,
+          serie: serieStr,
+          ambiente: empresa.ambiente,
+          valor_total: 0,
+          payload_entrada: { inutilizacao: true, justificativa: just },
+          status: 'inutilizada',
+          motivo_retorno: motivoInut,
+          codigo_retorno: '102',
+          protocolo: protocolo || null,
+        });
+      }
+      if (novos.length > 0) {
+        await supabase.from('nfe').insert(novos);
+      }
+    } catch (e) {
+      console.warn('Falha ao criar placeholders de inutilização:', (e as Error)?.message);
+    }
+
+    // 3) Remove números liberados na faixa (não podem mais ser reutilizados)
+    await supabase.from('series_numeros_liberados')
+      .delete()
+      .eq('empresa_id', empresaId)
+      .eq('tipo', 'nfe')
+      .eq('serie', serieStr)
+      .gte('numero', nIni)
+      .lte('numero', nFin);
 
     return new Response(JSON.stringify({ success: true, data: responseData }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
