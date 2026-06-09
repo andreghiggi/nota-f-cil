@@ -128,6 +128,7 @@ export default function NFe() {
   const [cceOpen, setCceOpen] = useState(false);
   const [cceNfe, setCceNfe] = useState<{ id: string; numero: string }>({ id: "", numero: "" });
   const [inutOpen, setInutOpen] = useState(false);
+  const [inutPrefill, setInutPrefill] = useState<{ empresa_id?: string; serie?: string; numero?: string; justificativa?: string } | null>(null);
   const queryClient = useQueryClient();
   const { ambiente } = useEnvironment();
   const { data: empresas = [] } = useEmpresas();
@@ -478,6 +479,21 @@ export default function NFe() {
                               </>
                             )}
                             {["pendente", "rejeitada", "denegada"].includes(nfe.status) && (
+                              <DropdownMenuItem onSelect={() => {
+                                setTimeout(() => {
+                                  setInutPrefill({
+                                    empresa_id: nfe.empresa_id,
+                                    serie: String(nfe.serie ?? "1"),
+                                    numero: String(parseInt(String(nfe.numero || "0"), 10) || ""),
+                                    justificativa: `Inutilização da numeração rejeitada da NF-e ${nfe.numero}`,
+                                  });
+                                  setInutOpen(true);
+                                }, 0);
+                              }}>
+                                <Ban className="h-4 w-4 mr-2" />Inutilizar numeração
+                              </DropdownMenuItem>
+                            )}
+                            {["pendente", "rejeitada", "denegada"].includes(nfe.status) && (
                               <DropdownMenuItem className="text-destructive" onSelect={() => handleExcluir(nfe.id, nfe.numero, nfe.status)}>
                                 <Trash2 className="h-4 w-4 mr-2" />Excluir (devolve numeração)
                               </DropdownMenuItem>
@@ -515,7 +531,11 @@ export default function NFe() {
           nfeId={cceNfe.id || null}
           nfeNumero={cceNfe.numero}
         />
-        <InutilizacoesDialog open={inutOpen} onOpenChange={setInutOpen} />
+        <InutilizacoesDialog
+          open={inutOpen}
+          onOpenChange={(v) => { setInutOpen(v); if (!v) setInutPrefill(null); }}
+          prefill={inutPrefill}
+        />
       </div>
     </AppLayout>
   );

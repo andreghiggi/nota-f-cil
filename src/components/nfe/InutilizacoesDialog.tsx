@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -26,12 +26,21 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEmpresas } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 
+interface Prefill {
+  empresa_id?: string;
+  serie?: string | number;
+  numero?: string | number;
+  justificativa?: string;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  prefill?: Prefill | null;
+  defaultTab?: "historico" | "nova";
 }
 
-export function InutilizacoesDialog({ open, onOpenChange }: Props) {
+export function InutilizacoesDialog({ open, onOpenChange, prefill, defaultTab }: Props) {
   const queryClient = useQueryClient();
   const { data: empresas = [] } = useEmpresas();
 
@@ -41,6 +50,26 @@ export function InutilizacoesDialog({ open, onOpenChange }: Props) {
   const [numFin, setNumFin] = useState<string>("");
   const [justificativa, setJustificativa] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
+  const [tab, setTab] = useState<string>(defaultTab || "historico");
+
+  // Apply prefill / default tab when opening
+  useState(() => {});
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  React.useEffect(() => {
+    if (!open) return;
+    setTab(defaultTab || (prefill ? "nova" : "historico"));
+    if (prefill) {
+      if (prefill.empresa_id) setEmpresaId(prefill.empresa_id);
+      if (prefill.serie !== undefined) setSerie(String(prefill.serie));
+      if (prefill.numero !== undefined) {
+        const n = String(prefill.numero).replace(/^0+/, "") || "0";
+        setNumIni(n);
+        setNumFin(n);
+      }
+      if (prefill.justificativa) setJustificativa(prefill.justificativa);
+    }
+  }, [open, prefill, defaultTab]);
+
 
   const { data: inutilizacoes = [], isLoading } = useQuery({
     queryKey: ["inutilizacoes-nfe"],
@@ -118,7 +147,7 @@ export function InutilizacoesDialog({ open, onOpenChange }: Props) {
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="historico" className="mt-2">
+        <Tabs value={tab} onValueChange={setTab} className="mt-2">
           <TabsList>
             <TabsTrigger value="historico">Histórico</TabsTrigger>
             <TabsTrigger value="nova">Nova inutilização</TabsTrigger>
