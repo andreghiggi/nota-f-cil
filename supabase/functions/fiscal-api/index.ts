@@ -196,6 +196,26 @@ function extractChaveNfeFromXml(xmlRaw: string): string {
   return '';
 }
 
+function extractChaveNfeFromSefazMessage(raw: any): string {
+  const parts: string[] = [];
+  const push = (v: any) => {
+    if (v == null) return;
+    if (typeof v === 'string' || typeof v === 'number') parts.push(String(v));
+    else if (typeof v === 'object') {
+      for (const key of ['erro', 'error', 'xMotivo', 'motivo', 'message', 'mensagem', 'chave', 'chave_acesso', 'chNFe', 'chave_nfe']) {
+        if (v[key] != null) parts.push(String(v[key]));
+      }
+      try { parts.push(JSON.stringify(v)); } catch {}
+    }
+  };
+  push(raw);
+  for (const text of parts) {
+    const matches = text.match(/\d{44}/g);
+    if (matches?.length) return matches[matches.length - 1];
+  }
+  return '';
+}
+
 async function resolverDuplicatasNfeInternas(
   supabase: ReturnType<typeof createClient>,
   empresaId: string,
