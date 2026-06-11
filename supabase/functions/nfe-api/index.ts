@@ -857,6 +857,22 @@ Deno.serve(async (req) => {
         );
       }
 
+      // ===== Validação de CFOP e derivação de tpNF =====
+      const { tpNF: tpNFDerivado, cfops: cfopsUsados, erro: erroCfop } = derivarTpNF(payload.itens);
+      if (erroCfop) {
+        return new Response(
+          JSON.stringify({ error: erroCfop, code: 'VALIDATION_ERROR', cfops: cfopsUsados }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const tpNF = payload.tp_nf !== undefined && payload.tp_nf !== null ? payload.tp_nf : tpNFDerivado!;
+      // Se o integrador enviou tp_nf explicitamente com CFOP de grupo oposto, aceitamos
+      // (responsabilidade do integrador), mas logamos aviso.
+      if (payload.tp_nf !== undefined && payload.tp_nf !== null && tpNFDerivado !== null && payload.tp_nf !== tpNFDerivado) {
+        console.warn(`[nfe-api] tp_nf=${payload.tp_nf} diverge do CFOP (tpNF derivado=${tpNFDerivado}); aceitando valor enviado pelo integrador`);
+      }
+      payload.tp_nf = tpNF;
+
       // Série canônica (evita contador paralelo "1" vs "001")
       const serieNfe = normalizeSerieFiscal(
         payload.serie || empresaData?.serie_nfe || '1',
