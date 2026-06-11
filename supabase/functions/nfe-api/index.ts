@@ -245,6 +245,30 @@ async function syncSerieNumeroAtual(
   }
 }
 
+/** Deriva tpNF (0=entrada, 1=saída) a partir do primeiro dígito do CFOP dos itens. */
+function derivarTpNF(itens: Array<{ cfop?: string }>): { tpNF: number | null; cfops: string[]; erro?: string } {
+  const cfops = itens.map((it) => String(it.cfop || '').trim()).filter(Boolean);
+  if (cfops.length === 0) return { tpNF: null, cfops: [], erro: 'Nenhum CFOP encontrado nos itens' };
+
+  const grupos = new Set<number>();
+  for (const cfop of cfops) {
+    const primeiro = cfop.charAt(0);
+    if (['1', '2', '3'].includes(primeiro)) grupos.add(0);
+    else if (['5', '6', '7'].includes(primeiro)) grupos.add(1);
+    else grupos.add(-1);
+  }
+
+  if (grupos.has(-1)) {
+    return { tpNF: null, cfops, erro: `CFOP inválido: ${cfops.find((c) => !/^[1-7]/.test(c))}` };
+  }
+  if (grupos.size > 1) {
+    return { tpNF: null, cfops, erro: 'CFOPs de entrada e saída não podem ser misturados na mesma NF-e' };
+  }
+
+  const tpNF = grupos.has(0) ? 0 : 1;
+  return { tpNF, cfops };
+}
+
 function shouldDeferTransmit(payload: NFePayload): boolean {
   const p = payload as Record<string, unknown>;
   return p.transmitir === false
