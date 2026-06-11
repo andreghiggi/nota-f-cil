@@ -1683,6 +1683,7 @@ Deno.serve(async (req) => {
             ? { CPF: (empresa.cpf || '').replace(/\D/g, '') }
             : { CNPJ: (empresa.cnpj || '').replace(/\D/g, '') }),
         },
+        ...(nfe.xml_envio ? { xml_envio: nfe.xml_envio } : {}),
       };
 
       const temReformaNfe = !!(empresa as any)?.enviar_ibs_cbs && ((nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it))
