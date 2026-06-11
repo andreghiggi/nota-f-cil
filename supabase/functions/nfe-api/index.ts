@@ -14,6 +14,7 @@ interface NFePayload {
   natureza_operacao?: string;
   finalidade?: string;
   modalidade_frete?: string;
+  tp_nf?: number; // 0=entrada, 1=saída; se omitido, deriva do CFOP
   // Reforma Tributária - Grupo B
   d_prev_entrega?: string;
   c_mun_fg_ibs?: string;
