@@ -2210,6 +2210,7 @@ function buildNfUpdateData(responseData: any): any {
   const codigoRetorno = responseData.codigo_retorno || responseData.cStat || responseData.code;
   const motivoRetorno = responseData.motivo_retorno || responseData.xMotivo || responseData.motivo || responseData.message;
   const xmlRetorno = normalizeFiscalXml(responseData.xml_retorno || responseData.xml || responseData.xmlRetorno || responseData.procNFe || responseData.nfeProc);
+  const xmlEnvio = normalizeFiscalXml(responseData.xml_envio || responseData.xmlEnvio || responseData.xmlEnvioBase64);
   const qrcodeUrl = responseData.qrcode_url || responseData.qrcode || responseData.urlQRCode || responseData.qr_code || responseData.qrCode || responseData.url_qrcode;
   const dataAutorizacao = responseData.data_autorizacao || responseData.dhRecbto || responseData.data_recebimento;
 
@@ -2218,6 +2219,7 @@ function buildNfUpdateData(responseData: any): any {
   if (codigoRetorno) updateData.codigo_retorno = codigoRetorno;
   if (motivoRetorno) updateData.motivo_retorno = motivoRetorno;
   if (xmlRetorno) updateData.xml_retorno = xmlRetorno;
+  if (xmlEnvio) updateData.xml_envio = xmlEnvio;
   if (qrcodeUrl) updateData.qrcode_url = qrcodeUrl;
   if (dataAutorizacao) updateData.data_autorizacao = dataAutorizacao;
 
