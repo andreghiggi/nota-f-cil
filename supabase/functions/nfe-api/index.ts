@@ -14,6 +14,7 @@ interface NFePayload {
   natureza_operacao?: string;
   finalidade?: string;
   modalidade_frete?: string;
+  tp_nf?: number; // 0=entrada, 1=saída; se omitido, deriva do CFOP
   // Reforma Tributária - Grupo B
   d_prev_entrega?: string;
   c_mun_fg_ibs?: string;
@@ -242,6 +243,30 @@ async function syncSerieNumeroAtual(
       .update({ numero_atual: maxNum, updated_at: new Date().toISOString() })
       .eq('id', canonRow.id);
   }
+}
+
+/** Deriva tpNF (0=entrada, 1=saída) a partir do primeiro dígito do CFOP dos itens. */
+function derivarTpNF(itens: Array<{ cfop?: string }>): { tpNF: number | null; cfops: string[]; erro?: string } {
+  const cfops = itens.map((it) => String(it.cfop || '').trim()).filter(Boolean);
+  if (cfops.length === 0) return { tpNF: null, cfops: [], erro: 'Nenhum CFOP encontrado nos itens' };
+
+  const grupos = new Set<number>();
+  for (const cfop of cfops) {
+    const primeiro = cfop.charAt(0);
+    if (['1', '2', '3'].includes(primeiro)) grupos.add(0);
+    else if (['5', '6', '7'].includes(primeiro)) grupos.add(1);
+    else grupos.add(-1);
+  }
+
+  if (grupos.has(-1)) {
+    return { tpNF: null, cfops, erro: `CFOP inválido: ${cfops.find((c) => !/^[1-7]/.test(c))}` };
+  }
+  if (grupos.size > 1) {
+    return { tpNF: null, cfops, erro: 'CFOPs de entrada e saída não podem ser misturados na mesma NF-e' };
+  }
+
+  const tpNF = grupos.has(0) ? 0 : 1;
+  return { tpNF, cfops };
 }
 
 function shouldDeferTransmit(payload: NFePayload): boolean {
@@ -832,6 +857,22 @@ Deno.serve(async (req) => {
         );
       }
 
+      // ===== Validação de CFOP e derivação de tpNF =====
+      const { tpNF: tpNFDerivado, cfops: cfopsUsados, erro: erroCfop } = derivarTpNF(payload.itens);
+      if (erroCfop) {
+        return new Response(
+          JSON.stringify({ error: erroCfop, code: 'VALIDATION_ERROR', cfops: cfopsUsados }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const tpNF = payload.tp_nf !== undefined && payload.tp_nf !== null ? payload.tp_nf : tpNFDerivado!;
+      // Se o integrador enviou tp_nf explicitamente com CFOP de grupo oposto, aceitamos
+      // (responsabilidade do integrador), mas logamos aviso.
+      if (payload.tp_nf !== undefined && payload.tp_nf !== null && tpNFDerivado !== null && payload.tp_nf !== tpNFDerivado) {
+        console.warn(`[nfe-api] tp_nf=${payload.tp_nf} diverge do CFOP (tpNF derivado=${tpNFDerivado}); aceitando valor enviado pelo integrador`);
+      }
+      payload.tp_nf = tpNF;
+
       // Série canônica (evita contador paralelo "1" vs "001")
       const serieNfe = normalizeSerieFiscal(
         payload.serie || empresaData?.serie_nfe || '1',
@@ -960,6 +1001,7 @@ Deno.serve(async (req) => {
           natureza_operacao: payload.natureza_operacao || 'VENDA',
           finalidade: payload.finalidade || '1',
           modalidade_frete: String(payload.modalidade_frete ?? '9'),
+          tp_nf: payload.tp_nf ?? null,
           dest_cpf_cnpj: dest.cpf_cnpj?.replace(/\D/g, '') || null,
           dest_nome: dest.nome,
           dest_ie: dest.ie?.replace(/\D/g, '') || null,

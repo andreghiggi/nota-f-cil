@@ -8,12 +8,36 @@ const corsHeaders = {
 const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
 /** Conferir deploy: GET .../fiscal-api?build=1 */
-const FISCAL_API_BUILD_ID = '31may26-nfce-payment-retry';
+const FISCAL_API_BUILD_ID = '11jun26-tpNF-CFOP-fix';
 
 function normalizeIbsCbsCst(raw: unknown): string {
   const digits = String(raw ?? '').replace(/\D/g, '');
   if (/^\d{3}$/.test(digits)) return digits;
   return '000';
+}
+
+/** Deriva tpNF (0=entrada, 1=saída) a partir do primeiro dígito do CFOP dos itens. */
+function derivarTpNF(itens: Array<{ cfop?: string }>): { tpNF: number | null; cfops: string[]; erro?: string } {
+  const cfops = itens.map((it) => String(it.cfop || '').trim()).filter(Boolean);
+  if (cfops.length === 0) return { tpNF: null, cfops: [], erro: 'Nenhum CFOP encontrado nos itens' };
+
+  const grupos = new Set<number>();
+  for (const cfop of cfops) {
+    const primeiro = cfop.charAt(0);
+    if (['1', '2', '3'].includes(primeiro)) grupos.add(0);
+    else if (['5', '6', '7'].includes(primeiro)) grupos.add(1);
+    else grupos.add(-1);
+  }
+
+  if (grupos.has(-1)) {
+    return { tpNF: null, cfops, erro: `CFOP inválido: ${cfops.find((c) => !/^[1-7]/.test(c))}` };
+  }
+  if (grupos.size > 1) {
+    return { tpNF: null, cfops, erro: 'CFOPs de entrada e saída não podem ser misturados na mesma NF-e' };
+  }
+
+  const tpNF = grupos.has(0) ? 0 : 1;
+  return { tpNF, cfops };
 }
 
 function normalizeCClassTrib(raw: unknown): string {
@@ -1366,14 +1390,61 @@ Deno.serve(async (req) => {
       // ===== Blocos adicionais (ide extras, entrega, transp, infAdic, infRespTec) =====
       const payloadEntrada = nfe.payload_entrada || {};
 
+      // --- tpNF: prioridade 1) payload_entrada.tp_nf/tpNF, 2) nfe.tp_nf, 3) derivar do CFOP ---
+      const itensParaDerivacao = Object.values(itensObj).map((it: any) => ({ cfop: it.cfop }));
+      const { tpNF: tpNFDerivado, erro: erroCfop } = derivarTpNF(itensParaDerivacao);
+      if (erroCfop) {
+        await supabase.from('nfe').update({
+          status: 'rejeitada',
+          erro_processamento: erroCfop,
+          motivo_retorno: erroCfop,
+        }).eq('id', nfeId);
+        return errorResponse(erroCfop, { httpStatus: 400 });
+      }
+
+      const tpNFExplicito =
+        payloadEntrada.tp_nf !== undefined && payloadEntrada.tp_nf !== null
+          ? Number(payloadEntrada.tp_nf)
+          : payloadEntrada.tpNF !== undefined && payloadEntrada.tpNF !== null
+            ? Number(payloadEntrada.tpNF)
+            : null;
+      const tpNFBanco = nfe.tp_nf != null ? Number(nfe.tp_nf) : null;
+      const tpNF = tpNFExplicito !== null ? tpNFExplicito : (tpNFBanco !== null ? tpNFBanco : tpNFDerivado!);
+      if (tpNFExplicito !== null && tpNFDerivado !== null && tpNFExplicito !== tpNFDerivado) {
+        console.warn(`[fiscal-api] NF-e ${nfe.numero}: tpNF explicito (${tpNFExplicito}) diverge do CFOP (${tpNFDerivado}); respeitando valor do integrador`);
+      }
+      console.log(`[fiscal-api] NF-e ${nfe.numero}: tpNF=${tpNF} (explicito=${tpNFExplicito}, banco=${tpNFBanco}, derivado=${tpNFDerivado})`);
+
+      // --- idDest: derivar da UF emitente vs destinatário se não informado ---
+      let idDest = nfe.id_dest != null ? Number(nfe.id_dest) : null;
+      if (idDest == null && payloadEntrada.idDest != null) idDest = Number(payloadEntrada.idDest);
+      if (idDest == null) {
+        const ufEmit = String(empresa.uf || '').toUpperCase();
+        const ufDest = String(nfe.dest_uf || '').toUpperCase();
+        if (!ufDest || ufDest === 'EX') idDest = 3; // Exterior
+        else if (ufEmit && ufDest && ufEmit !== ufDest) idDest = 2; // Interestadual
+        else idDest = 1; // Interna
+        console.log(`[fiscal-api] NF-e ${nfe.numero}: idDest derivado=${idDest} (${ufEmit} vs ${ufDest})`);
+      }
+
       // ide opcionais
       const ideExtras: any = {};
       if (nfe.dh_sai_ent) ideExtras.dhSaiEnt = nfe.dh_sai_ent;
-      if (nfe.id_dest != null) ideExtras.idDest = nfe.id_dest;
+      ideExtras.idDest = idDest;
       if (nfe.ind_final != null) ideExtras.indFinal = nfe.ind_final;
       if (nfe.ind_pres != null) ideExtras.indPres = nfe.ind_pres;
-      if (nfe.tp_nf != null) ideExtras.tpNF = nfe.tp_nf;
+      ideExtras.tpNF = tpNF;
+      ideExtras.tp_nf = tpNF;
+      ideExtras.tipo = tpNF;
+      ideExtras.TPNF = tpNF;
       Object.assign(ideExtras, payloadEntrada.ide || {});
+      // Garante que tpNF do payload_entrada.ide não sobreponha se vier nulo/errado
+      if (payloadEntrada.ide?.tpNF == null && payloadEntrada.ide?.tp_nf == null) {
+        ideExtras.tpNF = tpNF;
+        ideExtras.tp_nf = tpNF;
+        ideExtras.tipo = tpNF;
+        ideExtras.TPNF = tpNF;
+      }
 
       // Endereço de entrega (quando diferente do destinatário) — aceita aliases ERP
       const entregaSrc = nfe.entrega || payloadEntrada.entrega || payloadEntrada.endereco_entrega || null;
@@ -1618,6 +1689,7 @@ Deno.serve(async (req) => {
             ? { CPF: (empresa.cpf || '').replace(/\D/g, '') }
             : { CNPJ: (empresa.cnpj || '').replace(/\D/g, '') }),
         },
+        ...(nfe.xml_envio ? { xml_envio: nfe.xml_envio } : {}),
       };
 
       const temReformaNfe = !!(empresa as any)?.enviar_ibs_cbs && ((nfe.nfe_itens || []).some((it: any) => itemTemReformaTributaria(it))
@@ -2144,6 +2216,7 @@ function buildNfUpdateData(responseData: any): any {
   const codigoRetorno = responseData.codigo_retorno || responseData.cStat || responseData.code;
   const motivoRetorno = responseData.motivo_retorno || responseData.xMotivo || responseData.motivo || responseData.message;
   const xmlRetorno = normalizeFiscalXml(responseData.xml_retorno || responseData.xml || responseData.xmlRetorno || responseData.procNFe || responseData.nfeProc);
+  const xmlEnvio = normalizeFiscalXml(responseData.xml_envio || responseData.xmlEnvio || responseData.xmlEnvioBase64);
   const qrcodeUrl = responseData.qrcode_url || responseData.qrcode || responseData.urlQRCode || responseData.qr_code || responseData.qrCode || responseData.url_qrcode;
   const dataAutorizacao = responseData.data_autorizacao || responseData.dhRecbto || responseData.data_recebimento;
 
@@ -2152,6 +2225,7 @@ function buildNfUpdateData(responseData: any): any {
   if (codigoRetorno) updateData.codigo_retorno = codigoRetorno;
   if (motivoRetorno) updateData.motivo_retorno = motivoRetorno;
   if (xmlRetorno) updateData.xml_retorno = xmlRetorno;
+  if (xmlEnvio) updateData.xml_envio = xmlEnvio;
   if (qrcodeUrl) updateData.qrcode_url = qrcodeUrl;
   if (dataAutorizacao) updateData.data_autorizacao = dataAutorizacao;
 
