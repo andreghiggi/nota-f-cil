@@ -1434,10 +1434,16 @@ Deno.serve(async (req) => {
       if (nfe.ind_final != null) ideExtras.indFinal = nfe.ind_final;
       if (nfe.ind_pres != null) ideExtras.indPres = nfe.ind_pres;
       ideExtras.tpNF = tpNF;
+      ideExtras.tp_nf = tpNF;
+      ideExtras.tipo = tpNF;
+      ideExtras.TPNF = tpNF;
       Object.assign(ideExtras, payloadEntrada.ide || {});
       // Garante que tpNF do payload_entrada.ide não sobreponha se vier nulo/errado
       if (payloadEntrada.ide?.tpNF == null && payloadEntrada.ide?.tp_nf == null) {
         ideExtras.tpNF = tpNF;
+        ideExtras.tp_nf = tpNF;
+        ideExtras.tipo = tpNF;
+        ideExtras.TPNF = tpNF;
       }
 
       // Endereço de entrega (quando diferente do destinatário) — aceita aliases ERP
