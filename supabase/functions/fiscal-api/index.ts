@@ -1390,14 +1390,55 @@ Deno.serve(async (req) => {
       // ===== Blocos adicionais (ide extras, entrega, transp, infAdic, infRespTec) =====
       const payloadEntrada = nfe.payload_entrada || {};
 
+      // --- tpNF: prioridade 1) payload_entrada.tp_nf/tpNF, 2) nfe.tp_nf, 3) derivar do CFOP ---
+      const itensParaDerivacao = Object.values(itensObj).map((it: any) => ({ cfop: it.cfop }));
+      const { tpNF: tpNFDerivado, erro: erroCfop } = derivarTpNF(itensParaDerivacao);
+      if (erroCfop) {
+        await supabase.from('nfe').update({
+          status: 'rejeitada',
+          erro_processamento: erroCfop,
+          motivo_retorno: erroCfop,
+        }).eq('id', nfeId);
+        return errorResponse(erroCfop, { httpStatus: 400 });
+      }
+
+      const tpNFExplicito =
+        payloadEntrada.tp_nf !== undefined && payloadEntrada.tp_nf !== null
+          ? Number(payloadEntrada.tp_nf)
+          : payloadEntrada.tpNF !== undefined && payloadEntrada.tpNF !== null
+            ? Number(payloadEntrada.tpNF)
+            : null;
+      const tpNFBanco = nfe.tp_nf != null ? Number(nfe.tp_nf) : null;
+      const tpNF = tpNFExplicito !== null ? tpNFExplicito : (tpNFBanco !== null ? tpNFBanco : tpNFDerivado!);
+      if (tpNFExplicito !== null && tpNFDerivado !== null && tpNFExplicito !== tpNFDerivado) {
+        console.warn(`[fiscal-api] NF-e ${nfe.numero}: tpNF explicito (${tpNFExplicito}) diverge do CFOP (${tpNFDerivado}); respeitando valor do integrador`);
+      }
+      console.log(`[fiscal-api] NF-e ${nfe.numero}: tpNF=${tpNF} (explicito=${tpNFExplicito}, banco=${tpNFBanco}, derivado=${tpNFDerivado})`);
+
+      // --- idDest: derivar da UF emitente vs destinatário se não informado ---
+      let idDest = nfe.id_dest != null ? Number(nfe.id_dest) : null;
+      if (idDest == null && payloadEntrada.idDest != null) idDest = Number(payloadEntrada.idDest);
+      if (idDest == null) {
+        const ufEmit = String(empresa.uf || '').toUpperCase();
+        const ufDest = String(nfe.dest_uf || '').toUpperCase();
+        if (!ufDest || ufDest === 'EX') idDest = 3; // Exterior
+        else if (ufEmit && ufDest && ufEmit !== ufDest) idDest = 2; // Interestadual
+        else idDest = 1; // Interna
+        console.log(`[fiscal-api] NF-e ${nfe.numero}: idDest derivado=${idDest} (${ufEmit} vs ${ufDest})`);
+      }
+
       // ide opcionais
       const ideExtras: any = {};
       if (nfe.dh_sai_ent) ideExtras.dhSaiEnt = nfe.dh_sai_ent;
-      if (nfe.id_dest != null) ideExtras.idDest = nfe.id_dest;
+      ideExtras.idDest = idDest;
       if (nfe.ind_final != null) ideExtras.indFinal = nfe.ind_final;
       if (nfe.ind_pres != null) ideExtras.indPres = nfe.ind_pres;
-      if (nfe.tp_nf != null) ideExtras.tpNF = nfe.tp_nf;
+      ideExtras.tpNF = tpNF;
       Object.assign(ideExtras, payloadEntrada.ide || {});
+      // Garante que tpNF do payload_entrada.ide não sobreponha se vier nulo/errado
+      if (payloadEntrada.ide?.tpNF == null && payloadEntrada.ide?.tp_nf == null) {
+        ideExtras.tpNF = tpNF;
+      }
 
       // Endereço de entrega (quando diferente do destinatário) — aceita aliases ERP
       const entregaSrc = nfe.entrega || payloadEntrada.entrega || payloadEntrada.endereco_entrega || null;
