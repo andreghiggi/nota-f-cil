@@ -1001,6 +1001,7 @@ Deno.serve(async (req) => {
           natureza_operacao: payload.natureza_operacao || 'VENDA',
           finalidade: payload.finalidade || '1',
           modalidade_frete: String(payload.modalidade_frete ?? '9'),
+          tp_nf: payload.tp_nf ?? null,
           dest_cpf_cnpj: dest.cpf_cnpj?.replace(/\D/g, '') || null,
           dest_nome: dest.nome,
           dest_ie: dest.ie?.replace(/\D/g, '') || null,
