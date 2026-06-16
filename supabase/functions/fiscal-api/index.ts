@@ -714,15 +714,17 @@ function buildPaymentPayload(doc: any) {
     const card = p?.card ?? p?.cartao ?? p;
     const tPagRaw = firstPresent(p?.tPag, p?.tpag, p?.forma, p?.forma_pagamento, p?.tipo_pagamento, p?.codigo, '01');
     const tPag = String(tPagRaw).replace(/\D/g, '').padStart(2, '0').slice(-2) || '01';
-    // NT 2020.006: tPag=90 (sem pagamento) — vPag deve ser OMITIDO
+    // NT 2020.006: tPag=90 (sem pagamento) — vPag deve ser OMITIDO. XSD exige xPag OU vPag, então enviamos xPag.
     if (tPag === '90') {
       return {
         indPag: 0,
         tPag: '90',
+        xPag: 'Sem pagamento',
         forma_pagamento: '90',
         tipo_pagamento: '90',
       } as any;
     }
+
     const vPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, docTotal)).toFixed(2);
     const det: any = {
       indPag: Number(firstPresent(p?.indPag, p?.indpag, p?.indicador_pagamento, 0)),
