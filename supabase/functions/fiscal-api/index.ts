@@ -1456,6 +1456,12 @@ Deno.serve(async (req) => {
       ideExtras.tp_nf = tpNF;
       ideExtras.tipo = tpNF;
       ideExtras.TPNF = tpNF;
+      // natOp (B02) — usa valor persistido; PHP só lê de $nota->natOp
+      const _natOpResolved = String(
+        payloadEntrada.natOp || payloadEntrada.natureza_operacao || nfe.natureza_operacao || 'VENDA'
+      ).slice(0, 60);
+      ideExtras.natOp = _natOpResolved;
+      ideExtras.natureza_operacao = _natOpResolved;
       Object.assign(ideExtras, payloadEntrada.ide || {});
       // Garante que tpNF do payload_entrada.ide não sobreponha se vier nulo/errado
       if (payloadEntrada.ide?.tpNF == null && payloadEntrada.ide?.tp_nf == null) {
@@ -1464,6 +1470,9 @@ Deno.serve(async (req) => {
         ideExtras.tipo = tpNF;
         ideExtras.TPNF = tpNF;
       }
+      // Garante natOp mesmo se payloadEntrada.ide veio vazio
+      if (!ideExtras.natOp) ideExtras.natOp = _natOpResolved;
+      console.log(`[fiscal-api] NF-e ${nfe.numero}: natOp="${_natOpResolved}"`);
 
       // Endereço de entrega (quando diferente do destinatário) — aceita aliases ERP
       const entregaSrc = nfe.entrega || payloadEntrada.entrega || payloadEntrada.endereco_entrega || null;
