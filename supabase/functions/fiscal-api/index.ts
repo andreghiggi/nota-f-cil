@@ -713,8 +713,16 @@ function buildPaymentPayload(doc: any) {
   const detPag = sourceList.map((p: any) => {
     const card = p?.card ?? p?.cartao ?? p;
     const tPagRaw = firstPresent(p?.tPag, p?.tpag, p?.forma, p?.forma_pagamento, p?.tipo_pagamento, p?.codigo, '01');
-    const tPag = String(tPagRaw).replace(/\D/g, '').padStart(2, '0').slice(-2) || '01';
-    const vPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, docTotal)).toFixed(2);
+    let tPag = String(tPagRaw).replace(/\D/g, '').padStart(2, '0').slice(-2) || '01';
+    let rawVPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, docTotal));
+    // tPag=90 (Sem pagamento) só é válido p/ NF de valor zero; com valor > 0 SEFAZ rejeita (cStat 904).
+    // Auto-converter para tPag=99 (Outros) com vPag=valor_total.
+    if (tPag === '90' && docTotal > 0) {
+      tPag = '99';
+      if (!rawVPag || rawVPag <= 0) rawVPag = docTotal;
+    }
+    const vPag = Number(rawVPag).toFixed(2);
+
     const det: any = {
       indPag: Number(firstPresent(p?.indPag, p?.indpag, p?.indicador_pagamento, 0)),
       tPag,
@@ -724,6 +732,12 @@ function buildPaymentPayload(doc: any) {
       valor_pagamento: vPag,
       valor: vPag,
     };
+    // tPag=99 (Outros) exige xPag — SEFAZ rejeita com cStat 441 se ausente.
+    if (tPag === '99') {
+      const xPagIn = firstPresent(p?.xPag, p?.xpag, p?.descricao, p?.descricao_pagamento, 'Outros');
+      det.xPag = String(xPagIn).slice(0, 60);
+    }
+
     // Pagamentos eletrônicos exigem tpIntegra (NT 2020.006 v1.20):
     // 03/04 cartão crédito/débito, 10-13 vouchers, 17 PIX, 18 transferência bancária.
     const isCartaoReal = ['03','04','10','11','12','13'].includes(tPag);
@@ -752,14 +766,19 @@ function buildPaymentPayload(doc: any) {
     return det;
   });
 
+
   const totalPago = detPag.reduce((sum: number, pag: any) => sum + (Number(pag.vPag) || 0), 0);
   if (docTotal > 0 && totalPago + 0.009 < docTotal && detPag.length > 0) {
     const last = detPag[detPag.length - 1];
-    const corrected = Number(last.vPag || 0) + (docTotal - totalPago);
-    last.vPag = corrected.toFixed(2);
-    last.valor_pagamento = last.vPag;
-    last.valor = last.vPag;
+    // Não ajustar vPag quando tPag=90 (sem pagamento — vPag deve permanecer omitido)
+    if (last.tPag !== '90') {
+      const corrected = Number(last.vPag || 0) + (docTotal - totalPago);
+      last.vPag = corrected.toFixed(2);
+      last.valor_pagamento = last.vPag;
+      last.valor = last.vPag;
+    }
   }
+
 
   const primary = detPag[0];
   const pagamentosObj = Object.fromEntries(detPag.map((pag, idx) => [String(idx + 1), pag]));
