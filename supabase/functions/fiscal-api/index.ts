@@ -732,6 +732,12 @@ function buildPaymentPayload(doc: any) {
       valor_pagamento: vPag,
       valor: vPag,
     };
+    // tPag=99 (Outros) exige xPag — SEFAZ rejeita com cStat 441 se ausente.
+    if (tPag === '99') {
+      const xPagIn = firstPresent(p?.xPag, p?.xpag, p?.descricao, p?.descricao_pagamento, 'Outros');
+      det.xPag = String(xPagIn).slice(0, 60);
+    }
+
     // Pagamentos eletrônicos exigem tpIntegra (NT 2020.006 v1.20):
     // 03/04 cartão crédito/débito, 10-13 vouchers, 17 PIX, 18 transferência bancária.
     const isCartaoReal = ['03','04','10','11','12','13'].includes(tPag);
