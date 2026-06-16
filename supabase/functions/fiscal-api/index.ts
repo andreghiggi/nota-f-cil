@@ -713,19 +713,16 @@ function buildPaymentPayload(doc: any) {
   const detPag = sourceList.map((p: any) => {
     const card = p?.card ?? p?.cartao ?? p;
     const tPagRaw = firstPresent(p?.tPag, p?.tpag, p?.forma, p?.forma_pagamento, p?.tipo_pagamento, p?.codigo, '01');
-    const tPag = String(tPagRaw).replace(/\D/g, '').padStart(2, '0').slice(-2) || '01';
-    // NT 2020.006: tPag=90 (sem pagamento) — vPag deve ser OMITIDO. XSD exige xPag OU vPag, então enviamos xPag.
-    if (tPag === '90') {
-      return {
-        indPag: 0,
-        tPag: '90',
-        xPag: 'Sem pagamento',
-        forma_pagamento: '90',
-        tipo_pagamento: '90',
-      } as any;
+    let tPag = String(tPagRaw).replace(/\D/g, '').padStart(2, '0').slice(-2) || '01';
+    let rawVPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, docTotal));
+    // tPag=90 (Sem pagamento) só é válido p/ NF de valor zero; com valor > 0 SEFAZ rejeita (cStat 904).
+    // Auto-converter para tPag=99 (Outros) com vPag=valor_total.
+    if (tPag === '90' && docTotal > 0) {
+      tPag = '99';
+      if (!rawVPag || rawVPag <= 0) rawVPag = docTotal;
     }
+    const vPag = Number(rawVPag).toFixed(2);
 
-    const vPag = Number(firstPresent(p?.vPag, p?.vpag, p?.valor, p?.valor_pagamento, p?.total, docTotal)).toFixed(2);
     const det: any = {
       indPag: Number(firstPresent(p?.indPag, p?.indpag, p?.indicador_pagamento, 0)),
       tPag,
