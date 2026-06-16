@@ -765,11 +765,15 @@ function buildPaymentPayload(doc: any) {
   const totalPago = detPag.reduce((sum: number, pag: any) => sum + (Number(pag.vPag) || 0), 0);
   if (docTotal > 0 && totalPago + 0.009 < docTotal && detPag.length > 0) {
     const last = detPag[detPag.length - 1];
-    const corrected = Number(last.vPag || 0) + (docTotal - totalPago);
-    last.vPag = corrected.toFixed(2);
-    last.valor_pagamento = last.vPag;
-    last.valor = last.vPag;
+    // Não ajustar vPag quando tPag=90 (sem pagamento — vPag deve permanecer omitido)
+    if (last.tPag !== '90') {
+      const corrected = Number(last.vPag || 0) + (docTotal - totalPago);
+      last.vPag = corrected.toFixed(2);
+      last.valor_pagamento = last.vPag;
+      last.valor = last.vPag;
+    }
   }
+
 
   const primary = detPag[0];
   const pagamentosObj = Object.fromEntries(detPag.map((pag, idx) => [String(idx + 1), pag]));
