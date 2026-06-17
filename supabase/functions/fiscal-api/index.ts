@@ -8,7 +8,7 @@ const corsHeaders = {
 const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
 /** Conferir deploy: GET .../fiscal-api?build=1 */
-const FISCAL_API_BUILD_ID = '11jun26-tpNF-CFOP-fix';
+const FISCAL_API_BUILD_ID = '17jun26-cst51-full-dif-zero';
 
 function normalizeIbsCbsCst(raw: unknown): string {
   const digits = String(raw ?? '').replace(/\D/g, '');
@@ -165,6 +165,24 @@ function mergeItemComPayloadEntrada(
   }
 
   return merged;
+}
+
+function shouldZeroCst51(item: Record<string, unknown>): boolean {
+  return String(item.cst_icms || '') === '51' && Number(item.p_diferimento ?? item.pDif ?? 0) >= 100;
+}
+
+function zeroCst51Icms(item: Record<string, unknown>): void {
+  item.base_calculo_icms = 0;
+  item.vBC = 0;
+  item.vBC_icms = 0;
+  item.aliquota_icms = 0;
+  item.pICMS = 0;
+  item.valor_icms = 0;
+  item.vICMS = 0;
+  item.valor_icms_op = 0;
+  item.vICMSOp = 0;
+  item.valor_icms_dif = 0;
+  item.vICMSDif = 0;
 }
 
 function aplicarCamposReformaApi2(itemData: Record<string, unknown>, item: Record<string, unknown>): void {
@@ -1227,7 +1245,9 @@ Deno.serve(async (req) => {
         // ⚠️ Se o usuário ZEROU explicitamente no ERP (valor 0), respeita o zero:
         // não recalcula vBC a partir de valor_total, senão o totalizador (que respeita 0)
         // diverge do item → Rejeição 531 (Total da BC ICMS difere do somatório dos itens).
-        if (!isSimples && String(item.cst_icms || '') === '51') {
+        if (!isSimples && shouldZeroCst51(item)) {
+          zeroCst51Icms(item);
+        } else if (!isSimples && String(item.cst_icms || '') === '51') {
           // Só preenche defaults quando o campo é null/undefined, NUNCA quando é 0 explícito.
           if (item.aliquota_icms == null) item.aliquota_icms = 18;
           if (item.p_diferimento == null) item.p_diferimento = 100;
@@ -1294,13 +1314,13 @@ Deno.serve(async (req) => {
                   orig: item.origem ?? '0',
                   CST: item.cst_icms || '00',
                   modBC: '0',
-                  vBC: item.base_calculo_icms || item.valor_total || 0,
-                  pICMS: item.aliquota_icms || 0,
-                  vICMS: item.valor_icms || +(((item.base_calculo_icms || item.valor_total || 0) * (item.aliquota_icms || 0)) / 100).toFixed(2),
+                  vBC: item.base_calculo_icms ?? item.valor_total ?? 0,
+                  pICMS: item.aliquota_icms ?? 0,
+                  vICMS: item.valor_icms ?? +(((item.base_calculo_icms ?? item.valor_total ?? 0) * (item.aliquota_icms ?? 0)) / 100).toFixed(2),
                 },
               }),
           aliquota_icms: item.aliquota_icms,
-          base_calculo_icms: item.base_calculo_icms || item.valor_total || 0,
+          base_calculo_icms: item.base_calculo_icms ?? item.valor_total ?? 0,
           // ICMS extras (suporte completo a todos CSTs/CSOSNs)
           p_red_bc: item.p_red_bc || 0,
           pRedBC: item.p_red_bc || 0,
