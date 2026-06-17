@@ -1645,29 +1645,45 @@ Deno.serve(async (req) => {
           valor_produtos: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
           vProd: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
           // Bloco <total><ICMSTot> explícito (NFePHP)
+          // SEFAZ regra W04a/W04b: ICMSTot.vBC e vICMS são SOMATÓRIO dos itens,
+          // não podem ser derivados de valor_produtos — senão diferimento (CST 51)
+          // com vBC=0 nos itens dispara [531] "Total da BC ICMS difere do somatorio dos itens".
           total: {
-            ICMSTot: {
-              vBC: Number(nfe.valor_produtos || 0).toFixed(2),
-              vICMS: Number(nfe.valor_icms || 0).toFixed(2),
-              vICMSDeson: 0,
-              vFCP: 0,
-              vBCST: 0,
-              vST: 0,
-              vFCPST: 0,
-              vFCPSTRet: 0,
-              vProd: Number(nfe.valor_produtos || 0).toFixed(2),
-              vFrete: Number(nfe.valor_frete || 0).toFixed(2),
-              vSeg: Number(nfe.valor_seguro || 0).toFixed(2),
-              vDesc: Number(nfe.valor_desconto || 0).toFixed(2),
-              vII: 0,
-              vIPI: Number(nfe.valor_ipi || 0).toFixed(2),
-              vIPIDevol: 0,
-              vPIS: Number(nfe.valor_pis || 0).toFixed(2),
-              vCOFINS: Number(nfe.valor_cofins || 0).toFixed(2),
-              vOutro: Number(nfe.valor_outras_despesas || 0).toFixed(2),
-              vNF: Number(nfe.valor_total || 0).toFixed(2),
-              vTotTrib: 0,
-            },
+            ICMSTot: (() => {
+              const itArr = Object.values(itensObj) as any[];
+              const sum = (k: string) => itArr.reduce((s, it: any) => s + (Number(it?.[k]) || 0), 0);
+              const sumVBC = sum('base_calculo_icms');
+              const sumVICMS = sum('valor_icms');
+              const sumVICMSDeson = sum('valor_icms_desonerado');
+              const sumVFCP = sum('valor_fcp');
+              const sumVBCST = sum('base_calculo_icms_st');
+              const sumVST = sum('valor_icms_st');
+              const sumVIPI = itArr.reduce((s, it: any) => s + (Number(it?.valor_ipi ?? it?.vIPI) || 0), 0);
+              const sumVPIS = sum('valor_pis');
+              const sumVCOFINS = sum('valor_cofins');
+              return {
+                vBC: sumVBC.toFixed(2),
+                vICMS: sumVICMS.toFixed(2),
+                vICMSDeson: sumVICMSDeson.toFixed(2),
+                vFCP: sumVFCP.toFixed(2),
+                vBCST: sumVBCST.toFixed(2),
+                vST: sumVST.toFixed(2),
+                vFCPST: 0,
+                vFCPSTRet: 0,
+                vProd: Number(nfe.valor_produtos || 0).toFixed(2),
+                vFrete: Number(nfe.valor_frete || 0).toFixed(2),
+                vSeg: Number(nfe.valor_seguro || 0).toFixed(2),
+                vDesc: Number(nfe.valor_desconto || 0).toFixed(2),
+                vII: 0,
+                vIPI: (Number(nfe.valor_ipi) || sumVIPI).toFixed(2),
+                vIPIDevol: 0,
+                vPIS: (Number(nfe.valor_pis) || sumVPIS).toFixed(2),
+                vCOFINS: (Number(nfe.valor_cofins) || sumVCOFINS).toFixed(2),
+                vOutro: Number(nfe.valor_outras_despesas || 0).toFixed(2),
+                vNF: Number(nfe.valor_total || 0).toFixed(2),
+                vTotTrib: 0,
+              };
+            })(),
           },
           natureza_operacao: nfe.natureza_operacao || 'VENDA',
           finalidade: nfe.finalidade || '1',
