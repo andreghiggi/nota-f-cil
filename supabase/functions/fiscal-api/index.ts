@@ -1245,7 +1245,9 @@ Deno.serve(async (req) => {
         // ⚠️ Se o usuário ZEROU explicitamente no ERP (valor 0), respeita o zero:
         // não recalcula vBC a partir de valor_total, senão o totalizador (que respeita 0)
         // diverge do item → Rejeição 531 (Total da BC ICMS difere do somatório dos itens).
-        if (!isSimples && String(item.cst_icms || '') === '51') {
+        if (!isSimples && shouldZeroCst51(item)) {
+          zeroCst51Icms(item);
+        } else if (!isSimples && String(item.cst_icms || '') === '51') {
           // Só preenche defaults quando o campo é null/undefined, NUNCA quando é 0 explícito.
           if (item.aliquota_icms == null) item.aliquota_icms = 18;
           if (item.p_diferimento == null) item.p_diferimento = 100;
@@ -1312,13 +1314,13 @@ Deno.serve(async (req) => {
                   orig: item.origem ?? '0',
                   CST: item.cst_icms || '00',
                   modBC: '0',
-                  vBC: item.base_calculo_icms || item.valor_total || 0,
-                  pICMS: item.aliquota_icms || 0,
-                  vICMS: item.valor_icms || +(((item.base_calculo_icms || item.valor_total || 0) * (item.aliquota_icms || 0)) / 100).toFixed(2),
+                  vBC: item.base_calculo_icms ?? item.valor_total ?? 0,
+                  pICMS: item.aliquota_icms ?? 0,
+                  vICMS: item.valor_icms ?? +(((item.base_calculo_icms ?? item.valor_total ?? 0) * (item.aliquota_icms ?? 0)) / 100).toFixed(2),
                 },
               }),
           aliquota_icms: item.aliquota_icms,
-          base_calculo_icms: item.base_calculo_icms || item.valor_total || 0,
+          base_calculo_icms: item.base_calculo_icms ?? item.valor_total ?? 0,
           // ICMS extras (suporte completo a todos CSTs/CSOSNs)
           p_red_bc: item.p_red_bc || 0,
           pRedBC: item.p_red_bc || 0,
