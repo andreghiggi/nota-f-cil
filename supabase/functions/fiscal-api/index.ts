@@ -1220,20 +1220,22 @@ Deno.serve(async (req) => {
         const valorTotal = Number(item.valor_total ?? quantidade * valorUnitario);
         const unidade = String(item.unidade || 'UN').trim();
 
-        // ===== Guard CST 51 (diferimento) — defesa em profundidade =====
-        // Garante pICMS > 0, pDif = 100, vBC = vProd quando o ERP enviar CST 51 sem
-        // preencher corretamente (rejeição SEFAZ por regra N17a/N12).
+        // ===== Guard CST 51 (diferimento) — autoritativo =====
+        // SEFAZ N17a/N12: para CST 51, vICMSOp = vBC*pICMS/100, vICMSDif = vICMSOp*pDif/100,
+        // vICMS = vICMSOp - vICMSDif. ERP frequentemente envia vICMSOp=0 ou vICMS calculado
+        // sem considerar diferimento. Aqui recomputamos SEMPRE para evitar rejeição.
         if (!isSimples && String(item.cst_icms || '') === '51') {
-          const aliq = Number(item.aliquota_icms) || 0;
-          if (aliq <= 0) {
-            // Fallback conservador: 18% (alíquota interna mais comum). O ERP é o
-            // responsável por enviar a alíquota real (interna/interestadual).
-            item.aliquota_icms = 18;
-          }
-          const pDif = Number(item.p_diferimento) || 0;
-          if (pDif <= 0) item.p_diferimento = 100;
-          const vbc = Number(item.base_calculo_icms) || 0;
-          if (vbc <= 0) item.base_calculo_icms = valorTotal;
+          if ((Number(item.aliquota_icms) || 0) <= 0) item.aliquota_icms = 18;
+          if ((Number(item.p_diferimento) || 0) <= 0) item.p_diferimento = 100;
+          if ((Number(item.base_calculo_icms) || 0) <= 0) item.base_calculo_icms = valorTotal;
+          const vbcCalc  = Number(item.base_calculo_icms) || 0;
+          const pIcms    = Number(item.aliquota_icms) || 0;
+          const pDifCalc = Number(item.p_diferimento) || 0;
+          const vIcmsOp  = +(vbcCalc * pIcms / 100).toFixed(2);
+          const vIcmsDif = +(vIcmsOp * pDifCalc / 100).toFixed(2);
+          item.valor_icms_op  = vIcmsOp;
+          item.valor_icms_dif = vIcmsDif;
+          item.valor_icms     = +(vIcmsOp - vIcmsDif).toFixed(2);
         }
         const itemData: any = {
           descricao: descProduto,
