@@ -1365,15 +1365,26 @@ Deno.serve(async (req) => {
           cEnq: item.c_enq_ipi || '999',
           cst_pis: item.cst_pis || '99',
           aliquota_pis: item.aliquota_pis ?? 0,
-          base_calculo_pis: item.base_calculo_pis ?? item.valor_total ?? 0,
+          // Se ERP zerou alíquota e valor de PIS, zera a base também (respeita PIS isento/não-tributado)
+          base_calculo_pis: ((Number(item.aliquota_pis) || 0) === 0 && (Number(item.valor_pis) || 0) === 0)
+            ? 0
+            : (item.base_calculo_pis ?? item.valor_total ?? 0),
+          valor_pis: item.valor_pis ?? 0,
           cst_cofins: item.cst_cofins || '99',
           aliquota_cofins: item.aliquota_cofins ?? 0,
-          base_calculo_cofins: item.base_calculo_cofins ?? item.valor_total ?? 0,
+          base_calculo_cofins: ((Number(item.aliquota_cofins) || 0) === 0 && (Number(item.valor_cofins) || 0) === 0)
+            ? 0
+            : (item.base_calculo_cofins ?? item.valor_total ?? 0),
+          valor_cofins: item.valor_cofins ?? 0,
           // PHP NFePHP field names
-          vBC_pis: item.base_calculo_pis ?? valorTotal ?? 0,
+          vBC_pis: ((Number(item.aliquota_pis) || 0) === 0 && (Number(item.valor_pis) || 0) === 0)
+            ? 0
+            : (item.base_calculo_pis ?? valorTotal ?? 0),
           pPIS: item.aliquota_pis ?? 0,
           vPIS: item.valor_pis ?? 0,
-          vBC_cofins: item.base_calculo_cofins ?? valorTotal ?? 0,
+          vBC_cofins: ((Number(item.aliquota_cofins) || 0) === 0 && (Number(item.valor_cofins) || 0) === 0)
+            ? 0
+            : (item.base_calculo_cofins ?? valorTotal ?? 0),
           pCOFINS: item.aliquota_cofins ?? 0,
           vCOFINS: item.valor_cofins ?? 0,
           vBC_icms: item.base_calculo_icms ?? valorTotal ?? 0,
@@ -1697,8 +1708,8 @@ Deno.serve(async (req) => {
                 vII: 0,
                 vIPI: (Number(nfe.valor_ipi) || sumVIPI).toFixed(2),
                 vIPIDevol: 0,
-                vPIS: (Number(nfe.valor_pis) || sumVPIS).toFixed(2),
-                vCOFINS: (Number(nfe.valor_cofins) || sumVCOFINS).toFixed(2),
+                vPIS: (Number(nfe.valor_pis ?? sumVPIS) || 0).toFixed(2),
+                vCOFINS: (Number(nfe.valor_cofins ?? sumVCOFINS) || 0).toFixed(2),
                 vOutro: Number(nfe.valor_outras_despesas || 0).toFixed(2),
                 vNF: Number(nfe.valor_total || 0).toFixed(2),
                 vTotTrib: 0,
