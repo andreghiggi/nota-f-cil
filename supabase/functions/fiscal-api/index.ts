@@ -461,6 +461,23 @@ function normalizeXmlForDanfe(raw: any): string {
       .replace(/&amp;/g, '&');
   }
 
+  // Aceita data-URI (data:application/xml;base64,XXXX ou data:text/xml,<xml>)
+  if (/^data:[^;,]+(;[^,]+)?,/i.test(xml)) {
+    const commaIdx = xml.indexOf(',');
+    const meta = xml.slice(0, commaIdx).toLowerCase();
+    const payload = xml.slice(commaIdx + 1);
+    if (meta.includes(';base64')) {
+      try {
+        const bin = atob(payload.replace(/\s+/g, ''));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        xml = new TextDecoder('utf-8').decode(bytes).trim();
+      } catch { /* keep */ }
+    } else {
+      try { xml = decodeURIComponent(payload).trim(); } catch { xml = payload.trim(); }
+    }
+  }
+
   const compact = xml.replace(/\s+/g, '');
   if (!xml.startsWith('<') && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length > 40) {
     try {
@@ -1202,6 +1219,22 @@ Deno.serve(async (req) => {
         const valorUnitario = Number(item.valor_unitario) || 0;
         const valorTotal = Number(item.valor_total ?? quantidade * valorUnitario);
         const unidade = String(item.unidade || 'UN').trim();
+
+        // ===== Guard CST 51 (diferimento) — defesa em profundidade =====
+        // Garante pICMS > 0, pDif = 100, vBC = vProd quando o ERP enviar CST 51 sem
+        // preencher corretamente (rejeição SEFAZ por regra N17a/N12).
+        if (!isSimples && String(item.cst_icms || '') === '51') {
+          const aliq = Number(item.aliquota_icms) || 0;
+          if (aliq <= 0) {
+            // Fallback conservador: 18% (alíquota interna mais comum). O ERP é o
+            // responsável por enviar a alíquota real (interna/interestadual).
+            item.aliquota_icms = 18;
+          }
+          const pDif = Number(item.p_diferimento) || 0;
+          if (pDif <= 0) item.p_diferimento = 100;
+          const vbc = Number(item.base_calculo_icms) || 0;
+          if (vbc <= 0) item.base_calculo_icms = valorTotal;
+        }
         const itemData: any = {
           descricao: descProduto,
           descricao_produto: descProduto,
