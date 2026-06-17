@@ -1222,12 +1222,16 @@ Deno.serve(async (req) => {
 
         // ===== Guard CST 51 (diferimento) — autoritativo =====
         // SEFAZ N17a/N12: para CST 51, vICMSOp = vBC*pICMS/100, vICMSDif = vICMSOp*pDif/100,
-        // vICMS = vICMSOp - vICMSDif. ERP frequentemente envia vICMSOp=0 ou vICMS calculado
-        // sem considerar diferimento. Aqui recomputamos SEMPRE para evitar rejeição.
+        // vICMS = vICMSOp - vICMSDif. ERP pode enviar vICMSOp=0 ou vICMS calculado
+        // sem considerar diferimento — recomputamos só quando os campos vieram null/undefined.
+        // ⚠️ Se o usuário ZEROU explicitamente no ERP (valor 0), respeita o zero:
+        // não recalcula vBC a partir de valor_total, senão o totalizador (que respeita 0)
+        // diverge do item → Rejeição 531 (Total da BC ICMS difere do somatório dos itens).
         if (!isSimples && String(item.cst_icms || '') === '51') {
-          if ((Number(item.aliquota_icms) || 0) <= 0) item.aliquota_icms = 18;
-          if ((Number(item.p_diferimento) || 0) <= 0) item.p_diferimento = 100;
-          if ((Number(item.base_calculo_icms) || 0) <= 0) item.base_calculo_icms = valorTotal;
+          // Só preenche defaults quando o campo é null/undefined, NUNCA quando é 0 explícito.
+          if (item.aliquota_icms == null) item.aliquota_icms = 18;
+          if (item.p_diferimento == null) item.p_diferimento = 100;
+          if (item.base_calculo_icms == null) item.base_calculo_icms = valorTotal;
           const vbcCalc  = Number(item.base_calculo_icms) || 0;
           const pIcms    = Number(item.aliquota_icms) || 0;
           const pDifCalc = Number(item.p_diferimento) || 0;
