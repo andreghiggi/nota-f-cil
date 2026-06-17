@@ -1219,6 +1219,22 @@ Deno.serve(async (req) => {
         const valorUnitario = Number(item.valor_unitario) || 0;
         const valorTotal = Number(item.valor_total ?? quantidade * valorUnitario);
         const unidade = String(item.unidade || 'UN').trim();
+
+        // ===== Guard CST 51 (diferimento) — defesa em profundidade =====
+        // Garante pICMS > 0, pDif = 100, vBC = vProd quando o ERP enviar CST 51 sem
+        // preencher corretamente (rejeição SEFAZ por regra N17a/N12).
+        if (!isSimples && String(item.cst_icms || '') === '51') {
+          const aliq = Number(item.aliquota_icms) || 0;
+          if (aliq <= 0) {
+            // Fallback conservador: 18% (alíquota interna mais comum). O ERP é o
+            // responsável por enviar a alíquota real (interna/interestadual).
+            item.aliquota_icms = 18;
+          }
+          const pDif = Number(item.p_diferimento) || 0;
+          if (pDif <= 0) item.p_diferimento = 100;
+          const vbc = Number(item.base_calculo_icms) || 0;
+          if (vbc <= 0) item.base_calculo_icms = valorTotal;
+        }
         const itemData: any = {
           descricao: descProduto,
           descricao_produto: descProduto,
