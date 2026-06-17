@@ -461,6 +461,23 @@ function normalizeXmlForDanfe(raw: any): string {
       .replace(/&amp;/g, '&');
   }
 
+  // Aceita data-URI (data:application/xml;base64,XXXX ou data:text/xml,<xml>)
+  if (/^data:[^;,]+(;[^,]+)?,/i.test(xml)) {
+    const commaIdx = xml.indexOf(',');
+    const meta = xml.slice(0, commaIdx).toLowerCase();
+    const payload = xml.slice(commaIdx + 1);
+    if (meta.includes(';base64')) {
+      try {
+        const bin = atob(payload.replace(/\s+/g, ''));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        xml = new TextDecoder('utf-8').decode(bytes).trim();
+      } catch { /* keep */ }
+    } else {
+      try { xml = decodeURIComponent(payload).trim(); } catch { xml = payload.trim(); }
+    }
+  }
+
   const compact = xml.replace(/\s+/g, '');
   if (!xml.startsWith('<') && /^[A-Za-z0-9+/=]+$/.test(compact) && compact.length > 40) {
     try {
