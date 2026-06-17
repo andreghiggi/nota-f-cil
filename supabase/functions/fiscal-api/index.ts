@@ -1331,26 +1331,28 @@ Deno.serve(async (req) => {
           vICMSST: item.valor_icms_st || 0,
           cst_ipi: item.cst_ipi || '99',
           aliquota_ipi: item.aliquota_ipi ?? 0,
-          base_calculo_ipi: item.base_calculo_ipi || item.valor_total || 0,
-          valor_ipi: item.valor_ipi ?? +(((item.base_calculo_ipi || item.valor_total || 0) * (item.aliquota_ipi || 0)) / 100).toFixed(2),
-          vIPI: item.valor_ipi ?? +(((item.base_calculo_ipi || item.valor_total || 0) * (item.aliquota_ipi || 0)) / 100).toFixed(2),
-          valor_ipi_total: item.valor_ipi ?? +(((item.base_calculo_ipi || item.valor_total || 0) * (item.aliquota_ipi || 0)) / 100).toFixed(2),
+          // ⚠️ Usar ?? (não ||) para respeitar zeros explícitos vindos do ERP.
+          // Se o usuário zerou no ERP, o XML DEVE sair zerado.
+          base_calculo_ipi: item.base_calculo_ipi ?? item.valor_total ?? 0,
+          valor_ipi: item.valor_ipi ?? +(((item.base_calculo_ipi ?? item.valor_total ?? 0) * (item.aliquota_ipi ?? 0)) / 100).toFixed(2),
+          vIPI: item.valor_ipi ?? +(((item.base_calculo_ipi ?? item.valor_total ?? 0) * (item.aliquota_ipi ?? 0)) / 100).toFixed(2),
+          valor_ipi_total: item.valor_ipi ?? +(((item.base_calculo_ipi ?? item.valor_total ?? 0) * (item.aliquota_ipi ?? 0)) / 100).toFixed(2),
           c_enq_ipi: item.c_enq_ipi || '999',
           cEnq: item.c_enq_ipi || '999',
           cst_pis: item.cst_pis || '99',
           aliquota_pis: item.aliquota_pis ?? 0,
-          base_calculo_pis: item.base_calculo_pis || item.valor_total || 0,
+          base_calculo_pis: item.base_calculo_pis ?? item.valor_total ?? 0,
           cst_cofins: item.cst_cofins || '99',
           aliquota_cofins: item.aliquota_cofins ?? 0,
-          base_calculo_cofins: item.base_calculo_cofins || item.valor_total || 0,
+          base_calculo_cofins: item.base_calculo_cofins ?? item.valor_total ?? 0,
           // PHP NFePHP field names
-          vBC_pis: item.base_calculo_pis || valorTotal || 0,
+          vBC_pis: item.base_calculo_pis ?? valorTotal ?? 0,
           pPIS: item.aliquota_pis ?? 0,
           vPIS: item.valor_pis ?? 0,
-          vBC_cofins: item.base_calculo_cofins || valorTotal || 0,
+          vBC_cofins: item.base_calculo_cofins ?? valorTotal ?? 0,
           pCOFINS: item.aliquota_cofins ?? 0,
           vCOFINS: item.valor_cofins ?? 0,
-          vBC_icms: item.base_calculo_icms || valorTotal || 0,
+          vBC_icms: item.base_calculo_icms ?? valorTotal ?? 0,
         };
 
         // IBS/CBS (Reforma Tributária) — Grupo UB oficial NFe 4.00
