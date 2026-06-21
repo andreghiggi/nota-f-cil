@@ -117,6 +117,199 @@ export type Database = {
           },
         ]
       }
+      dfe_distribuicao_controle: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          empresa_id: string
+          id: string
+          intervalo_minutos: number
+          max_nsu: number
+          ultima_consulta: string | null
+          ultimo_erro: string | null
+          ultimo_nsu: number
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          empresa_id: string
+          id?: string
+          intervalo_minutos?: number
+          max_nsu?: number
+          ultima_consulta?: string | null
+          ultimo_erro?: string | null
+          ultimo_nsu?: number
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          empresa_id?: string
+          id?: string
+          intervalo_minutos?: number
+          max_nsu?: number
+          ultima_consulta?: string | null
+          ultimo_erro?: string | null
+          ultimo_nsu?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dfe_distribuicao_controle_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dfe_eventos: {
+        Row: {
+          chave_acesso: string
+          codigo_retorno: string | null
+          created_at: string
+          dfe_id: string | null
+          empresa_id: string
+          id: string
+          justificativa: string | null
+          motivo_retorno: string | null
+          protocolo: string | null
+          tp_evento: string
+          xml_envio: string | null
+          xml_retorno: string | null
+        }
+        Insert: {
+          chave_acesso: string
+          codigo_retorno?: string | null
+          created_at?: string
+          dfe_id?: string | null
+          empresa_id: string
+          id?: string
+          justificativa?: string | null
+          motivo_retorno?: string | null
+          protocolo?: string | null
+          tp_evento: string
+          xml_envio?: string | null
+          xml_retorno?: string | null
+        }
+        Update: {
+          chave_acesso?: string
+          codigo_retorno?: string | null
+          created_at?: string
+          dfe_id?: string | null
+          empresa_id?: string
+          id?: string
+          justificativa?: string | null
+          motivo_retorno?: string | null
+          protocolo?: string | null
+          tp_evento?: string
+          xml_envio?: string | null
+          xml_retorno?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dfe_eventos_dfe_id_fkey"
+            columns: ["dfe_id"]
+            isOneToOne: false
+            referencedRelation: "dfe_recebidas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "dfe_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dfe_recebidas: {
+        Row: {
+          chave_acesso: string
+          cnpj_emitente: string | null
+          created_at: string
+          data_emissao: string | null
+          data_manifestacao: string | null
+          digest_value: string | null
+          empresa_id: string
+          id: string
+          ie_emitente: string | null
+          nome_emitente: string | null
+          nsu: number
+          numero_nfe: string | null
+          raw: Json | null
+          schema: string | null
+          serie: string | null
+          situacao_nfe: string | null
+          status_manifestacao: string
+          tipo: string
+          tp_nf: number | null
+          updated_at: string
+          valor_total: number | null
+          xml_completo: string | null
+          xml_resumo: string | null
+        }
+        Insert: {
+          chave_acesso: string
+          cnpj_emitente?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          data_manifestacao?: string | null
+          digest_value?: string | null
+          empresa_id: string
+          id?: string
+          ie_emitente?: string | null
+          nome_emitente?: string | null
+          nsu: number
+          numero_nfe?: string | null
+          raw?: Json | null
+          schema?: string | null
+          serie?: string | null
+          situacao_nfe?: string | null
+          status_manifestacao?: string
+          tipo?: string
+          tp_nf?: number | null
+          updated_at?: string
+          valor_total?: number | null
+          xml_completo?: string | null
+          xml_resumo?: string | null
+        }
+        Update: {
+          chave_acesso?: string
+          cnpj_emitente?: string | null
+          created_at?: string
+          data_emissao?: string | null
+          data_manifestacao?: string | null
+          digest_value?: string | null
+          empresa_id?: string
+          id?: string
+          ie_emitente?: string | null
+          nome_emitente?: string | null
+          nsu?: number
+          numero_nfe?: string | null
+          raw?: Json | null
+          schema?: string | null
+          serie?: string | null
+          situacao_nfe?: string | null
+          status_manifestacao?: string
+          tipo?: string
+          tp_nf?: number | null
+          updated_at?: string
+          valor_total?: number | null
+          xml_completo?: string | null
+          xml_resumo?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dfe_recebidas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       empresas: {
         Row: {
           ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
