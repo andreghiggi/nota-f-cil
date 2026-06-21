@@ -315,6 +315,7 @@ Deno.serve(async (req) => {
 
     // ---------- GET /dfe-api?status=&limit=&offset= ----------
     if (method === 'GET' && sub.length === 0) {
+      const denied = requirePerm('consultar_dfe'); if (denied) return denied;
       const status = url.searchParams.get('status');
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
       const offset = parseInt(url.searchParams.get('offset') || '0');
