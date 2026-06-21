@@ -58,9 +58,9 @@ function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Re
   const cst = normalizeIbsCbsCst(cstIbsCbs);
   const cClassTrib = normalizeCClassTrib(item.c_class_trib ?? item.cClassTrib);
   const vbc = +vbcIbsCbs.toFixed(2);
-  const vIbsUf = Number(item.valor_ibs_uf ?? +(vbc * aliqIbsUf / 100).toFixed(2));
-  const vIbsMun = Number(item.valor_ibs_mun ?? +(vbc * aliqIbsMun / 100).toFixed(2));
-  const vCbs = Number(item.valor_cbs ?? +(vbc * aliqCbs / 100).toFixed(2));
+  const vIbsUf = +(Number(item.valor_ibs_uf ?? (vbc * aliqIbsUf / 100))).toFixed(2);
+  const vIbsMun = +(Number(item.valor_ibs_mun ?? (vbc * aliqIbsMun / 100))).toFixed(2);
+  const vCbs = +(Number(item.valor_cbs ?? (vbc * aliqCbs / 100))).toFixed(2);
 
   const gIBSUF: Record<string, unknown> = {
     vBC: vbc,
