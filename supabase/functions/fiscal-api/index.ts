@@ -185,6 +185,24 @@ function zeroCst51Icms(item: Record<string, unknown>): void {
   item.vICMSDif = 0;
 }
 
+function isCsosnSemBaseIcms(item: Record<string, unknown>): boolean {
+  return ['102', '103', '300', '400'].includes(String(item.csosn || item.CSOSN || '').replace(/\D/g, ''));
+}
+
+function zeroIcmsSimplesSemPermissaoCredito(item: Record<string, unknown>): void {
+  item.base_calculo_icms = 0;
+  item.vBC = 0;
+  item.vBC_icms = 0;
+  item.aliquota_icms = 0;
+  item.pICMS = 0;
+  item.valor_icms = 0;
+  item.vICMS = 0;
+  item.valor_cred_icms_sn = 0;
+  item.vCredICMSSN = 0;
+  item.p_cred_sn = 0;
+  item.pCredSN = 0;
+}
+
 function aplicarCamposReformaApi2(itemData: Record<string, unknown>, item: Record<string, unknown>): void {
   const cst = String(item.cst_ibs_cbs ?? item.cst_cbs ?? item.cst_ibs ?? '').trim();
   const aliqCbs = Number(item.aliquota_cbs ?? 0);
