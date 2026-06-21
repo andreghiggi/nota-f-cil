@@ -2296,6 +2296,13 @@ Deno.serve(async (req) => {
 
       const detCount = (xml.match(/<det\s/gi) || []).length;
       const compactDanfe = detCount > 120;
+      // Orientação: respeita o que o ERP/usuário pediu; default = Retrato (P).
+      // Modo compacto é independente da orientação — funciona em P e em L.
+      const orientacaoReq = String(body?.orientacao ?? 'P').toUpperCase();
+      const orientacao = orientacaoReq === 'L' ? 'L' : 'P';
+      const mostrarCanhoto = body?.mostrar_canhoto !== undefined
+        ? !!body.mostrar_canhoto
+        : !compactDanfe;
 
       let phpResponse: Response;
       let phpText = '';
@@ -2306,9 +2313,9 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             xml,
             tipo: 'base64',
-            orientacao: compactDanfe ? 'L' : 'P',
+            orientacao,
             tamanho: 'A4',
-            mostrar_canhoto: !compactDanfe,
+            mostrar_canhoto: mostrarCanhoto,
             modo_compacto: compactDanfe,
           }),
         });
