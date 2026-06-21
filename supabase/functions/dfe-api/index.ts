@@ -158,20 +158,42 @@ async function syncEmpresa(supabase: any, empresaId: string, maxLoops = 10): Pro
   let lastCStat = ''; let lastMotivo = '';
   let maxNSU = ultNSU;
 
+  let retriedAuth = false;
   for (let i = 0; i < maxLoops; i++) {
-    const resp = await fetch(`${FISCAL_API_BASE_URL}/nfe/dist-dfe`, {
+    let resp = await fetch(`${FISCAL_API_BASE_URL}/nfe/dist-dfe`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ ultNSU, api_key: apiKey })
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${got.apiKey}` },
+      body: JSON.stringify({ ultNSU, api_key: got.apiKey })
     });
-    const text = await resp.text();
+    let text = await resp.text();
     let json: any; try { json = JSON.parse(text); } catch { json = { raw: text }; }
+    const errMsg = String(json?.error || json?.erro || '');
+    // Auto-recovery: api2 não reconhece a api_key → re-registra empresa e tenta de novo (uma vez)
+    if (!retriedAuth && (resp.status === 401 || /api\s*key\s*inv[aá]lida/i.test(errMsg))) {
+      retriedAuth = true;
+      const re = await ensureApiKey(supabase, empresaId, true);
+      if ('error' in re) {
+        await supabase.from('dfe_distribuicao_controle')
+          .update({ ultimo_erro: ('re-register falhou: ' + re.error).substring(0, 500), ultima_consulta: new Date().toISOString() })
+          .eq('empresa_id', empresaId);
+        return { error: 're-register falhou: ' + re.error };
+      }
+      got.apiKey = re.apiKey;
+      resp = await fetch(`${FISCAL_API_BASE_URL}/nfe/dist-dfe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${got.apiKey}` },
+        body: JSON.stringify({ ultNSU, api_key: got.apiKey })
+      });
+      text = await resp.text();
+      try { json = JSON.parse(text); } catch { json = { raw: text }; }
+    }
     if (!resp.ok || json.sucesso === false || json.error) {
       await supabase.from('dfe_distribuicao_controle')
-        .update({ ultimo_erro: (json.error || text).substring(0, 500), ultima_consulta: new Date().toISOString() })
+        .update({ ultimo_erro: (json.error || json.erro || text).substring(0, 500), ultima_consulta: new Date().toISOString() })
         .eq('empresa_id', empresaId);
-      return { error: json.error || `api2 status ${resp.status}: ${text.substring(0, 300)}` };
+      return { error: json.error || json.erro || `api2 status ${resp.status}: ${text.substring(0, 300)}` };
     }
+
     const payload = json.dados || json.data || json;
     lastCStat = String(payload.cStat || '');
     lastMotivo = String(payload.xMotivo || '');
