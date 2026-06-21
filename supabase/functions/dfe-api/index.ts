@@ -45,12 +45,14 @@ async function ensureApiKey(supabase: any, empresaId: string, forceRegister = fa
   }
   // dispara o registro via fiscal-api para garantir / re-emitir api_key no api2
   const { data: reg } = await supabase.functions.invoke('fiscal-api', {
-    body: { action: 'register_empresa', empresa_id: empresaId, force: true }
+    body: { action: 'register_empresa', empresa_id: empresaId }
   });
-  if (reg?.api_key) {
-    await supabase.from('empresas').update({ api_key_fiscal: reg.api_key }).eq('id', empresaId);
-    return { apiKey: reg.api_key, empresa: { ...empresa, api_key_fiscal: reg.api_key } };
+  const newKey = reg?.data?.api_key || reg?.api_key;
+  if (newKey) {
+    await supabase.from('empresas').update({ api_key_fiscal: newKey }).eq('id', empresaId);
+    return { apiKey: newKey, empresa: { ...empresa, api_key_fiscal: newKey } };
   }
+
   return { error: 'Não foi possível obter api_key_fiscal' };
 }
 
