@@ -41,6 +41,7 @@ const App = () => (
             <Route path="/nfe" element={<ProtectedRoute><NFe /></ProtectedRoute>} />
             <Route path="/nfce" element={<ProtectedRoute><NFCe /></ProtectedRoute>} />
             <Route path="/mdfe" element={<ProtectedRoute><MDFe /></ProtectedRoute>} />
+            <Route path="/notas-recebidas" element={<ProtectedRoute><NotasRecebidas /></ProtectedRoute>} />
             <Route path="/certificados" element={<ProtectedRoute><Certificados /></ProtectedRoute>} />
             <Route path="/tokens" element={<ProtectedRoute><Tokens /></ProtectedRoute>} />
             <Route path="/webhooks" element={<ProtectedRoute><Webhooks /></ProtectedRoute>} />
