@@ -1862,7 +1862,7 @@ Deno.serve(async (req) => {
       for (const item of putPayload.itens) {
         const v = (item.quantidade || 0) * (item.valor_unitario || 0);
         valorProdutos += v;
-        valorIcms += v * (item.aliquota_icms || 0) / 100;
+        valorIcms += valorIcmsItem(item, v);
         valorIpi += v * (item.aliquota_ipi || 0) / 100;
         valorPis += v * (item.aliquota_pis || 0) / 100;
         valorCofins += v * (item.aliquota_cofins || 0) / 100;
@@ -1912,6 +1912,8 @@ Deno.serve(async (req) => {
       await supabase.from('nfe_itens').delete().eq('nfe_id', nfeId);
       const itensToInsert = putPayload.itens.map((item, index) => {
         const v = (item.quantidade || 0) * (item.valor_unitario || 0);
+        const baseIcms = baseIcmsItem(item, v);
+        const valorIcmsDoItem = valorIcmsItem(item, v);
         const vbcIbsCbs = item.vbc_ibs_cbs ?? v;
         const aliqIbsUf = item.p_aliq_efet_ibs_uf || item.aliquota_ibs_uf || 0;
         const aliqIbsMun = item.p_aliq_efet_ibs_mun || item.aliquota_ibs_mun || 0;
@@ -1925,8 +1927,8 @@ Deno.serve(async (req) => {
           quantidade: item.quantidade, valor_unitario: item.valor_unitario, valor_total: v,
           cst_icms: item.cst_icms, csosn: item.csosn,
           aliquota_icms: item.aliquota_icms || 0,
-          base_calculo_icms: item.base_calculo_icms || v,
-          valor_icms: v * (item.aliquota_icms || 0) / 100,
+          base_calculo_icms: baseIcms,
+          valor_icms: valorIcmsDoItem,
           cst_ipi: item.cst_ipi, aliquota_ipi: item.aliquota_ipi || 0,
           base_calculo_ipi: item.base_calculo_ipi || v,
           valor_ipi: (item.base_calculo_ipi || v) * (item.aliquota_ipi || 0) / 100,
