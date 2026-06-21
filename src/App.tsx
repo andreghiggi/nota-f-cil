@@ -12,6 +12,7 @@ import Onboarding from "./pages/Onboarding";
 import NFCe from "./pages/NFCe";
 import NFe from "./pages/NFe";
 import MDFe from "./pages/MDFe";
+import NotasRecebidas from "./pages/NotasRecebidas";
 import Certificados from "./pages/Certificados";
 import Tokens from "./pages/Tokens";
 import Webhooks from "./pages/Webhooks";
