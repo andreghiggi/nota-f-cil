@@ -58,9 +58,9 @@ function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Re
   const cst = normalizeIbsCbsCst(cstIbsCbs);
   const cClassTrib = normalizeCClassTrib(item.c_class_trib ?? item.cClassTrib);
   const vbc = +vbcIbsCbs.toFixed(2);
-  const vIbsUf = Number(item.valor_ibs_uf ?? +(vbc * aliqIbsUf / 100).toFixed(2));
-  const vIbsMun = Number(item.valor_ibs_mun ?? +(vbc * aliqIbsMun / 100).toFixed(2));
-  const vCbs = Number(item.valor_cbs ?? +(vbc * aliqCbs / 100).toFixed(2));
+  const vIbsUf = +(Number(item.valor_ibs_uf ?? (vbc * aliqIbsUf / 100))).toFixed(2);
+  const vIbsMun = +(Number(item.valor_ibs_mun ?? (vbc * aliqIbsMun / 100))).toFixed(2);
+  const vCbs = +(Number(item.valor_cbs ?? (vbc * aliqCbs / 100))).toFixed(2);
 
   const gIBSUF: Record<string, unknown> = {
     vBC: vbc,
@@ -1815,15 +1815,19 @@ Deno.serve(async (req) => {
         payload.reforma_tributaria = true;
         payload.IBSCBS_habilitado = true;
         const ibsCbsItens = Object.values(itensObj).filter((it: any) => it.ibs_cbs) as any[];
-        const vBCIBSCBS = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.vBC ?? it.vbc_ibs_cbs ?? it.valor_total ?? 0), 0);
-        const vIBSUF = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.gIBSUF?.vIBSUF ?? it.valor_ibs_uf ?? 0), 0);
-        const vIBSMun = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.gIBSMun?.vIBSMun ?? it.valor_ibs_mun ?? 0), 0);
-        const vCBS = ibsCbsItens.reduce((sum: number, it: any) => sum + Number(it.ibs_cbs?.gCBS?.vCBS ?? it.valor_cbs ?? 0), 0);
+        // SEFAZ rejeita [1080] se o total IBS/CBS no <total> diferir da soma dos itens NO XML.
+        // O XML serializa cada vIBSUF/vIBSMun/vCBS do item com 2 casas (TDec_1302).
+        // Logo o total precisa ser a soma dos valores JÁ ARREDONDADOS por item, não a soma crua.
+        const r2 = (n: number) => Math.round(n * 100) / 100;
+        const vBCIBSCBS = ibsCbsItens.reduce((s: number, it: any) => s + r2(Number(it.ibs_cbs?.vBC ?? it.vbc_ibs_cbs ?? it.valor_total ?? 0)), 0);
+        const vIBSUF = ibsCbsItens.reduce((s: number, it: any) => s + r2(Number(it.ibs_cbs?.gIBSUF?.vIBSUF ?? it.valor_ibs_uf ?? 0)), 0);
+        const vIBSMun = ibsCbsItens.reduce((s: number, it: any) => s + r2(Number(it.ibs_cbs?.gIBSMun?.vIBSMun ?? it.valor_ibs_mun ?? 0)), 0);
+        const vCBS = ibsCbsItens.reduce((s: number, it: any) => s + r2(Number(it.ibs_cbs?.gCBS?.vCBS ?? it.valor_cbs ?? 0)), 0);
         const ibsTot = {
-          vBCIBSCBS: Number(vBCIBSCBS.toFixed(2)),
-          vIBSUF: Number(vIBSUF.toFixed(2)),
-          vIBSMun: Number(vIBSMun.toFixed(2)),
-          vCBS: Number(vCBS.toFixed(2)),
+          vBCIBSCBS: r2(vBCIBSCBS),
+          vIBSUF: r2(vIBSUF),
+          vIBSMun: r2(vIBSMun),
+          vCBS: r2(vCBS),
         };
         payload.totais_ibs_cbs = { ...payload.nota.totais_ibs_cbs, ...ibsTot };
         payload.nota.totais_ibs_cbs = payload.totais_ibs_cbs;
