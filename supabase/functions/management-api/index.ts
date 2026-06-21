@@ -668,8 +668,8 @@ Deno.serve(async (req) => {
         return jsonResponse({ success: false, error: 'Campo nome é obrigatório.' }, 400);
       }
 
-      const permissoesValidas = ['emitir_nfce', 'emitir_nfe', 'emitir', 'consultar', 'cancelar', 'reprocessar', 'gerenciar', 'admin'];
-      const permissoesFinais = (novasPermissoes || ['emitir_nfce', 'emitir_nfe', 'consultar']).filter(
+      const permissoesValidas = ['emitir_nfce', 'emitir_nfe', 'emitir_mdfe', 'emitir', 'consultar', 'consultar_dfe', 'manifestar_dfe', 'cancelar', 'reprocessar', 'gerenciar', 'admin'];
+      const permissoesFinais = (novasPermissoes || ['emitir_nfce', 'emitir_nfe', 'consultar', 'consultar_dfe', 'manifestar_dfe']).filter(
         (p: string) => permissoesValidas.includes(p)
       );
 
