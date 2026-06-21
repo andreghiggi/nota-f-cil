@@ -1841,7 +1841,7 @@ Deno.serve(async (req) => {
         payload.IBSCBSTot = ibsTotPhp;
         payload.nota.IBSCBSTot = ibsTotPhp;
         if (payload.nota.total?.ICMSTot) {
-          payload.nota.total.IBSCBSTot = ibsTot;
+          payload.nota.total.IBSCBSTot = ibsTotPhp;
         }
         const qtdIbscbs = Object.values(itensObj).filter((it: any) => it.ibs_cbs).length;
         console.log(`📋 Reforma tributária: ${qtdIbscbs}/${Object.keys(itensObj).length} itens com ibs_cbs → api2`);
