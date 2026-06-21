@@ -141,9 +141,9 @@ async function extractDocs(retXmlBase64: string): Promise<ParsedDoc[]> {
 
 /** Sincroniza DF-e para uma empresa: chama api2 em loop até cStat=137 (sem novos docs) */
 async function syncEmpresa(supabase: any, empresaId: string, maxLoops = 10): Promise<any> {
-  const got = await ensureApiKey(supabase, empresaId);
+  const got = await ensureApiKey(supabase, empresaId) as { apiKey: string; empresa: any } | { error: string };
   if ('error' in got) return { error: got.error };
-  const { apiKey } = got;
+
 
   let { data: ctrl } = await supabase.from('dfe_distribuicao_controle')
     .select('*').eq('empresa_id', empresaId).maybeSingle();
