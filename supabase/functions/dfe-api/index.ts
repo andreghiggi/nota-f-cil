@@ -358,6 +358,7 @@ Deno.serve(async (req) => {
 
     // ---------- POST /dfe-api/:id/manifestar ----------
     if (method === 'POST' && sub.length === 2 && sub[1] === 'manifestar') {
+      const denied = requirePerm('manifestar_dfe'); if (denied) return denied;
       const body = await req.json().catch(() => ({}));
       const tipo = String(body.tipo || '');
       const map: Record<string, TpEvento> = {
