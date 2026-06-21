@@ -332,6 +332,7 @@ Deno.serve(async (req) => {
 
     // ---------- GET /dfe-api/:id ----------
     if (method === 'GET' && sub.length === 1 && sub[0] !== 'sync') {
+      const denied = requirePerm('consultar_dfe'); if (denied) return denied;
       const { data } = await supabase.from('dfe_recebidas')
         .select('*, dfe_eventos(*)').eq('id', sub[0]).eq('empresa_id', empresaId).maybeSingle();
       if (!data) return err('Not found', 'NOT_FOUND', 404);
