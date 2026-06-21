@@ -965,7 +965,7 @@ Deno.serve(async (req) => {
       for (const item of payload.itens) {
         const valorItem = item.quantidade * item.valor_unitario;
         valorProdutos += valorItem;
-        valorIcms += valorItem * (item.aliquota_icms || 0) / 100;
+        valorIcms += valorIcmsItem(item, valorItem);
         valorIpi += valorItem * (item.aliquota_ipi || 0) / 100;
         valorPis += valorItem * (item.aliquota_pis || 0) / 100;
         valorCofins += valorItem * (item.aliquota_cofins || 0) / 100;
@@ -1062,6 +1062,8 @@ Deno.serve(async (req) => {
       // Insert items with IBS/CBS/IS fields
       const itensToInsert = payload.itens.map((item, index) => {
         const valorItem = item.quantidade * item.valor_unitario;
+        const baseIcms = baseIcmsItem(item, valorItem);
+        const valorIcmsDoItem = valorIcmsItem(item, valorItem);
         const vbcIbsCbs = item.vbc_ibs_cbs ?? valorItem;
         const aliqIbsUf = item.p_aliq_efet_ibs_uf || item.aliquota_ibs_uf || 0;
         const aliqIbsMun = item.p_aliq_efet_ibs_mun || item.aliquota_ibs_mun || 0;
@@ -1080,10 +1082,10 @@ Deno.serve(async (req) => {
           cst_icms: item.cst_icms,
           csosn: item.csosn,
           aliquota_icms: item.aliquota_icms || 0,
-          base_calculo_icms: item.base_calculo_icms || valorItem,
-          valor_icms: valorItem * (item.aliquota_icms || 0) / 100,
+          base_calculo_icms: baseIcms,
+          valor_icms: valorIcmsDoItem,
           aliquota_fcp: item.aliquota_fcp || 0,
-          valor_fcp: (item.base_calculo_icms || valorItem) * (item.aliquota_fcp || 0) / 100,
+          valor_fcp: baseIcms * (item.aliquota_fcp || 0) / 100,
           base_calculo_icms_st: item.base_calculo_icms_st || 0,
           aliquota_icms_st: item.aliquota_icms_st || 0,
           mva_icms_st: item.mva_icms_st || 0,
