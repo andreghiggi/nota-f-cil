@@ -341,6 +341,7 @@ Deno.serve(async (req) => {
 
     // ---------- GET /dfe-api/:id/xml ----------
     if (method === 'GET' && sub.length === 2 && sub[1] === 'xml') {
+      const denied = requirePerm('consultar_dfe'); if (denied) return denied;
       const { data } = await supabase.from('dfe_recebidas')
         .select('chave_acesso, xml_completo, xml_resumo').eq('id', sub[0]).eq('empresa_id', empresaId).maybeSingle();
       if (!data) return err('Not found', 'NOT_FOUND', 404);
