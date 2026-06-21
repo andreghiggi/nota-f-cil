@@ -27,6 +27,7 @@ const navigation = [
   { name: "NF-e", href: "/nfe", icon: FileText },
   { name: "NFC-e", href: "/nfce", icon: Receipt },
   { name: "MDF-e", href: "/mdfe", icon: Truck },
+  { name: "Notas Recebidas", href: "/notas-recebidas", icon: Inbox },
   { name: "Certificados", href: "/certificados", icon: ShieldCheck },
   { name: "Tokens API", href: "/tokens", icon: Key },
   { name: "Webhooks", href: "/webhooks", icon: Webhook },
