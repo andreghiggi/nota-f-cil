@@ -36,20 +36,26 @@ async function hashToken(token: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Garante api_key_fiscal pra empresa (sincronizando no api2 se faltar) */
-async function ensureApiKey(supabase: any, empresaId: string): Promise<{ apiKey: string; empresa: any } | { error: string }> {
+/** Garante api_key_fiscal pra empresa (sincronizando no api2 se faltar ou se forceRegister=true) */
+async function ensureApiKey(supabase: any, empresaId: string, forceRegister = false): Promise<{ apiKey: string; empresa: any } | { error: string }> {
   const { data: empresa } = await supabase.from('empresas').select('*').eq('id', empresaId).maybeSingle();
   if (!empresa) return { error: 'Empresa não encontrada' };
-  if (empresa.api_key_fiscal && empresa.api_key_fiscal !== 'pending') {
+  if (!forceRegister && empresa.api_key_fiscal && empresa.api_key_fiscal !== 'pending') {
     return { apiKey: empresa.api_key_fiscal, empresa };
   }
-  // dispara o registro via fiscal-api para garantir api_key
+  // dispara o registro via fiscal-api para garantir / re-emitir api_key no api2
   const { data: reg } = await supabase.functions.invoke('fiscal-api', {
     body: { action: 'register_empresa', empresa_id: empresaId }
   });
-  if (reg?.api_key) return { apiKey: reg.api_key, empresa: { ...empresa, api_key_fiscal: reg.api_key } };
+  const newKey = reg?.data?.api_key || reg?.api_key;
+  if (newKey) {
+    await supabase.from('empresas').update({ api_key_fiscal: newKey }).eq('id', empresaId);
+    return { apiKey: newKey, empresa: { ...empresa, api_key_fiscal: newKey } };
+  }
+
   return { error: 'Não foi possível obter api_key_fiscal' };
 }
+
 
 /** Decodifica retDistDFe e extrai docZip (gzip + base64) */
 async function gunzipBase64(b64: string): Promise<string> {
@@ -137,9 +143,9 @@ async function extractDocs(retXmlBase64: string): Promise<ParsedDoc[]> {
 
 /** Sincroniza DF-e para uma empresa: chama api2 em loop até cStat=137 (sem novos docs) */
 async function syncEmpresa(supabase: any, empresaId: string, maxLoops = 10): Promise<any> {
-  const got = await ensureApiKey(supabase, empresaId);
+  const got = await ensureApiKey(supabase, empresaId) as { apiKey: string; empresa: any } | { error: string };
   if ('error' in got) return { error: got.error };
-  const { apiKey } = got;
+
 
   let { data: ctrl } = await supabase.from('dfe_distribuicao_controle')
     .select('*').eq('empresa_id', empresaId).maybeSingle();
@@ -154,20 +160,42 @@ async function syncEmpresa(supabase: any, empresaId: string, maxLoops = 10): Pro
   let lastCStat = ''; let lastMotivo = '';
   let maxNSU = ultNSU;
 
+  let retriedAuth = false;
   for (let i = 0; i < maxLoops; i++) {
-    const resp = await fetch(`${FISCAL_API_BASE_URL}/nfe/dist-dfe`, {
+    let resp = await fetch(`${FISCAL_API_BASE_URL}/nfe/dist-dfe`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ ultNSU, api_key: apiKey })
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${got.apiKey}` },
+      body: JSON.stringify({ ultNSU, api_key: got.apiKey })
     });
-    const text = await resp.text();
+    let text = await resp.text();
     let json: any; try { json = JSON.parse(text); } catch { json = { raw: text }; }
+    const errMsg = String(json?.error || json?.erro || '');
+    // Auto-recovery: api2 não reconhece a api_key → re-registra empresa e tenta de novo (uma vez)
+    if (!retriedAuth && (resp.status === 401 || /api\s*key\s*inv[aá]lida/i.test(errMsg))) {
+      retriedAuth = true;
+      const re = await ensureApiKey(supabase, empresaId, true);
+      if ('error' in re) {
+        await supabase.from('dfe_distribuicao_controle')
+          .update({ ultimo_erro: ('re-register falhou: ' + re.error).substring(0, 500), ultima_consulta: new Date().toISOString() })
+          .eq('empresa_id', empresaId);
+        return { error: 're-register falhou: ' + re.error };
+      }
+      got.apiKey = re.apiKey;
+      resp = await fetch(`${FISCAL_API_BASE_URL}/nfe/dist-dfe`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${got.apiKey}` },
+        body: JSON.stringify({ ultNSU, api_key: got.apiKey })
+      });
+      text = await resp.text();
+      try { json = JSON.parse(text); } catch { json = { raw: text }; }
+    }
     if (!resp.ok || json.sucesso === false || json.error) {
       await supabase.from('dfe_distribuicao_controle')
-        .update({ ultimo_erro: (json.error || text).substring(0, 500), ultima_consulta: new Date().toISOString() })
+        .update({ ultimo_erro: (json.error || json.erro || text).substring(0, 500), ultima_consulta: new Date().toISOString() })
         .eq('empresa_id', empresaId);
-      return { error: json.error || `api2 status ${resp.status}: ${text.substring(0, 300)}` };
+      return { error: json.error || json.erro || `api2 status ${resp.status}: ${text.substring(0, 300)}` };
     }
+
     const payload = json.dados || json.data || json;
     lastCStat = String(payload.cStat || '');
     lastMotivo = String(payload.xMotivo || '');
