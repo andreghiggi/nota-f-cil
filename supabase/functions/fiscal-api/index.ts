@@ -2294,13 +2294,23 @@ Deno.serve(async (req) => {
         );
       }
 
+      const detCount = (xml.match(/<det\s/gi) || []).length;
+      const compactDanfe = detCount > 120;
+
       let phpResponse: Response;
       let phpText = '';
       try {
         phpResponse = await fetch(`${FISCAL_API_BASE_URL}/nfe/danfe`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ xml, tipo: 'base64', orientacao: 'P', tamanho: 'A4', mostrar_canhoto: true }),
+          body: JSON.stringify({
+            xml,
+            tipo: 'base64',
+            orientacao: 'P',
+            tamanho: 'A4',
+            mostrar_canhoto: !compactDanfe,
+            modo_compacto: compactDanfe,
+          }),
         });
         phpText = await phpResponse.text();
       } catch (err: any) {
