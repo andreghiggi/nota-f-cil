@@ -264,6 +264,7 @@ Deno.serve(async (req) => {
 
     // Auth: token API (x-api-key) | header interno do cron | JWT do app
     let empresaId: string | null = null;
+    let tokenPermissoes: string[] | null = null;
     const apiKey = req.headers.get('x-api-key');
     const isInternalCron = req.headers.get('x-internal-cron') === 'true';
     if (apiKey) {
@@ -271,6 +272,10 @@ Deno.serve(async (req) => {
       const { data } = await supabase.rpc('validar_token_api', { p_token_hash: tokenHash });
       if (!data || data.length === 0) return err('Invalid API key', 'AUTH_INVALID', 401);
       empresaId = data[0].empresa_id;
+      tokenPermissoes = data[0].permissoes || [];
+      await supabase.from('tokens_api')
+        .update({ ultimo_uso: new Date().toISOString() })
+        .eq('id', data[0].token_id);
     } else if (isInternalCron) {
       // Chamada interna do cron pg_cron — apenas para /sync
       const body = method !== 'GET' ? await req.clone().json().catch(() => ({})) : {};
@@ -293,8 +298,16 @@ Deno.serve(async (req) => {
       if (!emp || emp.user_id !== user.id) return err('Forbidden', 'FORBIDDEN', 403);
     }
 
+    // Permission helper for x-api-key callers (ERP). JWT/cron sempre liberados.
+    const requirePerm = (perm: string) => {
+      if (!tokenPermissoes) return null; // não é via API key
+      if (tokenPermissoes.includes('admin') || tokenPermissoes.includes('gerenciar') || tokenPermissoes.includes(perm)) return null;
+      return err(`Permissão negada. Token precisa de "${perm}".`, 'FORBIDDEN', 403);
+    };
+
     // ---------- POST /dfe-api/sync ----------
     if (method === 'POST' && sub[0] === 'sync') {
+      const denied = requirePerm('consultar_dfe'); if (denied) return denied;
       const r = await syncEmpresa(supabase, empresaId!);
       if (r.error) return err(r.error, 'SYNC_ERROR', 502);
       return ok(r);
@@ -302,6 +315,7 @@ Deno.serve(async (req) => {
 
     // ---------- GET /dfe-api?status=&limit=&offset= ----------
     if (method === 'GET' && sub.length === 0) {
+      const denied = requirePerm('consultar_dfe'); if (denied) return denied;
       const status = url.searchParams.get('status');
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '50'), 200);
       const offset = parseInt(url.searchParams.get('offset') || '0');
@@ -318,6 +332,7 @@ Deno.serve(async (req) => {
 
     // ---------- GET /dfe-api/:id ----------
     if (method === 'GET' && sub.length === 1 && sub[0] !== 'sync') {
+      const denied = requirePerm('consultar_dfe'); if (denied) return denied;
       const { data } = await supabase.from('dfe_recebidas')
         .select('*, dfe_eventos(*)').eq('id', sub[0]).eq('empresa_id', empresaId).maybeSingle();
       if (!data) return err('Not found', 'NOT_FOUND', 404);
@@ -326,6 +341,7 @@ Deno.serve(async (req) => {
 
     // ---------- GET /dfe-api/:id/xml ----------
     if (method === 'GET' && sub.length === 2 && sub[1] === 'xml') {
+      const denied = requirePerm('consultar_dfe'); if (denied) return denied;
       const { data } = await supabase.from('dfe_recebidas')
         .select('chave_acesso, xml_completo, xml_resumo').eq('id', sub[0]).eq('empresa_id', empresaId).maybeSingle();
       if (!data) return err('Not found', 'NOT_FOUND', 404);
@@ -342,6 +358,7 @@ Deno.serve(async (req) => {
 
     // ---------- POST /dfe-api/:id/manifestar ----------
     if (method === 'POST' && sub.length === 2 && sub[1] === 'manifestar') {
+      const denied = requirePerm('manifestar_dfe'); if (denied) return denied;
       const body = await req.json().catch(() => ({}));
       const tipo = String(body.tipo || '');
       const map: Record<string, TpEvento> = {

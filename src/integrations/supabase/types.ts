@@ -1959,6 +1959,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      dfe_sync_all_empresas: { Args: never; Returns: undefined }
       excluir_documento_nao_processado: {
         Args: { p_id: string; p_tipo: string }
         Returns: Json
