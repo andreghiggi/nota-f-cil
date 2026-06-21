@@ -2306,7 +2306,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             xml,
             tipo: 'base64',
-            orientacao: 'P',
+            orientacao: compactDanfe ? 'L' : 'P',
             tamanho: 'A4',
             mostrar_canhoto: !compactDanfe,
             modo_compacto: compactDanfe,
