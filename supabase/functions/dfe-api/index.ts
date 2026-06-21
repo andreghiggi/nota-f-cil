@@ -264,6 +264,7 @@ Deno.serve(async (req) => {
 
     // Auth: token API (x-api-key) | header interno do cron | JWT do app
     let empresaId: string | null = null;
+    let tokenPermissoes: string[] | null = null;
     const apiKey = req.headers.get('x-api-key');
     const isInternalCron = req.headers.get('x-internal-cron') === 'true';
     if (apiKey) {
@@ -271,6 +272,10 @@ Deno.serve(async (req) => {
       const { data } = await supabase.rpc('validar_token_api', { p_token_hash: tokenHash });
       if (!data || data.length === 0) return err('Invalid API key', 'AUTH_INVALID', 401);
       empresaId = data[0].empresa_id;
+      tokenPermissoes = data[0].permissoes || [];
+      await supabase.from('tokens_api')
+        .update({ ultimo_uso: new Date().toISOString() })
+        .eq('id', data[0].token_id);
     } else if (isInternalCron) {
       // Chamada interna do cron pg_cron — apenas para /sync
       const body = method !== 'GET' ? await req.clone().json().catch(() => ({})) : {};
