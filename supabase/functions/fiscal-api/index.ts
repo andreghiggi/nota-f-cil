@@ -185,6 +185,24 @@ function zeroCst51Icms(item: Record<string, unknown>): void {
   item.vICMSDif = 0;
 }
 
+function isCsosnSemBaseIcms(item: Record<string, unknown>): boolean {
+  return ['102', '103', '300', '400'].includes(String(item.csosn || item.CSOSN || '').replace(/\D/g, ''));
+}
+
+function zeroIcmsSimplesSemPermissaoCredito(item: Record<string, unknown>): void {
+  item.base_calculo_icms = 0;
+  item.vBC = 0;
+  item.vBC_icms = 0;
+  item.aliquota_icms = 0;
+  item.pICMS = 0;
+  item.valor_icms = 0;
+  item.vICMS = 0;
+  item.valor_cred_icms_sn = 0;
+  item.vCredICMSSN = 0;
+  item.p_cred_sn = 0;
+  item.pCredSN = 0;
+}
+
 function aplicarCamposReformaApi2(itemData: Record<string, unknown>, item: Record<string, unknown>): void {
   const cst = String(item.cst_ibs_cbs ?? item.cst_cbs ?? item.cst_ibs ?? '').trim();
   const aliqCbs = Number(item.aliquota_cbs ?? 0);
@@ -1261,6 +1279,13 @@ Deno.serve(async (req) => {
           item.valor_icms_dif = vIcmsDif;
           item.valor_icms     = +(vIcmsOp - vIcmsDif).toFixed(2);
         }
+        if (isSimples && isCsosnSemBaseIcms(item)) {
+          zeroIcmsSimplesSemPermissaoCredito(item);
+        }
+
+        const baseIcms = item.base_calculo_icms ?? (isSimples ? 0 : valorTotal);
+        const aliquotaIcms = item.aliquota_icms ?? 0;
+        const valorIcms = item.valor_icms ?? +((Number(baseIcms) * Number(aliquotaIcms)) / 100).toFixed(2);
         const itemData: any = {
           descricao: descProduto,
           descricao_produto: descProduto,
@@ -1304,7 +1329,7 @@ Deno.serve(async (req) => {
             ? {
                 csosn: item.csosn || '102',
                 CSOSN: item.csosn || '102',
-                icms: { orig: item.origem ?? '0', CSOSN: item.csosn || '102', pCredSN: item.aliquota_icms || 0, vCredICMSSN: item.valor_icms || 0 },
+                icms: { orig: item.origem ?? '0', CSOSN: item.csosn || '102', pCredSN: item.p_cred_sn || 0, vCredICMSSN: item.valor_cred_icms_sn || 0 },
               }
             : {
                 cst_icms: item.cst_icms || '00',
@@ -1314,13 +1339,14 @@ Deno.serve(async (req) => {
                   orig: item.origem ?? '0',
                   CST: item.cst_icms || '00',
                   modBC: '0',
-                  vBC: item.base_calculo_icms ?? item.valor_total ?? 0,
-                  pICMS: item.aliquota_icms ?? 0,
-                  vICMS: item.valor_icms ?? +(((item.base_calculo_icms ?? item.valor_total ?? 0) * (item.aliquota_icms ?? 0)) / 100).toFixed(2),
+                  vBC: baseIcms,
+                  pICMS: aliquotaIcms,
+                  vICMS: valorIcms,
                 },
               }),
-          aliquota_icms: item.aliquota_icms,
-          base_calculo_icms: item.base_calculo_icms ?? item.valor_total ?? 0,
+          aliquota_icms: aliquotaIcms,
+          base_calculo_icms: baseIcms,
+          valor_icms: valorIcms,
           // ICMS extras (suporte completo a todos CSTs/CSOSNs)
           p_red_bc: item.p_red_bc || 0,
           pRedBC: item.p_red_bc || 0,
@@ -1387,7 +1413,7 @@ Deno.serve(async (req) => {
             : (item.base_calculo_cofins ?? valorTotal ?? 0),
           pCOFINS: item.aliquota_cofins ?? 0,
           vCOFINS: item.valor_cofins ?? 0,
-          vBC_icms: item.base_calculo_icms ?? valorTotal ?? 0,
+          vBC_icms: baseIcms,
         };
 
         // IBS/CBS (Reforma Tributária) — Grupo UB oficial NFe 4.00
@@ -2268,13 +2294,23 @@ Deno.serve(async (req) => {
         );
       }
 
+      const detCount = (xml.match(/<det\s/gi) || []).length;
+      const compactDanfe = detCount > 120;
+
       let phpResponse: Response;
       let phpText = '';
       try {
         phpResponse = await fetch(`${FISCAL_API_BASE_URL}/nfe/danfe`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ xml, tipo: 'base64', orientacao: 'P', tamanho: 'A4', mostrar_canhoto: true }),
+          body: JSON.stringify({
+            xml,
+            tipo: 'base64',
+            orientacao: compactDanfe ? 'L' : 'P',
+            tamanho: 'A4',
+            mostrar_canhoto: !compactDanfe,
+            modo_compacto: compactDanfe,
+          }),
         });
         phpText = await phpResponse.text();
       } catch (err: any) {

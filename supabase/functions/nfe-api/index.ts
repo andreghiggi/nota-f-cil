@@ -159,6 +159,20 @@ function normalizeReformaPayloadItem(item: Record<string, unknown>): Record<stri
   };
 }
 
+function isCsosnSemBaseIcms(item: { csosn?: string }): boolean {
+  return ['102', '103', '300', '400'].includes(String(item.csosn || '').replace(/\D/g, ''));
+}
+
+function baseIcmsItem(item: { csosn?: string; base_calculo_icms?: number }, valorItem: number): number {
+  if (isCsosnSemBaseIcms(item)) return 0;
+  return item.base_calculo_icms ?? valorItem;
+}
+
+function valorIcmsItem(item: { csosn?: string; aliquota_icms?: number; valor_icms?: number; base_calculo_icms?: number }, valorItem: number): number {
+  if (isCsosnSemBaseIcms(item)) return 0;
+  return item.valor_icms ?? (baseIcmsItem(item, valorItem) * (item.aliquota_icms || 0) / 100);
+}
+
 /** NF-e: série canônica em 3 dígitos — "1", "001" e "0001" → "001". */
 function normalizeSerieFiscal(serie: string | null | undefined): string {
   const t = String(serie ?? '001').trim();
@@ -951,7 +965,7 @@ Deno.serve(async (req) => {
       for (const item of payload.itens) {
         const valorItem = item.quantidade * item.valor_unitario;
         valorProdutos += valorItem;
-        valorIcms += valorItem * (item.aliquota_icms || 0) / 100;
+        valorIcms += valorIcmsItem(item, valorItem);
         valorIpi += valorItem * (item.aliquota_ipi || 0) / 100;
         valorPis += valorItem * (item.aliquota_pis || 0) / 100;
         valorCofins += valorItem * (item.aliquota_cofins || 0) / 100;
@@ -1048,6 +1062,8 @@ Deno.serve(async (req) => {
       // Insert items with IBS/CBS/IS fields
       const itensToInsert = payload.itens.map((item, index) => {
         const valorItem = item.quantidade * item.valor_unitario;
+        const baseIcms = baseIcmsItem(item, valorItem);
+        const valorIcmsDoItem = valorIcmsItem(item, valorItem);
         const vbcIbsCbs = item.vbc_ibs_cbs ?? valorItem;
         const aliqIbsUf = item.p_aliq_efet_ibs_uf || item.aliquota_ibs_uf || 0;
         const aliqIbsMun = item.p_aliq_efet_ibs_mun || item.aliquota_ibs_mun || 0;
@@ -1066,10 +1082,10 @@ Deno.serve(async (req) => {
           cst_icms: item.cst_icms,
           csosn: item.csosn,
           aliquota_icms: item.aliquota_icms || 0,
-          base_calculo_icms: item.base_calculo_icms || valorItem,
-          valor_icms: valorItem * (item.aliquota_icms || 0) / 100,
+          base_calculo_icms: baseIcms,
+          valor_icms: valorIcmsDoItem,
           aliquota_fcp: item.aliquota_fcp || 0,
-          valor_fcp: (item.base_calculo_icms || valorItem) * (item.aliquota_fcp || 0) / 100,
+          valor_fcp: baseIcms * (item.aliquota_fcp || 0) / 100,
           base_calculo_icms_st: item.base_calculo_icms_st || 0,
           aliquota_icms_st: item.aliquota_icms_st || 0,
           mva_icms_st: item.mva_icms_st || 0,
@@ -1846,7 +1862,7 @@ Deno.serve(async (req) => {
       for (const item of putPayload.itens) {
         const v = (item.quantidade || 0) * (item.valor_unitario || 0);
         valorProdutos += v;
-        valorIcms += v * (item.aliquota_icms || 0) / 100;
+        valorIcms += valorIcmsItem(item, v);
         valorIpi += v * (item.aliquota_ipi || 0) / 100;
         valorPis += v * (item.aliquota_pis || 0) / 100;
         valorCofins += v * (item.aliquota_cofins || 0) / 100;
@@ -1896,6 +1912,8 @@ Deno.serve(async (req) => {
       await supabase.from('nfe_itens').delete().eq('nfe_id', nfeId);
       const itensToInsert = putPayload.itens.map((item, index) => {
         const v = (item.quantidade || 0) * (item.valor_unitario || 0);
+        const baseIcms = baseIcmsItem(item, v);
+        const valorIcmsDoItem = valorIcmsItem(item, v);
         const vbcIbsCbs = item.vbc_ibs_cbs ?? v;
         const aliqIbsUf = item.p_aliq_efet_ibs_uf || item.aliquota_ibs_uf || 0;
         const aliqIbsMun = item.p_aliq_efet_ibs_mun || item.aliquota_ibs_mun || 0;
@@ -1909,8 +1927,8 @@ Deno.serve(async (req) => {
           quantidade: item.quantidade, valor_unitario: item.valor_unitario, valor_total: v,
           cst_icms: item.cst_icms, csosn: item.csosn,
           aliquota_icms: item.aliquota_icms || 0,
-          base_calculo_icms: item.base_calculo_icms || v,
-          valor_icms: v * (item.aliquota_icms || 0) / 100,
+          base_calculo_icms: baseIcms,
+          valor_icms: valorIcmsDoItem,
           cst_ipi: item.cst_ipi, aliquota_ipi: item.aliquota_ipi || 0,
           base_calculo_ipi: item.base_calculo_ipi || v,
           valor_ipi: (item.base_calculo_ipi || v) * (item.aliquota_ipi || 0) / 100,
