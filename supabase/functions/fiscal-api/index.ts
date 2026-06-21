@@ -1829,10 +1829,17 @@ Deno.serve(async (req) => {
           vIBSMun: r2(vIBSMun),
           vCBS: r2(vCBS),
         };
-        payload.totais_ibs_cbs = { ...payload.nota.totais_ibs_cbs, ...ibsTot };
+        const ibsTotPhp = {
+          vBCIBSCBS: ibsTot.vBCIBSCBS,
+          vIBSUF: ibsTot.vIBSUF, vIBSUFTot: ibsTot.vIBSUF, gIBSUF_vIBSUF: ibsTot.vIBSUF,
+          vIBSMun: ibsTot.vIBSMun, vIBSMunTot: ibsTot.vIBSMun, gIBSMun_vIBSMun: ibsTot.vIBSMun,
+          vCBS: ibsTot.vCBS, vCBSTot: ibsTot.vCBS, gCBS_vCBS: ibsTot.vCBS,
+          gIBS_vIBS: r2(ibsTot.vIBSUF + ibsTot.vIBSMun),
+        };
+        payload.totais_ibs_cbs = { ...payload.nota.totais_ibs_cbs, ...ibsTotPhp };
         payload.nota.totais_ibs_cbs = payload.totais_ibs_cbs;
-        payload.IBSCBSTot = ibsTot;
-        payload.nota.IBSCBSTot = ibsTot;
+        payload.IBSCBSTot = ibsTotPhp;
+        payload.nota.IBSCBSTot = ibsTotPhp;
         if (payload.nota.total?.ICMSTot) {
           payload.nota.total.IBSCBSTot = ibsTot;
         }
