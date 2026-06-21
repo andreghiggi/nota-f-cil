@@ -1413,7 +1413,7 @@ Deno.serve(async (req) => {
             : (item.base_calculo_cofins ?? valorTotal ?? 0),
           pCOFINS: item.aliquota_cofins ?? 0,
           vCOFINS: item.valor_cofins ?? 0,
-          vBC_icms: item.base_calculo_icms ?? valorTotal ?? 0,
+          vBC_icms: baseIcms,
         };
 
         // IBS/CBS (Reforma Tributária) — Grupo UB oficial NFe 4.00
