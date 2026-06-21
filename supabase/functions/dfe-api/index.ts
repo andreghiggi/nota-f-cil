@@ -36,20 +36,24 @@ async function hashToken(token: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-/** Garante api_key_fiscal pra empresa (sincronizando no api2 se faltar) */
-async function ensureApiKey(supabase: any, empresaId: string): Promise<{ apiKey: string; empresa: any } | { error: string }> {
+/** Garante api_key_fiscal pra empresa (sincronizando no api2 se faltar ou se forceRegister=true) */
+async function ensureApiKey(supabase: any, empresaId: string, forceRegister = false): Promise<{ apiKey: string; empresa: any } | { error: string }> {
   const { data: empresa } = await supabase.from('empresas').select('*').eq('id', empresaId).maybeSingle();
   if (!empresa) return { error: 'Empresa não encontrada' };
-  if (empresa.api_key_fiscal && empresa.api_key_fiscal !== 'pending') {
+  if (!forceRegister && empresa.api_key_fiscal && empresa.api_key_fiscal !== 'pending') {
     return { apiKey: empresa.api_key_fiscal, empresa };
   }
-  // dispara o registro via fiscal-api para garantir api_key
+  // dispara o registro via fiscal-api para garantir / re-emitir api_key no api2
   const { data: reg } = await supabase.functions.invoke('fiscal-api', {
-    body: { action: 'register_empresa', empresa_id: empresaId }
+    body: { action: 'register_empresa', empresa_id: empresaId, force: true }
   });
-  if (reg?.api_key) return { apiKey: reg.api_key, empresa: { ...empresa, api_key_fiscal: reg.api_key } };
+  if (reg?.api_key) {
+    await supabase.from('empresas').update({ api_key_fiscal: reg.api_key }).eq('id', empresaId);
+    return { apiKey: reg.api_key, empresa: { ...empresa, api_key_fiscal: reg.api_key } };
+  }
   return { error: 'Não foi possível obter api_key_fiscal' };
 }
+
 
 /** Decodifica retDistDFe e extrai docZip (gzip + base64) */
 async function gunzipBase64(b64: string): Promise<string> {
