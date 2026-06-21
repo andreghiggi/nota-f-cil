@@ -205,7 +205,7 @@ export default function NotasRecebidas() {
   }, {});
 
   return (
-    <AppLayout>
+    <AppLayout title="Notas Recebidas (DF-e)">
       <div className="space-y-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
