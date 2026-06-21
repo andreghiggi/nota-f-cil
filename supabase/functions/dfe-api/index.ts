@@ -298,8 +298,16 @@ Deno.serve(async (req) => {
       if (!emp || emp.user_id !== user.id) return err('Forbidden', 'FORBIDDEN', 403);
     }
 
+    // Permission helper for x-api-key callers (ERP). JWT/cron sempre liberados.
+    const requirePerm = (perm: string) => {
+      if (!tokenPermissoes) return null; // não é via API key
+      if (tokenPermissoes.includes('admin') || tokenPermissoes.includes('gerenciar') || tokenPermissoes.includes(perm)) return null;
+      return err(`Permissão negada. Token precisa de "${perm}".`, 'FORBIDDEN', 403);
+    };
+
     // ---------- POST /dfe-api/sync ----------
     if (method === 'POST' && sub[0] === 'sync') {
+      const denied = requirePerm('consultar_dfe'); if (denied) return denied;
       const r = await syncEmpresa(supabase, empresaId!);
       if (r.error) return err(r.error, 'SYNC_ERROR', 502);
       return ok(r);
