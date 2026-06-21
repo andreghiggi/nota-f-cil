@@ -1279,6 +1279,13 @@ Deno.serve(async (req) => {
           item.valor_icms_dif = vIcmsDif;
           item.valor_icms     = +(vIcmsOp - vIcmsDif).toFixed(2);
         }
+        if (isSimples && isCsosnSemBaseIcms(item)) {
+          zeroIcmsSimplesSemPermissaoCredito(item);
+        }
+
+        const baseIcms = item.base_calculo_icms ?? (isSimples ? 0 : valorTotal);
+        const aliquotaIcms = item.aliquota_icms ?? 0;
+        const valorIcms = item.valor_icms ?? +((Number(baseIcms) * Number(aliquotaIcms)) / 100).toFixed(2);
         const itemData: any = {
           descricao: descProduto,
           descricao_produto: descProduto,
@@ -1322,7 +1329,7 @@ Deno.serve(async (req) => {
             ? {
                 csosn: item.csosn || '102',
                 CSOSN: item.csosn || '102',
-                icms: { orig: item.origem ?? '0', CSOSN: item.csosn || '102', pCredSN: item.aliquota_icms || 0, vCredICMSSN: item.valor_icms || 0 },
+                icms: { orig: item.origem ?? '0', CSOSN: item.csosn || '102', pCredSN: item.p_cred_sn || 0, vCredICMSSN: item.valor_cred_icms_sn || 0 },
               }
             : {
                 cst_icms: item.cst_icms || '00',
@@ -1332,13 +1339,14 @@ Deno.serve(async (req) => {
                   orig: item.origem ?? '0',
                   CST: item.cst_icms || '00',
                   modBC: '0',
-                  vBC: item.base_calculo_icms ?? item.valor_total ?? 0,
-                  pICMS: item.aliquota_icms ?? 0,
-                  vICMS: item.valor_icms ?? +(((item.base_calculo_icms ?? item.valor_total ?? 0) * (item.aliquota_icms ?? 0)) / 100).toFixed(2),
+                  vBC: baseIcms,
+                  pICMS: aliquotaIcms,
+                  vICMS: valorIcms,
                 },
               }),
-          aliquota_icms: item.aliquota_icms,
-          base_calculo_icms: item.base_calculo_icms ?? item.valor_total ?? 0,
+          aliquota_icms: aliquotaIcms,
+          base_calculo_icms: baseIcms,
+          valor_icms: valorIcms,
           // ICMS extras (suporte completo a todos CSTs/CSOSNs)
           p_red_bc: item.p_red_bc || 0,
           pRedBC: item.p_red_bc || 0,
