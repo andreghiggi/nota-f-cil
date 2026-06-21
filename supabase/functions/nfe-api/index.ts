@@ -159,6 +159,20 @@ function normalizeReformaPayloadItem(item: Record<string, unknown>): Record<stri
   };
 }
 
+function isCsosnSemBaseIcms(item: { csosn?: string }): boolean {
+  return ['102', '103', '300', '400'].includes(String(item.csosn || '').replace(/\D/g, ''));
+}
+
+function baseIcmsItem(item: { csosn?: string; base_calculo_icms?: number }, valorItem: number): number {
+  if (isCsosnSemBaseIcms(item)) return 0;
+  return item.base_calculo_icms ?? valorItem;
+}
+
+function valorIcmsItem(item: { csosn?: string; aliquota_icms?: number; valor_icms?: number; base_calculo_icms?: number }, valorItem: number): number {
+  if (isCsosnSemBaseIcms(item)) return 0;
+  return item.valor_icms ?? (baseIcmsItem(item, valorItem) * (item.aliquota_icms || 0) / 100);
+}
+
 /** NF-e: série canônica em 3 dígitos — "1", "001" e "0001" → "001". */
 function normalizeSerieFiscal(serie: string | null | undefined): string {
   const t = String(serie ?? '001').trim();
