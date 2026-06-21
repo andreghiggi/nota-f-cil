@@ -262,11 +262,14 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Auth: token API (x-api-key) | header interno do cron | JWT do app
+    // Auth: token API (x-api-key OU Authorization: Bearer) | header interno do cron | JWT do app
     let empresaId: string | null = null;
     let tokenPermissoes: string[] | null = null;
-    const apiKey = req.headers.get('x-api-key');
     const isInternalCron = req.headers.get('x-internal-cron') === 'true';
+    const bearer = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '').trim();
+    // Token de API tem formato UUID. JWT do Supabase começa com "eyJ".
+    const looksLikeApiToken = bearer && !bearer.startsWith('eyJ');
+    const apiKey = req.headers.get('x-api-key') || (looksLikeApiToken ? bearer : null);
     if (apiKey) {
       const tokenHash = await hashToken(apiKey);
       const { data } = await supabase.rpc('validar_token_api', { p_token_hash: tokenHash });
