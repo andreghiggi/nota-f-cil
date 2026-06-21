@@ -262,16 +262,21 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Auth: token API (x-api-key) ou JWT do app
+    // Auth: token API (x-api-key) | header interno do cron | JWT do app
     let empresaId: string | null = null;
-    let viaTokenApi = false;
     const apiKey = req.headers.get('x-api-key');
+    const isInternalCron = req.headers.get('x-internal-cron') === 'true';
     if (apiKey) {
       const tokenHash = await hashToken(apiKey);
       const { data } = await supabase.rpc('validar_token_api', { p_token_hash: tokenHash });
       if (!data || data.length === 0) return err('Invalid API key', 'AUTH_INVALID', 401);
       empresaId = data[0].empresa_id;
-      viaTokenApi = true;
+    } else if (isInternalCron) {
+      // Chamada interna do cron pg_cron — apenas para /sync
+      const body = method !== 'GET' ? await req.clone().json().catch(() => ({})) : {};
+      empresaId = body.empresa_id;
+      if (!empresaId) return err('empresa_id required', 'VALIDATION_ERROR');
+      if (!sub[0] || sub[0] !== 'sync') return err('internal cron only allows /sync', 'FORBIDDEN', 403);
     } else {
       // JWT do usuário
       const auth = req.headers.get('authorization')?.replace('Bearer ', '');
@@ -281,7 +286,6 @@ Deno.serve(async (req) => {
       });
       const { data: { user } } = await userClient.auth.getUser();
       if (!user) return err('Invalid session', 'AUTH_INVALID', 401);
-      // empresa_id vem do body/query; valida ownership
       const body = method !== 'GET' ? await req.clone().json().catch(() => ({})) : {};
       empresaId = body.empresa_id || url.searchParams.get('empresa_id');
       if (!empresaId) return err('empresa_id é obrigatório', 'VALIDATION_ERROR');
