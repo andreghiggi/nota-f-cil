@@ -285,7 +285,9 @@ Deno.serve(async (req) => {
     const sub = parts.slice(1); // após /dfe-api
     const method = req.method;
 
-    if (method === 'GET' && sub.length === 0) {
+    // Healthcheck público — SÓ se não houver autenticação (senão cai pra listagem autenticada)
+    const hasAuthHeader = !!(req.headers.get('x-api-key') || req.headers.get('authorization') || req.headers.get('x-internal-cron'));
+    if (method === 'GET' && sub.length === 0 && !hasAuthHeader) {
       return new Response(JSON.stringify({ status: 'ok', service: 'dfe-api' }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
