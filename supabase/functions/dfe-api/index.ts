@@ -199,8 +199,25 @@ async function syncEmpresa(supabase: any, empresaId: string, maxLoops = 10): Pro
     const payload = json.dados || json.data || json;
     lastCStat = String(payload.cStat || '');
     lastMotivo = String(payload.xMotivo || '');
-    maxNSU = Number(payload.maxNSU || ultNSU);
-    const retUlt = Number(payload.ultNSU || ultNSU);
+    // Fallback: api2 às vezes retorna ultNSU/maxNSU=0 no JSON top-level.
+    // Extraímos direto do XML do retDistDFe (base64) pra evitar loop infinito.
+    let jsonUlt = Number(payload.ultNSU || 0);
+    let jsonMax = Number(payload.maxNSU || 0);
+    if (payload.xml_retorno) {
+      try {
+        const retXml = new TextDecoder('utf-8').decode(Uint8Array.from(atob(payload.xml_retorno), c => c.charCodeAt(0)));
+        const xu = retXml.match(/<ultNSU>(\d+)<\/ultNSU>/);
+        const xm = retXml.match(/<maxNSU>(\d+)<\/maxNSU>/);
+        const xs = retXml.match(/<cStat>(\d+)<\/cStat>/);
+        const xms = retXml.match(/<xMotivo>([^<]+)<\/xMotivo>/);
+        if (xu) jsonUlt = Math.max(jsonUlt, Number(xu[1]));
+        if (xm) jsonMax = Math.max(jsonMax, Number(xm[1]));
+        if (xs && !lastCStat) lastCStat = xs[1];
+        if (xms && !lastMotivo) lastMotivo = xms[1];
+      } catch {}
+    }
+    maxNSU = Math.max(jsonMax, ultNSU);
+    const retUlt = Math.max(jsonUlt, ultNSU);
 
     if (payload.xml_retorno) {
       const docs = await extractDocs(payload.xml_retorno);
