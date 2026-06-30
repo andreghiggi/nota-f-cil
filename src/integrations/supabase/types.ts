@@ -1844,6 +1844,27 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       webhook_logs: {
         Row: {
           created_at: string
@@ -1974,6 +1995,13 @@ export type Database = {
       gerar_numero_nfe:
         | { Args: { p_empresa_id: string }; Returns: string }
         | { Args: { p_empresa_id: string; p_serie?: string }; Returns: string }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       proximo_numero_fiscal: {
         Args: { p_empresa_id: string; p_serie: string; p_tipo: string }
         Returns: {
@@ -2008,6 +2036,7 @@ export type Database = {
     }
     Enums: {
       ambiente_sefaz: "homologacao" | "producao"
+      app_role: "admin" | "user"
       certificado_status: "valido" | "expirando" | "expirado" | "pendente"
       nfce_status:
         | "pendente"
@@ -2148,6 +2177,7 @@ export const Constants = {
   public: {
     Enums: {
       ambiente_sefaz: ["homologacao", "producao"],
+      app_role: ["admin", "user"],
       certificado_status: ["valido", "expirando", "expirado", "pendente"],
       nfce_status: [
         "pendente",
