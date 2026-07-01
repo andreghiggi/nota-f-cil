@@ -1701,6 +1701,15 @@ Deno.serve(async (req) => {
           valor_total_produtos: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
           valor_produtos: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
           vProd: Number(nfe.valor_produtos ?? Object.values(itensObj).reduce((s: number, it: any) => s + (Number(it.valor_total) || 0), 0)),
+          // Componentes do vNF em nota-level (PHP lê $nota->valor_frete/seguro/desconto/outras).
+          // Sem esses campos o PHP zera vFrete/vSeg/vDesc/vOutro no <ICMSTot> e SEFAZ rejeita 610.
+          valor_frete: Number(nfe.valor_frete || 0),
+          valor_seguro: Number(nfe.valor_seguro || 0),
+          valor_desconto: Number(nfe.valor_desconto || 0),
+          valor_outras_despesas: Number(nfe.valor_outras_despesas || 0),
+          valor_ipi: Number(nfe.valor_ipi || 0),
+          valor_pis: Number(nfe.valor_pis || 0),
+          valor_cofins: Number(nfe.valor_cofins || 0),
           // Bloco <total><ICMSTot> explícito (NFePHP)
           // SEFAZ regra W04a/W04b: ICMSTot.vBC e vICMS são SOMATÓRIO dos itens,
           // não podem ser derivados de valor_produtos — senão diferimento (CST 51)
