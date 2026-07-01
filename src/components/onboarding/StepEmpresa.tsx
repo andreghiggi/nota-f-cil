@@ -107,10 +107,48 @@ export function StepEmpresa({ onCreated }: Props) {
       return;
     }
     setSearching(true);
+
+    // Tenta múltiplas fontes (com fallback) — se todas falharem, permite cadastro manual
+    const sources: Array<() => Promise<any>> = [
+      async () => {
+        const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
+        if (!r.ok) throw new Error("brasilapi");
+        return await r.json();
+      },
+      async () => {
+        const r = await fetch(`https://publica.cnpj.ws/cnpj/${cnpj}`);
+        if (!r.ok) throw new Error("cnpjws");
+        const d = await r.json();
+        const est = d.estabelecimento || {};
+        return {
+          razao_social: d.razao_social,
+          nome_fantasia: est.nome_fantasia,
+          logradouro: est.logradouro,
+          descricao_tipo_de_logradouro: est.tipo_logradouro,
+          numero: est.numero,
+          complemento: est.complemento,
+          bairro: est.bairro,
+          cep: est.cep,
+          uf: est.estado?.sigla,
+          municipio: est.cidade?.nome,
+          ddd_telefone_1: est.ddd1 && est.telefone1 ? `${est.ddd1}${est.telefone1}` : undefined,
+          cnae_fiscal: est.atividade_principal?.id,
+        };
+      },
+    ];
+
+    let d: any = null;
+    for (const fn of sources) {
+      try { d = await fn(); if (d) break; } catch {}
+    }
+
+    if (!d) {
+      toast.warning("Consulta automática indisponível. Preencha os dados manualmente.");
+      setSearching(false);
+      return;
+    }
+
     try {
-      const r = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cnpj}`);
-      if (!r.ok) throw new Error("CNPJ não encontrado");
-      const d = await r.json();
       form.setValue("razao_social", d.razao_social || "");
       form.setValue("nome_fantasia", d.nome_fantasia || "");
       const log = d.descricao_tipo_de_logradouro ? `${d.descricao_tipo_de_logradouro} ${d.logradouro}` : d.logradouro;
@@ -118,12 +156,11 @@ export function StepEmpresa({ onCreated }: Props) {
       form.setValue("numero", d.numero || "");
       form.setValue("complemento", d.complemento || "");
       form.setValue("bairro", d.bairro || "");
-      form.setValue("cep", d.cep ? fmtCEP(d.cep) : "");
+      form.setValue("cep", d.cep ? fmtCEP(String(d.cep)) : "");
       form.setValue("uf", d.uf || "SP");
       form.setValue("municipio", d.municipio || "");
-      if (d.ddd_telefone_1) form.setValue("telefone", fmtPhone(d.ddd_telefone_1.replace(/\D/g, "")));
-      if (d.cnae_fiscal) form.setValue("cnae_principal", String(d.cnae_fiscal));
-      // IBGE 7 dígitos
+      if (d.ddd_telefone_1) form.setValue("telefone", fmtPhone(String(d.ddd_telefone_1).replace(/\D/g, "")));
+      if (d.cnae_fiscal) form.setValue("cnae_principal", String(d.cnae_fiscal).replace(/\D/g, "").slice(0, 7));
       try {
         const ibge = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${d.uf}/municipios`);
         if (ibge.ok) {
@@ -133,8 +170,6 @@ export function StepEmpresa({ onCreated }: Props) {
         }
       } catch {}
       toast.success("Dados carregados!");
-    } catch (e: any) {
-      toast.error(e.message || "Erro ao buscar CNPJ");
     } finally {
       setSearching(false);
     }
