@@ -915,6 +915,24 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                   )}
                 />
 
+                <FormField
+                  control={form.control}
+                  name="enviar_ibs_cbs"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
+                      <div className="space-y-1">
+                        <FormLabel className="text-base">Enviar IBS/CBS (Reforma Tributária)</FormLabel>
+                        <FormDescription>
+                          Quando ativado, os campos IBS/CBS enviados pelo ERP nos itens serão incluídos no XML da NF-e/NFC-e (grupo gIBSCBS). Mantenha desligado para emissão tradicional.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
                 {tipoPessoa === "PF" && (
                   <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
                     <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
