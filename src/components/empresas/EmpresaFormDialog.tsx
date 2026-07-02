@@ -31,6 +31,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Building2, FileText, Settings, Search, MapPin, User, Building, Truck } from "lucide-react";
 import { SeriesFiscaisManager } from "./SeriesFiscaisManager";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useCreateEmpresa, useUpdateEmpresa, Empresa } from "@/hooks/useSupabaseData";
 
@@ -162,6 +163,9 @@ const empresaSchema = z.object({
   resp_tec_email: z.string().email("E-mail inválido").max(60).optional().or(z.literal("")).nullable(),
   resp_tec_fone: z.string().max(20).optional().nullable(),
 
+  // Reforma Tributária (IBS/CBS)
+  enviar_ibs_cbs: z.boolean().default(false),
+
   // Status
   ativo: z.boolean().default(true),
 }).superRefine((data, ctx) => {
@@ -251,6 +255,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       resp_tec_contato: "",
       resp_tec_email: "",
       resp_tec_fone: "",
+      enviar_ibs_cbs: false,
       ativo: true,
     },
   });
@@ -288,6 +293,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         resp_tec_contato: (empresa as any).resp_tec_contato || "",
         resp_tec_email: (empresa as any).resp_tec_email || "",
         resp_tec_fone: (empresa as any).resp_tec_fone || "",
+        enviar_ibs_cbs: (empresa as any).enviar_ibs_cbs ?? false,
         ativo: empresa.ativo,
       });
     } else {
@@ -320,6 +326,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         resp_tec_contato: "",
         resp_tec_email: "",
         resp_tec_fone: "",
+        enviar_ibs_cbs: false,
         ativo: true,
       });
     }
@@ -442,6 +449,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         resp_tec_contato: data.resp_tec_contato || null,
         resp_tec_email: data.resp_tec_email || null,
         resp_tec_fone: data.resp_tec_fone?.replace(/\D/g, '') || null,
+        enviar_ibs_cbs: data.enviar_ibs_cbs,
         ativo: data.ativo,
       };
 
@@ -903,6 +911,24 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                         Use Homologação para testes. Produção envia notas reais à SEFAZ.
                       </FormDescription>
                       <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="enviar_ibs_cbs"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between p-4 rounded-lg border border-border bg-muted/30">
+                      <div className="space-y-1">
+                        <FormLabel className="text-base">Enviar IBS/CBS (Reforma Tributária)</FormLabel>
+                        <FormDescription>
+                          Quando ativado, os campos IBS/CBS enviados pelo ERP nos itens serão incluídos no XML da NF-e/NFC-e (grupo gIBSCBS). Mantenha desligado para emissão tradicional.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={!!field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
                     </FormItem>
                   )}
                 />
