@@ -947,6 +947,7 @@ Deno.serve(async (req) => {
       const clientePayload = buildNfceClientePayload(nfce.payload_entrada?.cliente, empresa.ambiente);
 
       const itensObj: Record<string, any> = {};
+      const payloadItens: any[] = Array.isArray(nfce.payload_entrada?.itens) ? nfce.payload_entrada.itens : [];
       (nfce.nfce_itens || []).forEach((item: any, idx: number) => {
         const qtd = Number(item.quantidade) || 0;
         const vUnit = Number(item.valor_unitario) || 0;
@@ -957,11 +958,19 @@ Deno.serve(async (req) => {
         const aliqCofins = Number(item.aliquota_cofins) || 0;
         const aliqIcms = Number(item.aliquota_icms) || 0;
 
+        // Reforma Tributária (opt-in): campos IBS/CBS chegam via payload_entrada.itens
+        // (nfce_itens ainda não persiste essas colunas). Casamos por índice e, se
+        // não bater, tentamos por código de produto.
+        const rawEntrada = payloadItens[idx]
+          || payloadItens.find((it: any) => String(it?.codigo ?? it?.codigo_produto ?? '') === String(item.codigo_produto ?? '')) 
+          || {};
+        const itemComReforma = { ...item, ...rawEntrada, valor_total: vTotal };
+
         // PHP/sped-nfe: envia todos os aliases para garantir que <xProd> e <cProd>
         // sejam preenchidos sempre com os dados reais recebidos do cliente.
         const descProduto = String(item.descricao ?? '').trim() || 'PRODUTO';
         const codProduto = String(item.codigo_produto ?? '').trim() || String(idx + 1).padStart(3, '0');
-        itensObj[String(idx)] = {
+        const itemData: any = {
           // Descrição (todos os aliases conhecidos)
           descricao: descProduto,
           descricao_produto: descProduto,
@@ -999,6 +1008,21 @@ Deno.serve(async (req) => {
           base_calculo_cofins: vTotal,
           valor_cofins: +((vTotal * aliqCofins) / 100).toFixed(2),
         };
+
+        // IBS/CBS (Reforma Tributária) — opt-in por empresa e só se o item traz os campos.
+        // Mesmo gating usado na NF-e para não quebrar clientes existentes.
+        if ((empresa as any)?.enviar_ibs_cbs && itemTemReformaTributaria(itemComReforma)) {
+          const ibscbs = buildIbscbsBlock(itemComReforma, vTotal);
+          if (ibscbs) {
+            itemData.ibs_cbs = ibscbs;
+            itemData.IBSCBS = ibscbs;
+            itemData.ibscbs = ibscbs;
+            itemData.gIBSCBS = ibscbs;
+          }
+          aplicarCamposReformaApi2(itemData, itemComReforma);
+        }
+
+        itensObj[String(idx)] = itemData;
       });
 
       const tpAmb = empresa.ambiente === 'producao' ? 1 : 2;
