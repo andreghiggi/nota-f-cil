@@ -448,6 +448,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         resp_tec_contato: data.resp_tec_contato || null,
         resp_tec_email: data.resp_tec_email || null,
         resp_tec_fone: data.resp_tec_fone?.replace(/\D/g, '') || null,
+        enviar_ibs_cbs: data.enviar_ibs_cbs,
         ativo: data.ativo,
       };
 
