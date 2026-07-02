@@ -31,6 +31,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Building2, FileText, Settings, Search, MapPin, User, Building, Truck } from "lucide-react";
 import { SeriesFiscaisManager } from "./SeriesFiscaisManager";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useCreateEmpresa, useUpdateEmpresa, Empresa } from "@/hooks/useSupabaseData";
 
