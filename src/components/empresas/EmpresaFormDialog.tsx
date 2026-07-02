@@ -162,6 +162,9 @@ const empresaSchema = z.object({
   resp_tec_email: z.string().email("E-mail inválido").max(60).optional().or(z.literal("")).nullable(),
   resp_tec_fone: z.string().max(20).optional().nullable(),
 
+  // Reforma Tributária (IBS/CBS)
+  enviar_ibs_cbs: z.boolean().default(false),
+
   // Status
   ativo: z.boolean().default(true),
 }).superRefine((data, ctx) => {
