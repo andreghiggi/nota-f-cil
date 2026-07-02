@@ -325,6 +325,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         resp_tec_contato: "",
         resp_tec_email: "",
         resp_tec_fone: "",
+        enviar_ibs_cbs: false,
         ativo: true,
       });
     }
