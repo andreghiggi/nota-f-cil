@@ -292,6 +292,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         resp_tec_contato: (empresa as any).resp_tec_contato || "",
         resp_tec_email: (empresa as any).resp_tec_email || "",
         resp_tec_fone: (empresa as any).resp_tec_fone || "",
+        enviar_ibs_cbs: (empresa as any).enviar_ibs_cbs ?? false,
         ativo: empresa.ativo,
       });
     } else {
