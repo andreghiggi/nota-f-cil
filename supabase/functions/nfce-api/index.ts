@@ -23,6 +23,35 @@ interface NFCePayload {
     aliquota_pis?: number;
     cst_cofins?: string;
     aliquota_cofins?: number;
+    // Reforma Tributária (IBS/CBS) — Grupo UB. Opcional: só entra no XML
+    // se a empresa tiver o flag `enviar_ibs_cbs` ligado (fiscal-api aplica).
+    cst_ibs_cbs?: string;
+    cst_cbs?: string;
+    cst_ibs?: string;
+    c_class_trib?: string;
+    vbc_ibs_cbs?: number;
+    base_calculo_ibs?: number;
+    base_calculo_cbs?: number;
+    aliquota_ibs_uf?: number;
+    aliquota_ibs_mun?: number;
+    aliquota_ibs?: number;
+    aliquota_cbs?: number;
+    p_red_aliq_ibs_uf?: number;
+    p_aliq_efet_ibs_uf?: number;
+    p_red_aliq_ibs_mun?: number;
+    p_aliq_efet_ibs_mun?: number;
+    p_red_aliq_cbs?: number;
+    p_aliq_efet_cbs?: number;
+    valor_dif_ibs_uf?: number;
+    valor_dif_ibs_mun?: number;
+    valor_dif_cbs?: number;
+    valor_dev_trib_ibs_uf?: number;
+    valor_dev_trib_ibs_mun?: number;
+    valor_dev_trib_cbs?: number;
+    valor_ibs_uf?: number;
+    valor_ibs_mun?: number;
+    valor_cbs?: number;
+    [k: string]: any;
   }[];
   valor_desconto?: number;
   valor_frete?: number;
