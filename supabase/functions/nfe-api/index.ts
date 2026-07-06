@@ -1433,13 +1433,34 @@ Deno.serve(async (req) => {
           body: { action: 'inutilizar_nfe', empresa_id, serie, numero_inicial, numero_final, justificativa }
         });
         if (fiscalError || !fiscalResult?.success) {
+          const det = (fiscalResult as any)?.details || {};
           return new Response(
-            JSON.stringify({ error: 'Erro ao inutilizar NF-e na SEFAZ', code: 'SEFAZ_ERROR', details: fiscalResult?.error || fiscalError?.message }),
+            JSON.stringify({
+              error: (fiscalResult as any)?.error || 'Erro ao inutilizar NF-e na SEFAZ',
+              code: 'SEFAZ_ERROR',
+              cStat: det?.cStat ?? null,
+              xMotivo: det?.xMotivo ?? null,
+              sefaz: (fiscalResult as any)?.sefaz ?? null,
+              details: det,
+            }),
             { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
+        const d = fiscalResult.data || {};
         return new Response(
-          JSON.stringify({ success: true, data: fiscalResult.data }),
+          JSON.stringify({
+            success: true,
+            data: {
+              status: 'inutilizada',
+              cStat: d.cStat ?? '102',
+              xMotivo: d.xMotivo ?? null,
+              protocolo: d.protocolo ?? d.nProt ?? null,
+              serie: d.serie ?? serie,
+              numero_inicial: d.numero_inicial ?? numero_inicial,
+              numero_final: d.numero_final ?? numero_final,
+              xml_retorno: d.xml_retorno ?? null,
+            }
+          }),
           { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       } catch (e: any) {
