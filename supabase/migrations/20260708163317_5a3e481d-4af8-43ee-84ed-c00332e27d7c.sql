@@ -1,0 +1,2 @@
+UPDATE public.nfce SET status='pendente', erro_processamento=NULL, updated_at=now()
+WHERE id IN ('7a1d198e-d529-476b-8b78-19caf992efc4','dc0d37f3-7d94-4142-8ab3-0f900bac20f6','ceadcc08-8362-4bb4-ba8d-b24eafba3a13');
