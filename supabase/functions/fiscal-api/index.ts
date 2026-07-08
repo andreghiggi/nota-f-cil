@@ -874,8 +874,10 @@ Deno.serve(async (req) => {
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+  let bodyRef: any = null;
   try {
     const body = await req.json();
+    bodyRef = body;
     const { action, empresa_id, nfce_id, nfe_id, mdfe_id } = body;
 
     // ========================================================================
