@@ -17,6 +17,39 @@ Deno.serve(async (req) => {
   try {
     console.log('🔄 Processing NF-e queue...');
 
+    // 🛟 Sweep de órfãs: NF-e em 'processando' há mais de 5 min sem entrada na fila
+    // (edge function timeout / crash silencioso deixou o documento travado).
+    try {
+      const cutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      const { data: orfas } = await supabase
+        .from('nfe')
+        .select('id, numero')
+        .eq('status', 'processando')
+        .lt('updated_at', cutoff)
+        .limit(50);
+      for (const o of orfas || []) {
+        const { data: jaEnfileirada } = await supabase
+          .from('fila_processamento_nfe')
+          .select('id').eq('nfe_id', o.id).maybeSingle();
+        if (jaEnfileirada) continue;
+        console.log(`🛟 NF-e ${o.numero} órfã em 'processando' — devolvendo para 'pendente' e reenfileirando`);
+        await supabase.from('nfe').update({
+          status: 'pendente',
+          erro_processamento: 'Timeout/interrupção durante emissão anterior — reprocessando automaticamente',
+        }).eq('id', o.id).eq('status', 'processando');
+        await supabase.from('fila_processamento_nfe').insert({
+          nfe_id: o.id,
+          prioridade: 5,
+          proximo_processamento: new Date().toISOString(),
+          tentativas: 0,
+          max_tentativas: 3,
+        });
+      }
+    } catch (sweepErr) {
+      console.error('⚠️ Sweep órfãs NF-e falhou:', (sweepErr as Error)?.message);
+    }
+
+
     const { data: filaItems, error: filaError } = await supabase
       .from('fila_processamento_nfe')
       .select('*, nfe(id, numero, serie, status, empresa_id)')

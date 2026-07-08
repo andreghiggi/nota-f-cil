@@ -874,8 +874,10 @@ Deno.serve(async (req) => {
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
+  let bodyRef: any = null;
   try {
     const body = await req.json();
+    bodyRef = body;
     const { action, empresa_id, nfce_id, nfe_id, mdfe_id } = body;
 
     // ========================================================================
@@ -2395,6 +2397,28 @@ Deno.serve(async (req) => {
 
   } catch (error: any) {
     console.error('❌ Fiscal API error:', error);
+    // ⚠️ Rollback: se o erro ocorreu durante uma emissão, o documento pode ter
+    // ficado com status='processando' sem retorno da SEFAZ. Devolve para
+    // 'pendente' com o erro registrado para que a fila reprocesse.
+    try {
+      const act = String(bodyRef?.action || '');
+      const errMsg = `Falha inesperada fiscal-api: ${error?.message || 'erro desconhecido'}`;
+      if (act === 'emit_nfe' && bodyRef?.nfe_id) {
+        await supabase.from('nfe')
+          .update({ status: 'pendente', erro_processamento: errMsg })
+          .eq('id', bodyRef.nfe_id).eq('status', 'processando');
+      } else if (act === 'emit_nfce' && bodyRef?.nfce_id) {
+        await supabase.from('nfce')
+          .update({ status: 'pendente', erro_processamento: errMsg })
+          .eq('id', bodyRef.nfce_id).eq('status', 'processando');
+      } else if (act === 'emit_mdfe' && bodyRef?.mdfe_id) {
+        await supabase.from('mdfe')
+          .update({ status: 'pendente', erro_processamento: errMsg })
+          .eq('id', bodyRef.mdfe_id).eq('status', 'processando');
+      }
+    } catch (rollbackErr) {
+      console.error('❌ Rollback status falhou:', (rollbackErr as Error)?.message);
+    }
     return new Response(
       JSON.stringify({ error: 'Erro interno', details: error.message }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
