@@ -1,0 +1,1 @@
+UPDATE public.fila_processamento SET proximo_processamento=now(), tentativas=0, erro_ultimo=NULL WHERE nfce_id='ceadcc08-8362-4bb4-ba8d-b24eafba3a13'; UPDATE public.nfce SET erro_processamento=NULL WHERE id='ceadcc08-8362-4bb4-ba8d-b24eafba3a13';
