@@ -406,6 +406,33 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ---------- POST /dfe-api/:id/consultar (alias: baixa XML e retorna JSON) ----------
+    if ((method === 'POST' || method === 'GET') && sub.length === 2 && sub[1] === 'consultar') {
+      const denied = requirePerm('consultar_dfe'); if (denied) return denied;
+      const { data } = await supabase.from('dfe_recebidas')
+        .select('id, chave_acesso, nsu, schema, tipo_documento, cnpj_emitente, nome_emitente, valor_total, data_emissao, xml_completo, xml_resumo')
+        .eq('id', sub[0]).eq('empresa_id', empresaId).maybeSingle();
+      if (!data) return err('Not found', 'NOT_FOUND', 404);
+      const xml = data.xml_completo || data.xml_resumo;
+      const tipoXml = data.xml_completo ? 'completo' : (data.xml_resumo ? 'resumo' : null);
+      if (!xml) return err('XML ainda não disponível (somente resumo). Manifeste com Confirmação ou Ciência para receber o XML completo.', 'NOT_AVAILABLE', 404);
+      return ok({
+        id: data.id,
+        chave_acesso: data.chave_acesso,
+        nsu: data.nsu,
+        schema: data.schema,
+        tipo_documento: data.tipo_documento,
+        cnpj_emitente: data.cnpj_emitente,
+        nome_emitente: data.nome_emitente,
+        valor_total: data.valor_total,
+        data_emissao: data.data_emissao,
+        tipo_xml: tipoXml,
+        xml,
+      });
+    }
+
+
+
     // ---------- POST /dfe-api/:id/manifestar ----------
     if (method === 'POST' && sub.length === 2 && sub[1] === 'manifestar') {
       const denied = requirePerm('manifestar_dfe'); if (denied) return denied;
