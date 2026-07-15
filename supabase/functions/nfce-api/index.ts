@@ -143,27 +143,9 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Pré-validação de CFOP: NFC-e (modelo 65) só aceita um subconjunto de CFOPs
-      // (SEFAZ rejeita com cStat 725 - "NFC-e com CFOP inválido"). Bloqueamos aqui
-      // com mensagem clara para o ERP em vez de gastar uma rodada de rejeição.
-      const CFOPS_NFCE = new Set([
-        '5101','5102','5103','5104','5115','5405','5656','5667','5933'
-      ]);
-      for (let i = 0; i < payload.itens.length; i++) {
-        const cfop = String(payload.itens[i].cfop || '').replace(/\D/g, '');
-        if (!CFOPS_NFCE.has(cfop)) {
-          return new Response(
-            JSON.stringify({
-              error: `CFOP ${cfop || '(vazio)'} não é aceito em NFC-e (item ${i + 1}). Use um dos CFOPs válidos para modelo 65: ${Array.from(CFOPS_NFCE).join(', ')}. Para outras operações (ex: 5949) emita NF-e modelo 55.`,
-              code: 'CFOP_INVALIDO_NFCE',
-              item: i + 1,
-              cfop_recebido: cfop,
-              cfops_aceitos: Array.from(CFOPS_NFCE),
-            }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-      }
+      // Observação: não bloqueamos CFOP no nível da nossa API — a SEFAZ decide
+      // se a combinação CFOP+CST/CSOSN é válida. Ex.: CFOP 5949 é aceito em NFC-e
+      // quando combinado com CSOSN 900 (Outros) ou CST equivalente.
 
       // Get empresa info first (needed for serie)
       const { data: empresaData } = await supabase
