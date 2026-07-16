@@ -224,6 +224,73 @@ Deno.serve(async (req) => {
         );
       }
 
+      // ================ IDEMPOTÊNCIA =================
+      // Evita double-submit do ERP (mesma transação reemitida em segundos).
+      // Chave 1: external_id + empresa (janela 10 min)
+      // Chave 2: card.NSU + card.tBand + empresa (janela 10 min) — proteção
+      //          mesmo quando o ERP muda o external_id em cada retry.
+      const janelaISO = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+
+      if (payload.external_id) {
+        const { data: existente } = await supabase
+          .from('nfce')
+          .select('id, numero, serie, status, chave_acesso, protocolo, data_autorizacao, qrcode_url, valor_total, created_at')
+          .eq('empresa_id', empresa_id)
+          .eq('external_id', payload.external_id)
+          .gte('created_at', janelaISO)
+          .in('status', ['autorizada', 'pendente', 'processando'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existente) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              idempotent: true,
+              message: 'NFC-e já emitida para este external_id nos últimos 10 minutos',
+              data: existente,
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      // Idempotência por NSU de cartão (proteção contra retry que troca external_id)
+      const pagamentos: any[] = Array.isArray((payload as any).pagamentos) ? (payload as any).pagamentos : [];
+      const cartaoComNSU = pagamentos.find((p: any) => {
+        const nsu = p?.card?.NSU ?? p?.card?.nsu ?? p?.cNSU;
+        const tPag = String(p?.tPag ?? p?.forma_pagamento ?? '');
+        return nsu && (tPag === '03' || tPag === '04' || tPag === '17');
+      });
+      if (cartaoComNSU) {
+        const nsu = cartaoComNSU.card?.NSU ?? cartaoComNSU.card?.nsu ?? cartaoComNSU.cNSU;
+        const { data: dupCard } = await supabase
+          .from('nfce')
+          .select('id, numero, serie, status, chave_acesso, protocolo, external_id, created_at')
+          .eq('empresa_id', empresa_id)
+          .gte('created_at', janelaISO)
+          .in('status', ['autorizada', 'pendente', 'processando'])
+          .filter('payload_entrada->pagamentos', 'cs', JSON.stringify([{ card: { NSU: String(nsu) } }]))
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (dupCard) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              idempotent: true,
+              reason: 'card_nsu_match',
+              message: 'NFC-e já emitida para este NSU de cartão nos últimos 10 minutos',
+              data: dupCard,
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+      // ================ FIM IDEMPOTÊNCIA =================
+
       // Observação: não bloqueamos CFOP no nível da nossa API — a SEFAZ decide
       // se a combinação CFOP+CST/CSOSN é válida. Ex.: CFOP 5949 é aceito em NFC-e
       // quando combinado com CSOSN 900 (Outros) ou CST equivalente.
