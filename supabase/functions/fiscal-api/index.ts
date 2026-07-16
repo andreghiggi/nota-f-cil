@@ -932,6 +932,16 @@ Deno.serve(async (req) => {
         );
       }
 
+      // 🛑 Guard: nota abortada para contingência não pode ser reprocessada.
+      // Retorno tardio da SEFAZ / re-enfileiramento deve ser silenciosamente ignorado.
+      if (nfce.status === 'abortada' || nfce.status === 'cancelada') {
+        console.log(`⏭️  NFC-e ${nfce.numero} status=${nfce.status} — ignorando emissão (retorno tardio/duplicado).`);
+        return new Response(
+          JSON.stringify({ success: false, ignored: true, status: nfce.status, message: 'Nota abortada/cancelada — emissão ignorada' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       // Auto-register empresa (ensures api_key, syncs with PHP, loads certificate)
       const { empresa, certificate, error: regError } = await ensureRegistered(supabase, nfce.empresa_id);
 
