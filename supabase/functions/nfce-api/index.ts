@@ -632,6 +632,76 @@ Deno.serve(async (req) => {
       );
     }
 
+    // POST /nfce-api/inutilizar - Inutilização de numeração NFC-e (modelo 65)
+    if (method === 'POST' && pathParts.length === 2 && pathParts[0] === 'nfce-api' && pathParts[1] === 'inutilizar') {
+      if (!permissoes.includes('cancelar') && !permissoes.includes('gerenciar')) {
+        return new Response(
+          JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      const inutPayload = await req.json().catch(() => ({}));
+      const serie = inutPayload.serie ?? inutPayload.nSerie ?? 1;
+      const numero_inicial = inutPayload.numero_inicial ?? inutPayload.nIni;
+      const numero_final = inutPayload.numero_final ?? inutPayload.nFin ?? numero_inicial;
+      const justificativa = (inutPayload.justificativa || '').toString().trim();
+
+      if (!numero_inicial || !numero_final) {
+        return new Response(
+          JSON.stringify({ error: 'numero_inicial e numero_final são obrigatórios', code: 'VALIDATION_ERROR' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (justificativa.length < 15 || justificativa.length > 255) {
+        return new Response(
+          JSON.stringify({ error: 'Justificativa deve ter entre 15 e 255 caracteres', code: 'VALIDATION_ERROR' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      try {
+        const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+          body: { action: 'inutilizar_nfce', empresa_id, serie, numero_inicial, numero_final, justificativa }
+        });
+        if (fiscalError || !fiscalResult?.success) {
+          const det = (fiscalResult as any)?.details || {};
+          return new Response(
+            JSON.stringify({
+              error: (fiscalResult as any)?.error || 'Erro ao inutilizar NFC-e na SEFAZ',
+              code: 'SEFAZ_ERROR',
+              cStat: det?.cStat ?? null,
+              xMotivo: det?.xMotivo ?? null,
+              sefaz: (fiscalResult as any)?.sefaz ?? null,
+              details: det,
+            }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        const d = fiscalResult.data || {};
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              status: 'inutilizada',
+              cStat: d.cStat ?? '102',
+              xMotivo: d.xMotivo ?? null,
+              protocolo: d.protocolo ?? d.nProt ?? null,
+              serie: d.serie ?? serie,
+              numero_inicial: d.numero_inicial ?? numero_inicial,
+              numero_final: d.numero_final ?? numero_final,
+              xml_retorno: d.xml_retorno ?? null,
+            }
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (e: any) {
+        return new Response(
+          JSON.stringify({ error: 'Erro interno ao inutilizar', code: 'INTERNAL_ERROR', details: e?.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Route not found
     return new Response(
       JSON.stringify({ error: 'Endpoint not found', code: 'NOT_FOUND' }),
