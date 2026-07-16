@@ -394,11 +394,13 @@ Deno.serve(async (req) => {
 
       await supabase.from('nfce_itens').insert(itensToInsert);
 
-      // Add to processing queue as fallback
-      await supabase.from('fila_processamento').insert({
-        nfce_id: nfceData.id,
-        prioridade: 5
-      });
+      // Add to processing queue as fallback (não usado em contingência)
+      if (payload.tp_emis !== 9) {
+        await supabase.from('fila_processamento').insert({
+          nfce_id: nfceData.id,
+          prioridade: 5
+        });
+      }
 
       // Log the action
       await supabase.rpc('registrar_log', {
@@ -407,10 +409,40 @@ Deno.serve(async (req) => {
         p_token_api_id: token_id,
         p_tipo: 'info',
         p_categoria: 'api',
-        p_mensagem: `NFC-e ${nfceData.numero} criada via API`,
-        p_detalhes: { external_id: payload.external_id, valor_total: valorTotal },
+        p_mensagem: `NFC-e ${nfceData.numero} criada via API${payload.tp_emis === 9 ? ' (contingência offline)' : ''}`,
+        p_detalhes: { external_id: payload.external_id, valor_total: valorTotal, tp_emis: payload.tp_emis || 1 },
         p_ip_origem: req.headers.get('x-forwarded-for')
       });
+
+      // ================ CONTINGÊNCIA OFFLINE (tpEmis=9) =================
+      // Não transmite online. Enfileira para retransmissão automática
+      // quando a SEFAZ voltar (worker roda em background, prazo 24h).
+      if (payload.tp_emis === 9) {
+        await supabase.from('nfce').update({ status: 'contingencia' }).eq('id', nfceData.id);
+        await supabase.from('nfce_contingencia_queue').insert({
+          nfce_id: nfceData.id,
+          empresa_id,
+          emitida_em: new Date().toISOString(),
+        });
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: {
+              id: nfceData.id,
+              numero: nfceData.numero,
+              serie: nfceData.serie,
+              status: 'contingencia',
+              tp_emis: 9,
+              ambiente,
+              valor_total: valorTotal,
+              mensagem: 'NFC-e registrada em contingência offline. Será retransmitida automaticamente quando a SEFAZ voltar (prazo 24h).',
+              created_at: nfceData.created_at,
+            }
+          }),
+          { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
 
       // Emit synchronously via fiscal-api for instant processing
       let emitResult: any = null;
