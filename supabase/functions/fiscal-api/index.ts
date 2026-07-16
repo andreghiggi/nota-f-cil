@@ -2294,6 +2294,20 @@ Deno.serve(async (req) => {
         body.numero_inicial,
         body.numero_final ?? body.numero_inicial,
         body.justificativa,
+        '55',
+      );
+    }
+
+    // ACTION: inutilizar_nfce (inutilização de numeração NFC-e modelo 65)
+    if (action === 'inutilizar_nfce') {
+      return await handleInutilizar(
+        supabase,
+        empresa_id,
+        body.serie,
+        body.numero_inicial,
+        body.numero_final ?? body.numero_inicial,
+        body.justificativa,
+        '65',
       );
     }
 
