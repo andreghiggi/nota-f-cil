@@ -953,7 +953,7 @@ Deno.serve(async (req) => {
       }
 
       // Update status to processing
-      await supabase.from('nfce').update({ status: 'processando' }).eq('id', nfce_id);
+      await supabase.from('nfce').update({ status: 'processando' }).eq('id', nfce_id).not('status', 'in', '(abortada,cancelada,autorizada)');
 
       // Build payload for PHP
       const clientePayload = buildNfceClientePayload(nfce.payload_entrada?.cliente, empresa.ambiente);
