@@ -542,6 +542,112 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ============================================================
+    // POST /nfce-api/:id/abortar-online - Aborta tentativa online
+    // Usado pelo ERP ANTES de imprimir contingência (tpEmis=9).
+    // Marca a NFC-e como 'abortada' e faz callback tardio da SEFAZ
+    // ser ignorado, prevenindo autorização duplicada.
+    // ============================================================
+    if (method === 'POST' && pathParts.length === 3 && pathParts[0] === 'nfce-api' && pathParts[2] === 'abortar-online') {
+      if (!permissoes.includes('emitir') && !permissoes.includes('emitir_nfce') && !permissoes.includes('gerenciar')) {
+        return new Response(
+          JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const nfceId = pathParts[1];
+
+      const { data: nfceData, error: fetchError } = await supabase
+        .from('nfce')
+        .select('id, numero, serie, status, protocolo, chave_acesso, external_id')
+        .eq('id', nfceId)
+        .eq('empresa_id', empresa_id)
+        .maybeSingle();
+
+      if (fetchError || !nfceData) {
+        return new Response(
+          JSON.stringify({ error: 'NFC-e não encontrada', code: 'NOT_FOUND' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Já autorizada → não pode abortar; ERP deve usar o XML autorizado
+      if (nfceData.status === 'autorizada') {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'nota_ja_autorizada',
+            code: 'ALREADY_AUTHORIZED',
+            protocolo: nfceData.protocolo,
+            chave_acesso: nfceData.chave_acesso,
+            numero: nfceData.numero,
+            serie: nfceData.serie,
+            mensagem: 'SEFAZ já autorizou esta NFC-e. NÃO imprima contingência — utilize o XML autorizado.',
+          }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Status finais não-autorizada → nada a abortar, resposta idempotente
+      if (['rejeitada', 'cancelada', 'denegada', 'inutilizada', 'abortada'].includes(nfceData.status)) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            id: nfceId,
+            status_anterior: nfceData.status,
+            status_novo: nfceData.status,
+            mensagem: 'Nada a abortar. Status já é final. Seguro imprimir contingência.',
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Em andamento (pendente/processando/contingencia) → aborta
+      const statusAnterior = nfceData.status;
+      const { error: updErr } = await supabase
+        .from('nfce')
+        .update({
+          status: 'abortada',
+          motivo_retorno: 'Abortada pelo ERP antes de imprimir contingência (tpEmis=9). Retorno tardio da SEFAZ será ignorado.',
+        })
+        .eq('id', nfceId)
+        .in('status', ['pendente', 'processando', 'contingencia']);
+
+      if (updErr) {
+        console.error('abortar-online update error:', updErr);
+        return new Response(
+          JSON.stringify({ error: 'Falha ao abortar', code: 'INTERNAL_ERROR', details: updErr.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Remove da fila de processamento normal (não retransmite online)
+      await supabase.from('fila_processamento').delete().eq('nfce_id', nfceId);
+
+      await supabase.rpc('registrar_log', {
+        p_empresa_id: empresa_id,
+        p_nfce_id: nfceId,
+        p_token_api_id: token_id,
+        p_tipo: 'warning',
+        p_categoria: 'api',
+        p_mensagem: `NFC-e ${nfceData.numero} abortada pelo ERP para contingência offline`,
+        p_detalhes: { status_anterior: statusAnterior, external_id: nfceData.external_id },
+        p_ip_origem: req.headers.get('x-forwarded-for'),
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          id: nfceId,
+          status_anterior: statusAnterior,
+          status_novo: 'abortada',
+          mensagem: 'Retorno tardio da SEFAZ será ignorado. Seguro imprimir contingência (tpEmis=9).',
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     // POST /nfce/:id/cancelar - Cancel NFC-e
     if (method === 'POST' && pathParts.length === 3 && pathParts[0] === 'nfce-api' && pathParts[2] === 'cancelar') {
       if (!permissoes.includes('cancelar')) {
