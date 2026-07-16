@@ -2434,7 +2434,7 @@ Deno.serve(async (req) => {
       } else if (act === 'emit_nfce' && bodyRef?.nfce_id) {
         await supabase.from('nfce')
           .update({ status: 'pendente', erro_processamento: errMsg })
-          .eq('id', bodyRef.nfce_id).eq('status', 'processando');
+          .eq('id', bodyRef.nfce_id).eq('status', 'processando').neq('status', 'abortada');
       } else if (act === 'emit_mdfe' && bodyRef?.mdfe_id) {
         await supabase.from('mdfe')
           .update({ status: 'pendente', erro_processamento: errMsg })
