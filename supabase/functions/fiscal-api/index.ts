@@ -1205,7 +1205,7 @@ Deno.serve(async (req) => {
         } catch {}
       }
 
-      await supabase.from('nfce').update(updateData).eq('id', nfce_id);
+      await supabase.from('nfce').update(updateData).eq('id', nfce_id).neq('status', 'abortada').neq('status', 'cancelada');
 
       await supabase.rpc('registrar_log', {
         p_empresa_id: nfce.empresa_id,
