@@ -2294,6 +2294,20 @@ Deno.serve(async (req) => {
         body.numero_inicial,
         body.numero_final ?? body.numero_inicial,
         body.justificativa,
+        '55',
+      );
+    }
+
+    // ACTION: inutilizar_nfce (inutilização de numeração NFC-e modelo 65)
+    if (action === 'inutilizar_nfce') {
+      return await handleInutilizar(
+        supabase,
+        empresa_id,
+        body.serie,
+        body.numero_inicial,
+        body.numero_final ?? body.numero_inicial,
+        body.justificativa,
+        '65',
       );
     }
 
@@ -3011,6 +3025,7 @@ async function handleInutilizar(
   numeroInicial: any,
   numeroFinal: any,
   justificativa: string,
+  modelo: '55' | '65' = '55',
 ) {
   if (!empresaId) {
     return new Response(JSON.stringify({ error: 'empresa_id é obrigatório' }),
@@ -3046,11 +3061,15 @@ async function handleInutilizar(
     payload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
   }
 
-  console.log(`📡 Inutilizando NF-e série ${nSerie} ${nIni}-${nFin} (empresa ${empresaId})...`);
+  const endpoint = modelo === '65' ? '/nfce/inutilizar' : '/nfe/inutilizar';
+  const docLabel = modelo === '65' ? 'NFC-e' : 'NF-e';
+  const tabela = modelo === '65' ? 'nfce' : 'nfe';
+
+  console.log(`📡 Inutilizando ${docLabel} série ${nSerie} ${nIni}-${nFin} (empresa ${empresaId})...`);
   const { response, text: responseText, data: responseData } = await postWithRetry(
-    `${FISCAL_API_BASE_URL}/nfe/inutilizar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`,
+    `${FISCAL_API_BASE_URL}${endpoint}?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`,
     payload,
-    { label: `Inutilizar NF-e ${nIni}-${nFin}` }
+    { label: `Inutilizar ${docLabel} ${nIni}-${nFin}` }
   );
   console.log(`📡 Inutilizar response (${response.status}):`, responseText.substring(0, 500));
 
@@ -3059,10 +3078,10 @@ async function handleInutilizar(
   await supabase.from('logs_fiscais').insert({
     empresa_id: empresaId,
     tipo: ok ? 'sucesso' : 'erro',
-    categoria: 'inutilizacao_nfe',
+    categoria: modelo === '65' ? 'inutilizacao_nfce' : 'inutilizacao_nfe',
     mensagem: ok
-      ? `NF-e série ${nSerie} ${nIni}-${nFin} inutilizada (cStat ${responseData?.cStat})`
-      : `Falha ao inutilizar NF-e série ${nSerie} ${nIni}-${nFin}`,
+      ? `${docLabel} série ${nSerie} ${nIni}-${nFin} inutilizada (cStat ${responseData?.cStat})`
+      : `Falha ao inutilizar ${docLabel} série ${nSerie} ${nIni}-${nFin}`,
     detalhes: responseData,
   });
 
@@ -3072,7 +3091,7 @@ async function handleInutilizar(
     const motivoInut = `Inutilizada SEFAZ: ${just}`;
 
     // 1) Marca registros existentes na faixa (não autorizados/cancelados) como 'inutilizada'
-    await supabase.from('nfe')
+    await supabase.from(tabela)
       .update({
         status: 'inutilizada' as any,
         motivo_retorno: motivoInut,
@@ -3089,7 +3108,7 @@ async function handleInutilizar(
     // 2) Cria placeholders 'inutilizada' para números sem registro
     try {
       const { data: existentes } = await supabase
-        .from('nfe')
+        .from(tabela)
         .select('numero')
         .eq('empresa_id', empresaId)
         .eq('serie', serieStr)
@@ -3114,7 +3133,7 @@ async function handleInutilizar(
         });
       }
       if (novos.length > 0) {
-        await supabase.from('nfe').insert(novos);
+        await supabase.from(tabela).insert(novos);
       }
     } catch (e) {
       console.warn('Falha ao criar placeholders de inutilização:', (e as Error)?.message);
@@ -3124,7 +3143,7 @@ async function handleInutilizar(
     await supabase.from('series_numeros_liberados')
       .delete()
       .eq('empresa_id', empresaId)
-      .eq('tipo', 'nfe')
+      .eq('tipo', modelo === '65' ? 'nfce' : 'nfe')
       .eq('serie', serieStr)
       .gte('numero', nIni)
       .lte('numero', nFin);
