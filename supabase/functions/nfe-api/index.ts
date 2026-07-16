@@ -1414,6 +1414,9 @@ Deno.serve(async (req) => {
       const numero_inicial = inutPayload.numero_inicial ?? inutPayload.nIni;
       const numero_final = inutPayload.numero_final ?? inutPayload.nFin ?? numero_inicial;
       const justificativa = (inutPayload.justificativa || '').toString().trim();
+      const modelo = String(inutPayload.modelo ?? inutPayload.model ?? inutPayload.mod ?? '55').replace(/\D/g, '') === '65' ? '65' : '55';
+      const action = modelo === '65' ? 'inutilizar_nfce' : 'inutilizar_nfe';
+      const docLabel = modelo === '65' ? 'NFC-e' : 'NF-e';
 
       if (!numero_inicial || !numero_final) {
         return new Response(
@@ -1430,13 +1433,13 @@ Deno.serve(async (req) => {
 
       try {
         const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
-          body: { action: 'inutilizar_nfe', empresa_id, serie, numero_inicial, numero_final, justificativa }
+          body: { action, empresa_id, serie, numero_inicial, numero_final, justificativa }
         });
         if (fiscalError || !fiscalResult?.success) {
           const det = (fiscalResult as any)?.details || {};
           return new Response(
             JSON.stringify({
-              error: (fiscalResult as any)?.error || 'Erro ao inutilizar NF-e na SEFAZ',
+              error: (fiscalResult as any)?.error || `Erro ao inutilizar ${docLabel} na SEFAZ`,
               code: 'SEFAZ_ERROR',
               cStat: det?.cStat ?? null,
               xMotivo: det?.xMotivo ?? null,
