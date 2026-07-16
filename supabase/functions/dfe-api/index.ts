@@ -96,6 +96,11 @@ function parseDoc(nsu: number, schema: string, xml: string): ParsedDoc | null {
   const chave = pickTag(xml, 'chNFe') || (xml.match(/Id="NFe(\d{44})"/)?.[1] ?? '');
   if (!chave) return null;
   const base: ParsedDoc = { nsu, schema, xml, chave, tipo: 'resumo' };
+  // nNF/serie estão embutidos na chave (posições: serie 22-24, nNF 25-33)
+  if (chave.length === 44) {
+    base.serie = String(parseInt(chave.substring(22, 25), 10));
+    base.numero = String(parseInt(chave.substring(25, 34), 10));
+  }
   if (isResNFe) {
     base.tipo = 'resumo';
     base.cnpj_emitente = pickTag(xml, 'CNPJ');
