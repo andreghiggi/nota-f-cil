@@ -123,6 +123,87 @@ Deno.serve(async (req) => {
 
     // Route handling
     const method = req.method;
+
+    // Compatibilidade: alguns ERPs chamam POST /nfce-api com action/body de inutilização,
+    // em vez de POST /nfce-api/inutilizar.
+    if (method === 'POST' && pathParts.length === 1 && pathParts[0] === 'nfce-api') {
+      const actionPayload = await req.clone().json().catch(() => ({}));
+      const action = String(actionPayload.action || actionPayload.acao || '').toLowerCase();
+      const looksLikeInutilizacao = action.includes('inutil') || (
+        !Array.isArray(actionPayload.itens)
+        && (actionPayload.numero_inicial || actionPayload.nIni || actionPayload.numeroInicial)
+        && actionPayload.justificativa
+      );
+
+      if (looksLikeInutilizacao) {
+        if (!permissoes.includes('cancelar') && !permissoes.includes('gerenciar')) {
+          return new Response(
+            JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
+            { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const serie = actionPayload.serie ?? actionPayload.nSerie ?? 1;
+        const numero_inicial = actionPayload.numero_inicial ?? actionPayload.numeroInicial ?? actionPayload.nIni;
+        const numero_final = actionPayload.numero_final ?? actionPayload.numeroFinal ?? actionPayload.nFin ?? numero_inicial;
+        const justificativa = (actionPayload.justificativa || '').toString().trim();
+
+        if (!numero_inicial || !numero_final) {
+          return new Response(
+            JSON.stringify({ error: 'numero_inicial e numero_final são obrigatórios', code: 'VALIDATION_ERROR' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (justificativa.length < 15 || justificativa.length > 255) {
+          return new Response(
+            JSON.stringify({ error: 'Justificativa deve ter entre 15 e 255 caracteres', code: 'VALIDATION_ERROR' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        try {
+          const { data: fiscalResult, error: fiscalError } = await supabase.functions.invoke('fiscal-api', {
+            body: { action: 'inutilizar_nfce', empresa_id, serie, numero_inicial, numero_final, justificativa }
+          });
+          if (fiscalError || !fiscalResult?.success) {
+            const det = (fiscalResult as any)?.details || {};
+            return new Response(
+              JSON.stringify({
+                error: (fiscalResult as any)?.error || 'Erro ao inutilizar NFC-e na SEFAZ',
+                code: 'SEFAZ_ERROR',
+                cStat: det?.cStat ?? null,
+                xMotivo: det?.xMotivo ?? null,
+                sefaz: (fiscalResult as any)?.sefaz ?? null,
+                details: det,
+              }),
+              { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          const d = fiscalResult.data || {};
+          return new Response(
+            JSON.stringify({
+              success: true,
+              data: {
+                status: 'inutilizada',
+                cStat: d.cStat ?? '102',
+                xMotivo: d.xMotivo ?? null,
+                protocolo: d.protocolo ?? d.nProt ?? null,
+                serie: d.serie ?? serie,
+                numero_inicial: d.numero_inicial ?? numero_inicial,
+                numero_final: d.numero_final ?? numero_final,
+                xml_retorno: d.xml_retorno ?? null,
+              }
+            }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        } catch (e: any) {
+          return new Response(
+            JSON.stringify({ error: 'Erro interno ao inutilizar', code: 'INTERNAL_ERROR', details: e?.message }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    }
     
     // POST /nfce - Emit new NFC-e
     if (method === 'POST' && pathParts.length === 1 && pathParts[0] === 'nfce-api') {

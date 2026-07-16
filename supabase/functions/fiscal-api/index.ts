@@ -3073,7 +3073,10 @@ async function handleInutilizar(
   );
   console.log(`📡 Inutilizar response (${response.status}):`, responseText.substring(0, 500));
 
-  const ok = response.ok && (responseData?.sucesso || responseData?.status === 'inutilizada' || String(responseData?.cStat) === '102');
+  const alreadyInutilized = String(responseData?.cStat) === '563'
+    || /ja existe pedido de inutilizacao|já existe pedido de inutilização/i.test(JSON.stringify(responseData));
+  const ok = (response.ok && (responseData?.sucesso || responseData?.status === 'inutilizada' || String(responseData?.cStat) === '102'))
+    || alreadyInutilized;
 
   await supabase.from('logs_fiscais').insert({
     empresa_id: empresaId,
