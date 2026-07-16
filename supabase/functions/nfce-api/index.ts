@@ -352,7 +352,10 @@ Deno.serve(async (req) => {
           valor_pis: valorPis,
           valor_cofins: valorCofins,
           payload_entrada: payload,
-          external_id: payload.external_id
+          external_id: payload.external_id,
+          tp_emis: payload.tp_emis === 9 ? 9 : 1,
+          contingencia_dh: payload.tp_emis === 9 ? new Date().toISOString() : null,
+          contingencia_justificativa: payload.tp_emis === 9 ? (payload.contingencia_justificativa || 'Contingência offline NFC-e (tpEmis=9)') : null,
         })
         .select('id, numero, serie, status, created_at')
         .single();
