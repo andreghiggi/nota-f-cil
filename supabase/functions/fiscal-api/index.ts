@@ -1170,7 +1170,7 @@ Deno.serve(async (req) => {
           status: 'rejeitada',
           erro_processamento: responseData.error || 'Erro na API fiscal',
           motivo_retorno: JSON.stringify(responseData),
-        }).eq('id', nfce_id);
+        }).eq('id', nfce_id).neq('status', 'abortada').neq('status', 'cancelada');
 
         await supabase.rpc('registrar_log', {
           p_empresa_id: nfce.empresa_id,
