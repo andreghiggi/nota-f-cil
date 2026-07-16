@@ -64,6 +64,7 @@ async function sendWebhook(
       headers: {
         'Content-Type': 'application/json',
         'X-Webhook-Signature': signature,
+        'X-Webhook-Secret': webhook.secret,
         'X-Webhook-Timestamp': timestamp,
         'X-Webhook-Event': payload.evento,
         'User-Agent': 'FiscalFlow-Webhook/1.0',
