@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
               .from('fila_processamento')
               .update({ tentativas: newTentativas, max_tentativas: newTentativas + 3, proximo_processamento: nextProcessing.toISOString(), erro_ultimo: err.message })
               .eq('id', item.id);
-            await supabase.from('nfce').update({ status: 'pendente', erro_processamento: `Falha temporária SEFAZ/API2: ${err.message}` }).eq('id', nfce.id);
+            await supabase.from('nfce').update({ status: 'pendente', erro_processamento: `Falha temporária SEFAZ/API2: ${err.message}` }).eq('id', nfce.id).neq('status', 'abortada').neq('status', 'cancelada').neq('status', 'autorizada');
             continue;
           }
 
@@ -137,7 +137,7 @@ Deno.serve(async (req) => {
               status: 'rejeitada', 
               erro_processamento: `Máximo de tentativas atingido: ${err.message}` 
             })
-            .eq('id', nfce.id);
+            .eq('id', nfce.id).neq('status', 'abortada').neq('status', 'cancelada').neq('status', 'autorizada');
 
           await supabase.from('fila_processamento').delete().eq('id', item.id);
 
