@@ -8,6 +8,8 @@ const corsHeaders = {
 
 interface NFCePayload {
   external_id?: string;
+  tp_emis?: number; // 1 = normal (default), 9 = contingência offline
+  contingencia_justificativa?: string;
   itens: {
     codigo: string;
     descricao: string;
