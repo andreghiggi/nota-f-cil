@@ -1147,7 +1147,7 @@ Deno.serve(async (req) => {
           status: 'rejeitada',
           erro_processamento: `API fiscal retornou resposta inválida (status ${response.status})`,
           motivo_retorno: responseText.substring(0, 500),
-        }).eq('id', nfce_id);
+        }).eq('id', nfce_id).neq('status', 'abortada').neq('status', 'cancelada');
 
         await supabase.rpc('registrar_log', {
           p_empresa_id: nfce.empresa_id,
