@@ -875,6 +875,8 @@ export type Database = {
           ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
           chave_acesso: string | null
           codigo_retorno: string | null
+          contingencia_dh: string | null
+          contingencia_justificativa: string | null
           created_at: string
           data_autorizacao: string | null
           data_emissao: string
@@ -892,6 +894,7 @@ export type Database = {
           status: Database["public"]["Enums"]["nfce_status"]
           tentativas: number
           token_api_id: string | null
+          tp_emis: number
           updated_at: string
           valor_cofins: number | null
           valor_desconto: number | null
@@ -907,6 +910,8 @@ export type Database = {
           ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
           chave_acesso?: string | null
           codigo_retorno?: string | null
+          contingencia_dh?: string | null
+          contingencia_justificativa?: string | null
           created_at?: string
           data_autorizacao?: string | null
           data_emissao?: string
@@ -924,6 +929,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["nfce_status"]
           tentativas?: number
           token_api_id?: string | null
+          tp_emis?: number
           updated_at?: string
           valor_cofins?: number | null
           valor_desconto?: number | null
@@ -939,6 +945,8 @@ export type Database = {
           ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
           chave_acesso?: string | null
           codigo_retorno?: string | null
+          contingencia_dh?: string | null
+          contingencia_justificativa?: string | null
           created_at?: string
           data_autorizacao?: string | null
           data_emissao?: string
@@ -956,6 +964,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["nfce_status"]
           tentativas?: number
           token_api_id?: string | null
+          tp_emis?: number
           updated_at?: string
           valor_cofins?: number | null
           valor_desconto?: number | null
@@ -980,6 +989,66 @@ export type Database = {
             columns: ["token_api_id"]
             isOneToOne: false
             referencedRelation: "tokens_api"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      nfce_contingencia_queue: {
+        Row: {
+          created_at: string
+          emitida_em: string
+          empresa_id: string
+          id: string
+          nfce_id: string
+          prazo_final: string
+          proxima_tentativa: string
+          status: string
+          tentativas: number
+          transmitida_em: string | null
+          ultimo_erro: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          emitida_em?: string
+          empresa_id: string
+          id?: string
+          nfce_id: string
+          prazo_final?: string
+          proxima_tentativa?: string
+          status?: string
+          tentativas?: number
+          transmitida_em?: string | null
+          ultimo_erro?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          emitida_em?: string
+          empresa_id?: string
+          id?: string
+          nfce_id?: string
+          prazo_final?: string
+          proxima_tentativa?: string
+          status?: string
+          tentativas?: number
+          transmitida_em?: string | null
+          ultimo_erro?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfce_contingencia_queue_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "nfce_contingencia_queue_nfce_id_fkey"
+            columns: ["nfce_id"]
+            isOneToOne: true
+            referencedRelation: "nfce"
             referencedColumns: ["id"]
           },
         ]
@@ -2047,6 +2116,7 @@ export type Database = {
         | "denegada"
         | "contingencia"
         | "inutilizada"
+        | "abortada"
       regime_tributario: "simples_nacional" | "lucro_presumido" | "lucro_real"
       token_status: "ativo" | "inativo" | "revogado"
     }
@@ -2188,6 +2258,7 @@ export const Constants = {
         "denegada",
         "contingencia",
         "inutilizada",
+        "abortada",
       ],
       regime_tributario: ["simples_nacional", "lucro_presumido", "lucro_real"],
       token_status: ["ativo", "inativo", "revogado"],
