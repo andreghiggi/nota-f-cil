@@ -932,6 +932,16 @@ Deno.serve(async (req) => {
         );
       }
 
+      // 🛑 Guard: nota abortada para contingência não pode ser reprocessada.
+      // Retorno tardio da SEFAZ / re-enfileiramento deve ser silenciosamente ignorado.
+      if (nfce.status === 'abortada' || nfce.status === 'cancelada') {
+        console.log(`⏭️  NFC-e ${nfce.numero} status=${nfce.status} — ignorando emissão (retorno tardio/duplicado).`);
+        return new Response(
+          JSON.stringify({ success: false, ignored: true, status: nfce.status, message: 'Nota abortada/cancelada — emissão ignorada' }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
       // Auto-register empresa (ensures api_key, syncs with PHP, loads certificate)
       const { empresa, certificate, error: regError } = await ensureRegistered(supabase, nfce.empresa_id);
 
@@ -943,7 +953,7 @@ Deno.serve(async (req) => {
       }
 
       // Update status to processing
-      await supabase.from('nfce').update({ status: 'processando' }).eq('id', nfce_id);
+      await supabase.from('nfce').update({ status: 'processando' }).eq('id', nfce_id).not('status', 'in', '(abortada,cancelada,autorizada)');
 
       // Build payload for PHP
       const clientePayload = buildNfceClientePayload(nfce.payload_entrada?.cliente, empresa.ambiente);
@@ -1137,7 +1147,7 @@ Deno.serve(async (req) => {
           status: 'rejeitada',
           erro_processamento: `API fiscal retornou resposta inválida (status ${response.status})`,
           motivo_retorno: responseText.substring(0, 500),
-        }).eq('id', nfce_id);
+        }).eq('id', nfce_id).neq('status', 'abortada').neq('status', 'cancelada');
 
         await supabase.rpc('registrar_log', {
           p_empresa_id: nfce.empresa_id,
@@ -1160,7 +1170,7 @@ Deno.serve(async (req) => {
           status: 'rejeitada',
           erro_processamento: responseData.error || 'Erro na API fiscal',
           motivo_retorno: JSON.stringify(responseData),
-        }).eq('id', nfce_id);
+        }).eq('id', nfce_id).neq('status', 'abortada').neq('status', 'cancelada');
 
         await supabase.rpc('registrar_log', {
           p_empresa_id: nfce.empresa_id,
@@ -1195,7 +1205,7 @@ Deno.serve(async (req) => {
         } catch {}
       }
 
-      await supabase.from('nfce').update(updateData).eq('id', nfce_id);
+      await supabase.from('nfce').update(updateData).eq('id', nfce_id).neq('status', 'abortada').neq('status', 'cancelada');
 
       await supabase.rpc('registrar_log', {
         p_empresa_id: nfce.empresa_id,
@@ -2424,7 +2434,7 @@ Deno.serve(async (req) => {
       } else if (act === 'emit_nfce' && bodyRef?.nfce_id) {
         await supabase.from('nfce')
           .update({ status: 'pendente', erro_processamento: errMsg })
-          .eq('id', bodyRef.nfce_id).eq('status', 'processando');
+          .eq('id', bodyRef.nfce_id).eq('status', 'processando').neq('status', 'abortada');
       } else if (act === 'emit_mdfe' && bodyRef?.mdfe_id) {
         await supabase.from('mdfe')
           .update({ status: 'pendente', erro_processamento: errMsg })
