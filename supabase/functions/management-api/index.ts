@@ -95,14 +95,8 @@ async function resolveUltimoNumeroSerie(
       .maybeSingle();
 
     if (!canonRow) {
-      await supabase.from('series_fiscais').insert({
-        empresa_id: empresaId,
-        tipo,
-        serie: canon,
-        numero_atual: ultimo,
-        ativo: true,
-      });
-      ativo = true;
+      // Nunca criamos série automaticamente. Apenas reflete o último número
+      // consolidado com base nas notas existentes.
     } else if ((canonRow.numero_atual ?? 0) < ultimo || !canonRow.ativo) {
       await supabase
         .from('series_fiscais')
