@@ -1021,6 +1021,34 @@ Deno.serve(async (req) => {
           valor_cofins: +((vTotal * aliqCofins) / 100).toFixed(2),
         };
 
+        // ===== Combustível (monofásico / ICMS 61) =====
+        // ERP envia blocos aninhados: item.imposto.ICMS.ICMS61 e item.comb
+        // O sped-nfe precisa desses campos no topo do item + chamada tagcomb.
+        const rawImposto: any = (rawEntrada as any)?.imposto || {};
+        const rawIcms: any = rawImposto?.ICMS || {};
+        const icms61Node: any = rawIcms?.ICMS61
+          || (String((rawEntrada as any)?.cst_icms ?? (rawEntrada as any)?.CST ?? '') === '61' ? rawEntrada : null);
+        if (icms61Node) {
+          itemData.cst_icms = '61';
+          itemData.CST = '61';
+          itemData.qBCMonoRet   = Number(icms61Node.qBCMonoRet   ?? (rawEntrada as any).qBCMonoRet   ?? 0);
+          itemData.adRemICMSRet = Number(icms61Node.adRemICMSRet ?? (rawEntrada as any).adRemICMSRet ?? 0);
+          itemData.vICMSMonoRet = Number(icms61Node.vICMSMonoRet ?? (rawEntrada as any).vICMSMonoRet ?? 0);
+          // Zera bases ICMS próprio (não se aplicam em monofásico retido anteriormente)
+          itemData.base_calculo_icms = 0;
+          itemData.valor_icms = 0;
+          itemData.aliquota_icms = 0;
+        }
+        // Ajusta CST PIS/COFINS quando ERP envia grupos explícitos (PISNT/COFINSNT etc.)
+        const pisNode: any = rawImposto?.PIS?.PISNT || rawImposto?.PIS?.PISOutr || rawImposto?.PIS?.PISAliq;
+        if (pisNode?.CST) itemData.cst_pis = String(pisNode.CST);
+        const cofNode: any = rawImposto?.COFINS?.COFINSNT || rawImposto?.COFINS?.COFINSOutr || rawImposto?.COFINS?.COFINSAliq;
+        if (cofNode?.CST) itemData.cst_cofins = String(cofNode.CST);
+        // Bloco de combustível (grupo LA — obrigatório para CFOP de combustível)
+        if ((rawEntrada as any)?.comb) {
+          itemData.comb = (rawEntrada as any).comb;
+        }
+
         // IBS/CBS (Reforma Tributária) — opt-in por empresa e só se o item traz os campos.
         // Mesmo gating usado na NF-e para não quebrar clientes existentes.
         if ((empresa as any)?.enviar_ibs_cbs && itemTemReformaTributaria(itemComReforma)) {
