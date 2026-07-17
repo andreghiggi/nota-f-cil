@@ -476,11 +476,9 @@ Deno.serve(async (req) => {
         console.error('Register token error:', tokenInsertError);
       }
 
-      // Create default series
-      await supabase.from('series_fiscais').insert([
-        { empresa_id: novaEmpresa.id, tipo: 'nfe', serie: '001', numero_atual: 0 },
-        { empresa_id: novaEmpresa.id, tipo: 'nfce', serie: '001', numero_atual: 0 },
-      ]);
+      // Séries fiscais NÃO são mais criadas automaticamente no cadastro da empresa.
+      // O usuário cadastra manualmente as séries que irá usar em Empresas > Séries.
+
 
       return new Response(
         JSON.stringify({
