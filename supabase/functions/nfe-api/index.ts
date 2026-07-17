@@ -244,14 +244,11 @@ async function syncSerieNumeroAtual(
     .maybeSingle();
 
   if (!canonRow) {
-    await supabase.from('series_fiscais').insert({
-      empresa_id: empresaId,
-      tipo: 'nfe',
-      serie: canon,
-      numero_atual: maxNum,
-      ativo: true,
-    });
-  } else if ((canonRow.numero_atual ?? 0) < maxNum) {
+    // Não criamos série automaticamente. Se a canônica não existe, apenas
+    // sincroniza aliases já existentes (feito acima) e sai.
+    return;
+  }
+  if ((canonRow.numero_atual ?? 0) < maxNum) {
     await supabase
       .from('series_fiscais')
       .update({ numero_atual: maxNum, updated_at: new Date().toISOString() })
