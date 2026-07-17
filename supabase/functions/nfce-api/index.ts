@@ -304,7 +304,29 @@ Deno.serve(async (req) => {
         .eq('id', empresa_id)
         .single();
 
-      const serieNfce = empresaData?.serie_nfce || '001';
+      // Resolve série: preferência = payload.serie > empresa.serie_nfce > primeira série NFC-e ATIVA cadastrada.
+      // Nunca criamos série automaticamente — se não houver nenhuma ativa, erro.
+      let serieNfce: string | null = (payload as any)?.serie ? String((payload as any).serie).trim() : null;
+      if (!serieNfce && empresaData?.serie_nfce) serieNfce = String(empresaData.serie_nfce).trim();
+
+      const { data: seriesAtivas } = await supabase
+        .from('series_fiscais')
+        .select('serie, numero_atual')
+        .eq('empresa_id', empresa_id)
+        .eq('tipo', 'nfce')
+        .eq('ativo', true);
+
+      const ativas = (seriesAtivas || []).map((s: any) => String(s.serie).trim());
+      if (ativas.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'Nenhuma série NFC-e ativa cadastrada para esta empresa. Cadastre uma série antes de emitir.', code: 'SERIE_NAO_CONFIGURADA' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      if (!serieNfce || !ativas.includes(serieNfce)) {
+        // Série pedida não está ativa: usa a primeira ativa cadastrada (sem criar novas).
+        serieNfce = ativas[0];
+      }
 
       // Get next number using serie
       const { data: numeroData, error: numeroError } = await supabase

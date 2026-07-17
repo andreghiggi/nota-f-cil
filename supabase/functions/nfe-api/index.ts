@@ -244,14 +244,11 @@ async function syncSerieNumeroAtual(
     .maybeSingle();
 
   if (!canonRow) {
-    await supabase.from('series_fiscais').insert({
-      empresa_id: empresaId,
-      tipo: 'nfe',
-      serie: canon,
-      numero_atual: maxNum,
-      ativo: true,
-    });
-  } else if ((canonRow.numero_atual ?? 0) < maxNum) {
+    // Não criamos série automaticamente. Se a canônica não existe, apenas
+    // sincroniza aliases já existentes (feito acima) e sai.
+    return;
+  }
+  if ((canonRow.numero_atual ?? 0) < maxNum) {
     await supabase
       .from('series_fiscais')
       .update({ numero_atual: maxNum, updated_at: new Date().toISOString() })
@@ -476,11 +473,9 @@ Deno.serve(async (req) => {
         console.error('Register token error:', tokenInsertError);
       }
 
-      // Create default series
-      await supabase.from('series_fiscais').insert([
-        { empresa_id: novaEmpresa.id, tipo: 'nfe', serie: '001', numero_atual: 0 },
-        { empresa_id: novaEmpresa.id, tipo: 'nfce', serie: '001', numero_atual: 0 },
-      ]);
+      // Séries fiscais NÃO são mais criadas automaticamente no cadastro da empresa.
+      // O usuário cadastra manualmente as séries que irá usar em Empresas > Séries.
+
 
       return new Response(
         JSON.stringify({
