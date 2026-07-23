@@ -27,7 +27,7 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
             <tr>
               <td colSpan={2} style={{ border: "1px solid #000", borderTop: "none", borderLeft: "none", borderRight: "none", height: "7mm", fontSize: "6pt", padding: "1px 3px", verticalAlign: "top" }}>
                 <span style={{ fontSize: "5pt", textTransform: "uppercase" }}>Recebemos de </span>
-                <strong style={{ fontFamily: "'Courier New', monospace", fontSize: "6.5pt" }}>{emp.razao_social || "EMPRESA"}</strong>
+                <strong style={{ fontFamily: "'Courier New', monospace", fontSize: "6.5pt" }}>{(emp.razao_social || "EMPRESA").slice(0, 60)}</strong>
                 <span style={{ fontSize: "5pt" }}> os produtos e/ou serviços constantes na Nota Fiscal indicada ao lado.</span>
               </td>
               <td rowSpan={2} style={{ border: "1px solid #000", borderTop: "none", borderRight: "none", width: "20mm", textAlign: "center", fontSize: "7pt", verticalAlign: "middle", padding: "2px" }}>
@@ -58,8 +58,8 @@ export function DANFePrintContent({ nfe, itens }: DANFePrintContentProps) {
           <tr className="header-row">
             {/* Emitente */}
             <td style={{ width: "40%", verticalAlign: "top" }}>
-              <div className="company-name">{emp.razao_social || "EMPRESA"}</div>
-              {emp.nome_fantasia && <div className="company-info" style={{ fontWeight: "bold" }}>{emp.nome_fantasia}</div>}
+              <div className="company-name">{(emp.razao_social || "EMPRESA").slice(0, 60)}</div>
+              {emp.nome_fantasia && <div className="company-info" style={{ fontWeight: "bold" }}>{emp.nome_fantasia.slice(0, 60)}</div>}
               <div className="company-info">
                 {endereco}<br />
                 {endereco2}<br />

@@ -120,6 +120,12 @@ export function StepEmpresa({ onCreated }: Props) {
         if (!r.ok) throw new Error("cnpjws");
         const d = await r.json();
         const est = d.estabelecimento || {};
+        const ies: any[] = Array.isArray(est.inscricoes_estaduais) ? est.inscricoes_estaduais : [];
+        const ufSigla = (est.estado?.sigla || "").toUpperCase();
+        const chosenIE =
+          ies.find((i) => i.ativo && (i.estado?.sigla || "").toUpperCase() === ufSigla) ||
+          ies.find((i) => i.ativo) ||
+          ies[0];
         return {
           razao_social: d.razao_social,
           nome_fantasia: est.nome_fantasia,
@@ -133,6 +139,7 @@ export function StepEmpresa({ onCreated }: Props) {
           municipio: est.cidade?.nome,
           ddd_telefone_1: est.ddd1 && est.telefone1 ? `${est.ddd1}${est.telefone1}` : undefined,
           cnae_fiscal: est.atividade_principal?.id,
+          inscricao_estadual: chosenIE?.inscricao_estadual || null,
         };
       },
     ];
@@ -161,6 +168,25 @@ export function StepEmpresa({ onCreated }: Props) {
       form.setValue("municipio", d.municipio || "");
       if (d.ddd_telefone_1) form.setValue("telefone", fmtPhone(String(d.ddd_telefone_1).replace(/\D/g, "")));
       if (d.cnae_fiscal) form.setValue("cnae_principal", String(d.cnae_fiscal).replace(/\D/g, "").slice(0, 7));
+      // Se a fonte primária não trouxe IE, complementa via cnpj.ws
+      let ieValue = d.inscricao_estadual ? String(d.inscricao_estadual).replace(/\D/g, "") : "";
+      if (!ieValue) {
+        try {
+          const r = await fetch(`https://publica.cnpj.ws/cnpj/${cnpj}`);
+          if (r.ok) {
+            const jd = await r.json();
+            const est = jd?.estabelecimento || {};
+            const ies: any[] = Array.isArray(est.inscricoes_estaduais) ? est.inscricoes_estaduais : [];
+            const uf = String(d.uf || "").toUpperCase();
+            const chosen =
+              ies.find((i) => i.ativo && (i.estado?.sigla || "").toUpperCase() === uf) ||
+              ies.find((i) => i.ativo) ||
+              ies[0];
+            if (chosen?.inscricao_estadual) ieValue = String(chosen.inscricao_estadual).replace(/\D/g, "");
+          }
+        } catch {}
+      }
+      if (ieValue) form.setValue("inscricao_estadual", ieValue);
       try {
         const ibge = await fetch(`https://servicodados.ibge.gov.br/api/v1/localidades/estados/${d.uf}/municipios`);
         if (ibge.ok) {
