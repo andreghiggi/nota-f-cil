@@ -400,7 +400,27 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       if (data.cnae_fiscal) {
         form.setValue("cnae_principal", data.cnae_fiscal.toString());
       }
-      
+
+      // BrasilAPI não retorna Inscrição Estadual — complementa via cnpj.ws
+      try {
+        const ieResp = await fetch(`https://publica.cnpj.ws/cnpj/${cleanCNPJ}`);
+        if (ieResp.ok) {
+          const ieData = await ieResp.json();
+          const est = ieData?.estabelecimento || {};
+          const ufAtual = (data.uf || "").toUpperCase();
+          const ies: any[] = Array.isArray(est.inscricoes_estaduais) ? est.inscricoes_estaduais : [];
+          const chosen =
+            ies.find((i) => i.ativo && (i.estado?.sigla || "").toUpperCase() === ufAtual) ||
+            ies.find((i) => i.ativo) ||
+            ies[0];
+          if (chosen?.inscricao_estadual) {
+            form.setValue("inscricao_estadual", String(chosen.inscricao_estadual).replace(/\D/g, ""));
+          }
+        }
+      } catch (e) {
+        console.warn("Não foi possível obter Inscrição Estadual:", e);
+      }
+
       toast.success("Dados do CNPJ carregados com sucesso!");
       
     } catch (error: any) {

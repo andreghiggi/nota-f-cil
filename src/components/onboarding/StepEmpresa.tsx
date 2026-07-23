@@ -120,6 +120,12 @@ export function StepEmpresa({ onCreated }: Props) {
         if (!r.ok) throw new Error("cnpjws");
         const d = await r.json();
         const est = d.estabelecimento || {};
+        const ies: any[] = Array.isArray(est.inscricoes_estaduais) ? est.inscricoes_estaduais : [];
+        const ufSigla = (est.estado?.sigla || "").toUpperCase();
+        const chosenIE =
+          ies.find((i) => i.ativo && (i.estado?.sigla || "").toUpperCase() === ufSigla) ||
+          ies.find((i) => i.ativo) ||
+          ies[0];
         return {
           razao_social: d.razao_social,
           nome_fantasia: est.nome_fantasia,
@@ -133,6 +139,7 @@ export function StepEmpresa({ onCreated }: Props) {
           municipio: est.cidade?.nome,
           ddd_telefone_1: est.ddd1 && est.telefone1 ? `${est.ddd1}${est.telefone1}` : undefined,
           cnae_fiscal: est.atividade_principal?.id,
+          inscricao_estadual: chosenIE?.inscricao_estadual || null,
         };
       },
     ];
