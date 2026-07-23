@@ -125,19 +125,35 @@ export default function NFCe() {
     `${chave.substring(0, 12)}...${chave.substring(chave.length - 8)}`;
 
   const handleDownloadXml = async (nfceId: string, numero: string) => {
-    const { data, error } = await supabase.from("nfce").select("xml_envio, xml_retorno").eq("id", nfceId).single();
-    if (error || !data?.xml_envio) {
+    const { data, error } = await supabase
+      .from("nfce")
+      .select("xml_envio, xml_retorno, chave_acesso")
+      .eq("id", nfceId)
+      .single();
+    if (error || (!data?.xml_retorno && !data?.xml_envio)) {
       toast.error("XML não disponível para esta NFC-e");
       return;
     }
-    const xml = data.xml_retorno || data.xml_envio;
-    const blob = new Blob([xml], { type: "application/xml" });
+    // Prefere o XML autorizado (nfeProc/procNFe). Se não houver, usa o assinado enviado.
+    const xml = (data.xml_retorno && data.xml_retorno.trim())
+      ? data.xml_retorno
+      : (data.xml_envio || "");
+    if (!xml.trim()) {
+      toast.error("XML vazio para esta NFC-e");
+      return;
+    }
+    const baseName = data.chave_acesso && data.chave_acesso.length >= 44
+      ? data.chave_acesso
+      : `nfce_${numero}`;
+    const blob = new Blob([xml], { type: "application/xml;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `nfce_${numero}.xml`;
+    a.download = `${baseName}.xml`;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
     toast.success("XML baixado com sucesso");
   };
 

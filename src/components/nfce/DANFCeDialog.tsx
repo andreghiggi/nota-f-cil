@@ -118,10 +118,10 @@ export function DANFCeDialog({ open, onOpenChange, nfceId }: DANFCeDialogProps) 
               {/* Header - Empresa */}
               <div className="center">
                 <div className="bold" style={{ fontSize: "12px" }}>
-                  {nfce.empresas?.razao_social || "EMPRESA"}
+                  {((nfce.empresas?.razao_social || "EMPRESA")).slice(0, 60)}
                 </div>
                 {nfce.empresas?.nome_fantasia && (
-                  <div>{nfce.empresas.nome_fantasia}</div>
+                  <div>{nfce.empresas.nome_fantasia.slice(0, 60)}</div>
                 )}
                 <div className="small">
                   CNPJ: {nfce.empresas?.cnpj ? formatCNPJ(nfce.empresas.cnpj) : "—"}
