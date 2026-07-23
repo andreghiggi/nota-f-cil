@@ -207,7 +207,7 @@ export default function Tokens() {
                 Novo Token
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
+            <DialogContent className="sm:max-w-3xl">
               {!generatedToken ? (
                 <>
                   <DialogHeader>
@@ -218,35 +218,37 @@ export default function Tokens() {
                   </DialogHeader>
                   
                   <div className="space-y-4 py-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="nome">Nome do Token</Label>
-                      <Input
-                        id="nome"
-                        placeholder="Ex: ERP Principal, PDV Loja 01"
-                        value={newTokenName}
-                        onChange={(e) => setNewTokenName(e.target.value)}
-                      />
-                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="nome">Nome do Token</Label>
+                        <Input
+                          id="nome"
+                          placeholder="Ex: ERP Principal, PDV Loja 01"
+                          value={newTokenName}
+                          onChange={(e) => setNewTokenName(e.target.value)}
+                        />
+                      </div>
 
-                    <div className="space-y-2">
-                      <Label>Empresa</Label>
-                      <Select value={selectedEmpresa} onValueChange={setSelectedEmpresa}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma empresa" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {empresas?.map((empresa) => (
-                            <SelectItem key={empresa.id} value={empresa.id}>
-                              {empresa.nome_fantasia || empresa.razao_social}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="space-y-2">
+                        <Label>Empresa</Label>
+                        <Select value={selectedEmpresa} onValueChange={setSelectedEmpresa}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione uma empresa" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {empresas?.map((empresa) => (
+                              <SelectItem key={empresa.id} value={empresa.id}>
+                                {empresa.nome_fantasia || empresa.razao_social}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                     </div>
 
                     <div className="space-y-3">
                       <Label>Permissões</Label>
-                      <div className="space-y-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                         {permissoesDisponiveis.map((perm) => (
                           <div
                             key={perm.id}
@@ -271,6 +273,7 @@ export default function Tokens() {
                       </div>
                     </div>
                   </div>
+
 
                   <DialogFooter>
                     <Button variant="outline" onClick={handleCloseCreateDialog}>
