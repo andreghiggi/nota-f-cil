@@ -63,6 +63,7 @@ const statusStyles: Record<string, string> = {
   cancelada: "status-cancelada",
   denegada: "status-rejeitada",
   contingencia: "status-processando",
+  inutilizada: "status-cancelada",
 };
 
 type NfceWithEmpresa = Tables<"nfce"> & {
