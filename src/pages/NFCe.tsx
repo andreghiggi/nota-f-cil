@@ -191,6 +191,30 @@ export default function NFCe() {
     toast.success(`NFC-e ${numero} excluída${devolvida ? " (numeração devolvida)" : ""}`);
   };
 
+  const handleInutilizar = async (nfce: NfceWithEmpresa) => {
+    const justificativa = "NFC-e nao consta na base de dados da SEFAZ";
+    if (!confirm(`Inutilizar NFC-e ${nfce.numero} (série ${nfce.serie}) na SEFAZ?\n\nJustificativa: "${justificativa}"`)) return;
+    const numero = Number(nfce.numero);
+    if (!numero) { toast.error("Número inválido"); return; }
+    toast.info(`Enviando inutilização da NFC-e ${nfce.numero} à SEFAZ...`);
+    const { data, error } = await supabase.functions.invoke("fiscal-api", {
+      body: {
+        action: "inutilizar_nfce",
+        empresa_id: nfce.empresa_id,
+        serie: nfce.serie,
+        numero_inicial: numero,
+        numero_final: numero,
+        justificativa,
+      },
+    });
+    queryClient.invalidateQueries({ queryKey: ["nfce"] });
+    if (error || (data as any)?.error) {
+      toast.error(`Falha ao inutilizar: ${error?.message || (data as any)?.error}`);
+      return;
+    }
+    toast.success(`NFC-e ${nfce.numero} inutilizada com sucesso`);
+  };
+
   const handleCancelar = async (justificativa: string) => {
     setCancelLoading(true);
     try {
