@@ -404,6 +404,11 @@ export default function NFCe() {
                               </DropdownMenuItem>
                             )}
                             {["pendente", "rejeitada", "denegada"].includes(nfce.status) && (
+                              <DropdownMenuItem className="text-destructive" onSelect={() => handleInutilizar(nfce)}>
+                                <Ban className="h-4 w-4 mr-2" />Inutilizar
+                              </DropdownMenuItem>
+                            )}
+                            {["pendente", "rejeitada", "denegada"].includes(nfce.status) && (
                               <DropdownMenuItem className="text-destructive" onSelect={() => handleExcluir(nfce.id, nfce.numero, nfce.status)}>
                                 <Trash2 className="h-4 w-4 mr-2" />Excluir (devolve numeração)
                               </DropdownMenuItem>
