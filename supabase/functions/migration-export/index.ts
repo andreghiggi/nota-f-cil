@@ -1,6 +1,23 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 
+// Gera token no formato ff_<48 chars> e retorna { plain, hash, prefix }
+async function gerarToken() {
+  const bytes = new Uint8Array(36)
+  crypto.getRandomValues(bytes)
+  const b64 = btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '')
+    .replace(/\//g, '')
+    .replace(/=/g, '')
+    .slice(0, 48)
+  const plain = `ff_${b64}`
+  const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(plain))
+  const hash = Array.from(new Uint8Array(hashBuf))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+  return { plain, hash, prefix: plain.slice(0, 12) }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -18,43 +35,90 @@ Deno.serve(async (req) => {
       })
     }
 
+    const url = new URL(req.url)
+    // ?regenerate=1 => cria um novo token por empresa e devolve o valor em claro (só aparece agora)
+    // ?regenerate=1&empresa_id=xxx => regenera só uma empresa
+    const regenerate = url.searchParams.get('regenerate') === '1'
+    const empresaFilter = url.searchParams.get('empresa_id')
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
 
-    const { data: empresas, error: e1 } = await supabase
+    let empresasQuery = supabase
       .from('empresas')
       .select('id, razao_social, nome_fantasia, cnpj, cpf, tipo_pessoa, inscricao_estadual, uf, municipio, codigo_municipio, ambiente, regime_tributario, ativo, created_at')
       .order('razao_social', { ascending: true })
 
+    if (empresaFilter) empresasQuery = empresasQuery.eq('id', empresaFilter)
+
+    const { data: empresas, error: e1 } = await empresasQuery
     if (e1) throw e1
 
-    const { data: tokens, error: e2 } = await supabase
+    const { data: tokensExistentes, error: e2 } = await supabase
       .from('tokens_api')
-      .select('id, empresa_id, nome, token_hash, token_prefix, status, permissoes, ultimo_uso, expires_at, created_at')
-
+      .select('id, empresa_id, nome, token_prefix, status, permissoes, ultimo_uso, expires_at, created_at')
     if (e2) throw e2
 
     const byEmpresa = new Map<string, any[]>()
-    for (const t of tokens ?? []) {
+    for (const t of tokensExistentes ?? []) {
       const arr = byEmpresa.get(t.empresa_id) ?? []
       arr.push(t)
       byEmpresa.set(t.empresa_id, arr)
     }
 
-    const result = (empresas ?? []).map((e) => ({
-      ...e,
-      tokens_api: byEmpresa.get(e.id) ?? [],
-    }))
+    const result: any[] = []
+    for (const e of empresas ?? []) {
+      const item: any = {
+        ...e,
+        tokens_existentes: byEmpresa.get(e.id) ?? [],
+      }
+
+      if (regenerate) {
+        const { plain, hash, prefix } = await gerarToken()
+        const { data: novo, error: eIns } = await supabase
+          .from('tokens_api')
+          .insert({
+            empresa_id: e.id,
+            nome: `Migração ${new Date().toISOString().slice(0, 10)}`,
+            token_hash: hash,
+            token_prefix: prefix,
+            status: 'ativo',
+            permissoes: [
+              'nfce.emitir', 'nfce.consultar', 'nfce.cancelar', 'nfce.inutilizar',
+              'nfe.emitir', 'nfe.consultar', 'nfe.cancelar',
+              'mdfe.emitir', 'mdfe.consultar', 'mdfe.encerrar',
+              'dfe.sincronizar', 'dfe.manifestar', 'dfe.consultar',
+            ],
+          })
+          .select('id, nome, token_prefix, created_at')
+          .single()
+        if (eIns) {
+          item.token_novo_erro = eIns.message
+        } else {
+          item.token_novo = {
+            id: novo!.id,
+            nome: novo!.nome,
+            prefix: novo!.token_prefix,
+            token_plain: plain, // VISÍVEL APENAS AGORA
+            aviso: 'Copie este token agora. Ele não poderá ser recuperado depois.',
+          }
+        }
+      }
+
+      result.push(item)
+    }
 
     return new Response(
       JSON.stringify({
+        modo: regenerate ? 'regenerar' : 'listar',
         total_empresas: result.length,
-        total_tokens: tokens?.length ?? 0,
-        note: 'token_hash é o hash armazenado (não o valor original). token_prefix é os primeiros caracteres visíveis. Tokens originais não são recuperáveis — para migração, importe o hash como está e o ERP continuará autenticando com o mesmo token que já possui.',
+        aviso: regenerate
+          ? 'Novos tokens foram criados. Os valores em claro só aparecem nesta resposta — salve o JSON.'
+          : 'Tokens existentes têm apenas hash — o valor original não é recuperável. Use ?regenerate=1 para criar novos.',
         empresas: result,
-      }),
+      }, null, 2),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     )
   } catch (err) {
