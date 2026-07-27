@@ -3142,7 +3142,7 @@ async function handleInutilizar(
       })
       .eq('empresa_id', empresaId)
       .eq('serie', serieStr)
-      .in('status', ['pendente', 'rejeitada', 'denegada', 'processando', 'erro'])
+      .in('status', ['pendente', 'rejeitada', 'denegada', 'processando', 'contingencia', 'abortada'])
       .gte('numero', String(nIni).padStart(9, '0'))
       .lte('numero', String(nFin).padStart(9, '0'));
 
