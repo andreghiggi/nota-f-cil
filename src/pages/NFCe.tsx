@@ -52,6 +52,7 @@ const statusLabels: Record<string, string> = {
   cancelada: "Cancelada",
   denegada: "Denegada",
   contingencia: "Contingência",
+  inutilizada: "Inutilizada",
 };
 
 const statusStyles: Record<string, string> = {
