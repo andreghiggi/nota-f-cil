@@ -212,6 +212,8 @@ export default function NFCe() {
       toast.error(`Falha ao inutilizar: ${error?.message || (data as any)?.error}`);
       return;
     }
+    await supabase.from("nfce").update({ status: "inutilizada" }).eq("id", nfce.id);
+    queryClient.invalidateQueries({ queryKey: ["nfce"] });
     toast.success(`NFC-e ${nfce.numero} inutilizada com sucesso`);
   };
 
