@@ -15,7 +15,8 @@ import {
   FileText,
   Inbox,
   Printer,
-  Trash2
+  Trash2,
+  Ban
 } from "lucide-react";
 import {
   DropdownMenu,
