@@ -403,7 +403,7 @@ export default function NFCe() {
                                 <XCircle className="h-4 w-4 mr-2" />Cancelar
                               </DropdownMenuItem>
                             )}
-                            {["pendente", "rejeitada", "denegada"].includes(nfce.status) && (
+                            {nfce.status !== "autorizada" && nfce.status !== "cancelada" && nfce.status !== "inutilizada" && (
                               <DropdownMenuItem className="text-destructive" onSelect={() => handleInutilizar(nfce)}>
                                 <Ban className="h-4 w-4 mr-2" />Inutilizar
                               </DropdownMenuItem>
