@@ -15,7 +15,8 @@ import {
   FileText,
   Inbox,
   Printer,
-  Trash2
+  Trash2,
+  Ban
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -51,6 +52,7 @@ const statusLabels: Record<string, string> = {
   cancelada: "Cancelada",
   denegada: "Denegada",
   contingencia: "Contingência",
+  inutilizada: "Inutilizada",
 };
 
 const statusStyles: Record<string, string> = {
@@ -61,6 +63,7 @@ const statusStyles: Record<string, string> = {
   cancelada: "status-cancelada",
   denegada: "status-rejeitada",
   contingencia: "status-processando",
+  inutilizada: "status-cancelada",
 };
 
 type NfceWithEmpresa = Tables<"nfce"> & {
@@ -186,6 +189,30 @@ export default function NFCe() {
     queryClient.invalidateQueries({ queryKey: ["nfce"] });
     const devolvida = (data as any)?.numeracao_devolvida;
     toast.success(`NFC-e ${numero} excluída${devolvida ? " (numeração devolvida)" : ""}`);
+  };
+
+  const handleInutilizar = async (nfce: NfceWithEmpresa) => {
+    const justificativa = "NFC-e nao consta na base de dados da SEFAZ";
+    if (!confirm(`Inutilizar NFC-e ${nfce.numero} (série ${nfce.serie}) na SEFAZ?\n\nJustificativa: "${justificativa}"`)) return;
+    const numero = Number(nfce.numero);
+    if (!numero) { toast.error("Número inválido"); return; }
+    toast.info(`Enviando inutilização da NFC-e ${nfce.numero} à SEFAZ...`);
+    const { data, error } = await supabase.functions.invoke("fiscal-api", {
+      body: {
+        action: "inutilizar_nfce",
+        empresa_id: nfce.empresa_id,
+        serie: nfce.serie,
+        numero_inicial: numero,
+        numero_final: numero,
+        justificativa,
+      },
+    });
+    queryClient.invalidateQueries({ queryKey: ["nfce"] });
+    if (error || (data as any)?.error) {
+      toast.error(`Falha ao inutilizar: ${error?.message || (data as any)?.error}`);
+      return;
+    }
+    toast.success(`NFC-e ${nfce.numero} inutilizada com sucesso`);
   };
 
   const handleCancelar = async (justificativa: string) => {
@@ -374,6 +401,11 @@ export default function NFCe() {
                             {nfce.status === "autorizada" && (
                               <DropdownMenuItem className="text-destructive" onSelect={() => { setTimeout(() => { setCancelNfce({ id: nfce.id, numero: nfce.numero }); setCancelOpen(true); }, 0); }}>
                                 <XCircle className="h-4 w-4 mr-2" />Cancelar
+                              </DropdownMenuItem>
+                            )}
+                            {["pendente", "rejeitada", "denegada"].includes(nfce.status) && (
+                              <DropdownMenuItem className="text-destructive" onSelect={() => handleInutilizar(nfce)}>
+                                <Ban className="h-4 w-4 mr-2" />Inutilizar
                               </DropdownMenuItem>
                             )}
                             {["pendente", "rejeitada", "denegada"].includes(nfce.status) && (
