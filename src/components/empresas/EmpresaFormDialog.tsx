@@ -537,6 +537,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
           serie_nfe: data.serie_nfe,
           serie_nfce: data.serie_nfce,
           serie_mdfe: data.serie_mdfe,
+          serie_nfse: data.serie_nfse,
         } as any);
         toast.success("Empresa cadastrada com sucesso!");
       }
