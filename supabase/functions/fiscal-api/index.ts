@@ -1,4 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  handleNfseEmit,
+  handleNfseConsultar,
+  handleNfseCancelar,
+  handleNfseDanfse,
+  handleNfseXml,
+  handleNfseStatus,
+} from './nfse.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
