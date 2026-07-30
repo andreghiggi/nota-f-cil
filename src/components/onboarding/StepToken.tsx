@@ -11,6 +11,7 @@ const PERMS = [
   { id: "emitir_nfce", label: "Emitir NFC-e" },
   { id: "emitir_nfe", label: "Emitir NF-e" },
   { id: "emitir_mdfe", label: "Emitir MDF-e" },
+  { id: "emitir_nfse", label: "Emitir NFS-e" },
   { id: "consultar", label: "Consultar" },
   { id: "cancelar", label: "Cancelar" },
   { id: "reprocessar", label: "Reprocessar" },
