@@ -2309,6 +2309,28 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================================
+    // ACTION: NFS-e Nacional (SEFIN/ADN)
+    // ========================================================================
+    if (action === 'emit_nfse') {
+      return await handleNfseEmit(supabase, ensureRegistered, body.nfse_id);
+    }
+    if (action === 'consult_nfse') {
+      return await handleNfseConsultar(supabase, ensureRegistered, body.nfse_id);
+    }
+    if (action === 'cancel_nfse') {
+      return await handleNfseCancelar(supabase, ensureRegistered, body.nfse_id, body.justificativa, body.motivo);
+    }
+    if (action === 'danfse_nfse') {
+      return await handleNfseDanfse(supabase, ensureRegistered, body.nfse_id);
+    }
+    if (action === 'xml_nfse') {
+      return await handleNfseXml(supabase, ensureRegistered, body.nfse_id);
+    }
+    if (action === 'status_nfse') {
+      return await handleNfseStatus();
+    }
+
+    // ========================================================================
     // ACTION: emit_mdfe / encerrar_mdfe / cancel_mdfe (modelo 58)
     // ========================================================================
     if (action === 'emit_mdfe') {
