@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 
 interface SeriesFiscaisManagerProps {
   empresaId: string;
-  tipo: 'nfe' | 'nfce' | 'mdfe';
+  tipo: 'nfe' | 'nfce' | 'mdfe' | 'nfse';
 }
 
 export function SeriesFiscaisManager({ empresaId, tipo }: SeriesFiscaisManagerProps) {
@@ -46,8 +46,9 @@ export function SeriesFiscaisManager({ empresaId, tipo }: SeriesFiscaisManagerPr
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const series = allSeries?.filter(s => s.tipo === tipo) || [];
-  const label = tipo === 'nfe' ? 'NF-e' : tipo === 'nfce' ? 'NFC-e' : 'MDF-e';
-  const Icon = tipo === 'nfe' ? FileText : tipo === 'nfce' ? ShoppingCart : Truck;
+  const label = tipo === 'nfe' ? 'NF-e' : tipo === 'nfce' ? 'NFC-e' : tipo === 'mdfe' ? 'MDF-e' : 'NFS-e';
+  const Icon = tipo === 'nfe' ? FileText : tipo === 'nfce' ? ShoppingCart : tipo === 'mdfe' ? Truck : FileSignature;
+
 
   const handleAdd = async () => {
     const serieFormatted = newSerie.padStart(3, '0');
