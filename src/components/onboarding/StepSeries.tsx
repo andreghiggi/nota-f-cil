@@ -34,7 +34,7 @@ export function StepSeries({ empresa, selected, onSelectedChange, onContinue }: 
     <div className="space-y-6">
       <div>
         <h3 className="text-sm font-semibold mb-3">Quais documentos esta empresa irá emitir?</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {modelos.map(m => {
             const active = selected.has(m.id);
             const Icon = m.icon;
