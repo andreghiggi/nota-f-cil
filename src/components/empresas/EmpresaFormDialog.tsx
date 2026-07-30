@@ -514,6 +514,15 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         resp_tec_email: data.resp_tec_email || null,
         resp_tec_fone: data.resp_tec_fone?.replace(/\D/g, '') || null,
         enviar_ibs_cbs: data.enviar_ibs_cbs,
+        nfse_ativo: data.nfse_ativo,
+        inscricao_municipal: data.inscricao_municipal?.replace(/\D/g, '') || null,
+        nfse_op_simples: data.nfse_op_simples,
+        nfse_reg_esp: data.nfse_reg_esp,
+        nfse_incentivo_cultural: data.nfse_incentivo_cultural,
+        nfse_incluir_ibscbs: data.nfse_incluir_ibscbs,
+        nfse_aliquota_padrao: data.nfse_aliquota_padrao ?? null,
+        nfse_ctribnac_padrao: data.nfse_ctribnac_padrao || null,
+        nfse_cnbs_padrao: data.nfse_cnbs_padrao || null,
         ativo: data.ativo,
       };
 
