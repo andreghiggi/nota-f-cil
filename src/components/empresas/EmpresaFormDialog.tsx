@@ -595,6 +595,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                   <Truck className="h-4 w-4" />
                   MDF-e
                 </TabsTrigger>
+                <TabsTrigger value="nfse" className="flex items-center gap-2">
+                  <FileSignature className="h-4 w-4" />
+                  NFS-e
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="dados" className="space-y-4 mt-4">
