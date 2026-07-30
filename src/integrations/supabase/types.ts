@@ -328,13 +328,23 @@ export type Database = {
           enviar_ibs_cbs: boolean
           id: string
           inscricao_estadual: string | null
+          inscricao_municipal: string | null
           logradouro: string | null
           municipio: string
+          nfse_aliquota_padrao: number | null
+          nfse_ativo: boolean
+          nfse_cnbs_padrao: string | null
+          nfse_ctribnac_padrao: string | null
+          nfse_incentivo_cultural: boolean
+          nfse_incluir_ibscbs: boolean
+          nfse_op_simples: number
+          nfse_reg_esp: number
           nome_fantasia: string | null
           numero: string | null
           numero_mdfe_atual: number
           numero_nfce_atual: number
           numero_nfe_atual: number
+          numero_nfse_atual: number
           razao_social: string
           regime_tributario: Database["public"]["Enums"]["regime_tributario"]
           resp_tec_cnpj: string | null
@@ -345,6 +355,7 @@ export type Database = {
           serie_mdfe: string
           serie_nfce: string
           serie_nfe: string
+          serie_nfse: string
           telefone: string | null
           tipo_pessoa: string
           uf: string
@@ -368,13 +379,23 @@ export type Database = {
           enviar_ibs_cbs?: boolean
           id?: string
           inscricao_estadual?: string | null
+          inscricao_municipal?: string | null
           logradouro?: string | null
           municipio: string
+          nfse_aliquota_padrao?: number | null
+          nfse_ativo?: boolean
+          nfse_cnbs_padrao?: string | null
+          nfse_ctribnac_padrao?: string | null
+          nfse_incentivo_cultural?: boolean
+          nfse_incluir_ibscbs?: boolean
+          nfse_op_simples?: number
+          nfse_reg_esp?: number
           nome_fantasia?: string | null
           numero?: string | null
           numero_mdfe_atual?: number
           numero_nfce_atual?: number
           numero_nfe_atual?: number
+          numero_nfse_atual?: number
           razao_social: string
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
           resp_tec_cnpj?: string | null
@@ -385,6 +406,7 @@ export type Database = {
           serie_mdfe?: string
           serie_nfce?: string
           serie_nfe?: string
+          serie_nfse?: string
           telefone?: string | null
           tipo_pessoa?: string
           uf: string
@@ -408,13 +430,23 @@ export type Database = {
           enviar_ibs_cbs?: boolean
           id?: string
           inscricao_estadual?: string | null
+          inscricao_municipal?: string | null
           logradouro?: string | null
           municipio?: string
+          nfse_aliquota_padrao?: number | null
+          nfse_ativo?: boolean
+          nfse_cnbs_padrao?: string | null
+          nfse_ctribnac_padrao?: string | null
+          nfse_incentivo_cultural?: boolean
+          nfse_incluir_ibscbs?: boolean
+          nfse_op_simples?: number
+          nfse_reg_esp?: number
           nome_fantasia?: string | null
           numero?: string | null
           numero_mdfe_atual?: number
           numero_nfce_atual?: number
           numero_nfe_atual?: number
+          numero_nfse_atual?: number
           razao_social?: string
           regime_tributario?: Database["public"]["Enums"]["regime_tributario"]
           resp_tec_cnpj?: string | null
@@ -425,6 +457,7 @@ export type Database = {
           serie_mdfe?: string
           serie_nfce?: string
           serie_nfe?: string
+          serie_nfse?: string
           telefone?: string | null
           tipo_pessoa?: string
           uf?: string
@@ -1775,6 +1808,137 @@ export type Database = {
           },
         ]
       }
+      nfse: {
+        Row: {
+          aliquota_iss: number | null
+          ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          c_nbs: string | null
+          c_trib_mun: string | null
+          c_trib_nac: string | null
+          chave_acesso: string | null
+          codigo_municipio_prestacao: string | null
+          codigo_retorno: string | null
+          codigo_verificacao: string | null
+          created_at: string
+          data_cancelamento: string | null
+          data_emissao: string
+          discriminacao: string | null
+          empresa_id: string
+          erro_processamento: string | null
+          external_id: string | null
+          id: string
+          iss_retido: number
+          justificativa_cancelamento: string | null
+          motivo_retorno: string | null
+          numero_dps: number
+          numero_nfse: string | null
+          payload_entrada: Json
+          protocolo: string | null
+          resposta: Json | null
+          serie: string
+          status: Database["public"]["Enums"]["nfce_status"]
+          token_api_id: string | null
+          tomador_documento: string | null
+          tomador_email: string | null
+          tomador_im: string | null
+          tomador_nome: string | null
+          updated_at: string
+          valor_deducoes: number
+          valor_iss: number | null
+          valor_servicos: number
+          xml_nfse: string | null
+          xml_retorno: string | null
+        }
+        Insert: {
+          aliquota_iss?: number | null
+          ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          c_nbs?: string | null
+          c_trib_mun?: string | null
+          c_trib_nac?: string | null
+          chave_acesso?: string | null
+          codigo_municipio_prestacao?: string | null
+          codigo_retorno?: string | null
+          codigo_verificacao?: string | null
+          created_at?: string
+          data_cancelamento?: string | null
+          data_emissao?: string
+          discriminacao?: string | null
+          empresa_id: string
+          erro_processamento?: string | null
+          external_id?: string | null
+          id?: string
+          iss_retido?: number
+          justificativa_cancelamento?: string | null
+          motivo_retorno?: string | null
+          numero_dps: number
+          numero_nfse?: string | null
+          payload_entrada?: Json
+          protocolo?: string | null
+          resposta?: Json | null
+          serie?: string
+          status?: Database["public"]["Enums"]["nfce_status"]
+          token_api_id?: string | null
+          tomador_documento?: string | null
+          tomador_email?: string | null
+          tomador_im?: string | null
+          tomador_nome?: string | null
+          updated_at?: string
+          valor_deducoes?: number
+          valor_iss?: number | null
+          valor_servicos?: number
+          xml_nfse?: string | null
+          xml_retorno?: string | null
+        }
+        Update: {
+          aliquota_iss?: number | null
+          ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          c_nbs?: string | null
+          c_trib_mun?: string | null
+          c_trib_nac?: string | null
+          chave_acesso?: string | null
+          codigo_municipio_prestacao?: string | null
+          codigo_retorno?: string | null
+          codigo_verificacao?: string | null
+          created_at?: string
+          data_cancelamento?: string | null
+          data_emissao?: string
+          discriminacao?: string | null
+          empresa_id?: string
+          erro_processamento?: string | null
+          external_id?: string | null
+          id?: string
+          iss_retido?: number
+          justificativa_cancelamento?: string | null
+          motivo_retorno?: string | null
+          numero_dps?: number
+          numero_nfse?: string | null
+          payload_entrada?: Json
+          protocolo?: string | null
+          resposta?: Json | null
+          serie?: string
+          status?: Database["public"]["Enums"]["nfce_status"]
+          token_api_id?: string | null
+          tomador_documento?: string | null
+          tomador_email?: string | null
+          tomador_im?: string | null
+          tomador_nome?: string | null
+          updated_at?: string
+          valor_deducoes?: number
+          valor_iss?: number | null
+          valor_servicos?: number
+          xml_nfse?: string | null
+          xml_retorno?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "nfse_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       series_fiscais: {
         Row: {
           ativo: boolean
@@ -2064,6 +2228,10 @@ export type Database = {
       gerar_numero_nfe:
         | { Args: { p_empresa_id: string }; Returns: string }
         | { Args: { p_empresa_id: string; p_serie?: string }; Returns: string }
+      gerar_numero_nfse: {
+        Args: { p_empresa_id: string; p_serie?: string }
+        Returns: number
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
