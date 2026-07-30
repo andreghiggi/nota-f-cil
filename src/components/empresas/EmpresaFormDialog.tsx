@@ -1277,6 +1277,213 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                   </p>
                 </div>
               </TabsContent>
+
+              <TabsContent value="nfse" className="space-y-4 mt-4">
+                <FormField
+                  control={form.control}
+                  name="nfse_ativo"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="space-y-0.5 pr-4">
+                        <FormLabel>Habilitar NFS-e Nacional</FormLabel>
+                        <FormDescription>
+                          Permite que o ERP emita NFS-e (padrão nacional SEFIN/ADN) para esta empresa.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="inscricao_municipal"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Inscrição Municipal *</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Somente números"
+                            {...field}
+                            value={field.value || ""}
+                            onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 20))}
+                          />
+                        </FormControl>
+                        <FormDescription>Obrigatória para emitir NFS-e.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {!isEditing && (
+                    <FormField
+                      control={form.control}
+                      name="serie_nfse"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Série NFS-e (DPS)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="1" maxLength={5} {...field} />
+                          </FormControl>
+                          <FormDescription>Série usada na numeração do DPS.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+
+                {isEditing && empresa && (
+                  <SeriesFiscaisManager empresaId={empresa.id} tipo="nfse" />
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="nfse_op_simples"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Situação no Simples Nacional</FormLabel>
+                        <Select value={String(field.value)} onValueChange={(v) => field.onChange(Number(v))}>
+                          <FormControl>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent className="bg-popover z-50">
+                            <SelectItem value="1">1 - Não optante</SelectItem>
+                            <SelectItem value="2">2 - Optante - MEI</SelectItem>
+                            <SelectItem value="3">3 - Optante - ME/EPP</SelectItem>
+                            <SelectItem value="0">0 - Não informar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="nfse_reg_esp"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Regime Especial de Tributação</FormLabel>
+                        <Select value={String(field.value)} onValueChange={(v) => field.onChange(Number(v))}>
+                          <FormControl>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent className="bg-popover z-50">
+                            <SelectItem value="0">Nenhum</SelectItem>
+                            <SelectItem value="1">1 - Ato Cooperado</SelectItem>
+                            <SelectItem value="2">2 - Estimativa</SelectItem>
+                            <SelectItem value="3">3 - Microempresa Municipal</SelectItem>
+                            <SelectItem value="4">4 - Notário/Registrador</SelectItem>
+                            <SelectItem value="5">5 - Profissional Autônomo</SelectItem>
+                            <SelectItem value="6">6 - Sociedade de Profissionais</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="nfse_aliquota_padrao"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Alíquota ISS padrão (%)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Ex.: 3.00"
+                            {...field}
+                            value={field.value ?? ""}
+                            onChange={(e) => field.onChange(e.target.value === "" ? null : Number(e.target.value))}
+                          />
+                        </FormControl>
+                        <FormDescription>Usada quando o ERP não enviar a alíquota.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="nfse_ctribnac_padrao"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Código de Tributação Nacional padrão</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ex.: 010101" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormDescription>cTribNac usado quando o ERP não informar.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="nfse_cnbs_padrao"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Código NBS padrão</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Opcional" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="nfse_incentivo_cultural"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="space-y-0.5 pr-4">
+                        <FormLabel>Incentivo fiscal / cultural</FormLabel>
+                        <FormDescription>Marque se a empresa possui incentivo fiscal municipal.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nfse_incluir_ibscbs"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="space-y-0.5 pr-4">
+                        <FormLabel>Incluir IBS/CBS na NFS-e</FormLabel>
+                        <FormDescription>Reforma tributária — envie apenas se o ERP fornecer os dados.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
+                  <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
+                    <FileSignature className="h-4 w-4" />
+                    NFS-e Nacional (SEFIN/ADN)
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    Usa o mesmo certificado A1 e ambiente da aba Fiscal. O ERP emite via{" "}
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded">POST /nfse-api</code> com a permissão{" "}
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded">emitir_nfse</code> no token.
+                  </p>
+                </div>
+              </TabsContent>
             </Tabs>
 
             <DialogFooter>
