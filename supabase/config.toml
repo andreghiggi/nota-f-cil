@@ -26,3 +26,7 @@ verify_jwt = false
 
 [functions.mdfe-api]
 verify_jwt = false
+
+[functions.nfse-api]
+verify_jwt = false
+

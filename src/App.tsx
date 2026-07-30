@@ -12,6 +12,7 @@ import Onboarding from "./pages/Onboarding";
 import NFCe from "./pages/NFCe";
 import NFe from "./pages/NFe";
 import MDFe from "./pages/MDFe";
+import NFSe from "./pages/NFSe";
 import NotasRecebidas from "./pages/NotasRecebidas";
 import Certificados from "./pages/Certificados";
 import Tokens from "./pages/Tokens";
@@ -41,6 +42,7 @@ const App = () => (
             <Route path="/nfe" element={<ProtectedRoute><NFe /></ProtectedRoute>} />
             <Route path="/nfce" element={<ProtectedRoute><NFCe /></ProtectedRoute>} />
             <Route path="/mdfe" element={<ProtectedRoute><MDFe /></ProtectedRoute>} />
+            <Route path="/nfse" element={<ProtectedRoute><NFSe /></ProtectedRoute>} />
             <Route path="/notas-recebidas" element={<ProtectedRoute><NotasRecebidas /></ProtectedRoute>} />
             <Route path="/certificados" element={<ProtectedRoute><Certificados /></ProtectedRoute>} />
             <Route path="/tokens" element={<ProtectedRoute><Tokens /></ProtectedRoute>} />

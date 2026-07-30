@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FileText, ShoppingCart, Truck } from "lucide-react";
+import { FileText, ShoppingCart, Truck, FileSignature } from "lucide-react";
 import { Empresa } from "@/hooks/useSupabaseData";
 import { SeriesFiscaisManager } from "@/components/empresas/SeriesFiscaisManager";
 import { cn } from "@/lib/utils";
@@ -10,19 +10,21 @@ const modelos = [
   { id: "nfe" as const, label: "NF-e (Modelo 55)", desc: "Nota Fiscal Eletrônica para vendas entre empresas", icon: FileText },
   { id: "nfce" as const, label: "NFC-e (Modelo 65)", desc: "Cupom Fiscal Eletrônico para venda ao consumidor", icon: ShoppingCart },
   { id: "mdfe" as const, label: "MDF-e (Modelo 58)", desc: "Manifesto Eletrônico para transporte de cargas", icon: Truck },
+  { id: "nfse" as const, label: "NFS-e (Nacional)", desc: "Nota Fiscal de Serviço no padrão nacional (SEFIN/ADN)", icon: FileSignature },
 ];
+
 
 interface Props {
   empresa: Empresa;
-  selected: Set<"nfe" | "nfce" | "mdfe">;
-  onSelectedChange: (s: Set<"nfe" | "nfce" | "mdfe">) => void;
+  selected: Set<"nfe" | "nfce" | "mdfe" | "nfse">;
+  onSelectedChange: (s: Set<"nfe" | "nfce" | "mdfe" | "nfse">) => void;
   onContinue: () => void;
 }
 
 export function StepSeries({ empresa, selected, onSelectedChange, onContinue }: Props) {
   const [touched, setTouched] = useState(false);
 
-  const toggle = (id: "nfe" | "nfce" | "mdfe") => {
+  const toggle = (id: "nfe" | "nfce" | "mdfe" | "nfse") => {
     const next = new Set(selected);
     next.has(id) ? next.delete(id) : next.add(id);
     onSelectedChange(next);
@@ -32,7 +34,7 @@ export function StepSeries({ empresa, selected, onSelectedChange, onContinue }: 
     <div className="space-y-6">
       <div>
         <h3 className="text-sm font-semibold mb-3">Quais documentos esta empresa irá emitir?</h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           {modelos.map(m => {
             const active = selected.has(m.id);
             const Icon = m.icon;

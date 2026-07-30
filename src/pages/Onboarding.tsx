@@ -23,7 +23,7 @@ export default function Onboarding() {
   const [current, setCurrent] = useState(0);
   const [completed, setCompleted] = useState<Set<number>>(new Set());
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
-  const [modelos, setModelos] = useState<Set<"nfe" | "nfce" | "mdfe">>(new Set(["nfce"]));
+  const [modelos, setModelos] = useState<Set<"nfe" | "nfce" | "mdfe" | "nfse">>(new Set(["nfce"]));
   const [certOk, setCertOk] = useState(false);
   const [tokenOk, setTokenOk] = useState(false);
 

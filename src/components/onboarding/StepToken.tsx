@@ -11,6 +11,7 @@ const PERMS = [
   { id: "emitir_nfce", label: "Emitir NFC-e" },
   { id: "emitir_nfe", label: "Emitir NF-e" },
   { id: "emitir_mdfe", label: "Emitir MDF-e" },
+  { id: "emitir_nfse", label: "Emitir NFS-e" },
   { id: "consultar", label: "Consultar" },
   { id: "cancelar", label: "Cancelar" },
   { id: "reprocessar", label: "Reprocessar" },
@@ -19,7 +20,7 @@ const PERMS = [
 
 interface Props {
   empresa: Empresa;
-  modelosSelecionados: Set<"nfe" | "nfce" | "mdfe">;
+  modelosSelecionados: Set<"nfe" | "nfce" | "mdfe" | "nfse">;
   onDone: () => void;
   onSkip: () => void;
 }
@@ -30,6 +31,7 @@ export function StepToken({ empresa, modelosSelecionados, onDone, onSkip }: Prop
   if (modelosSelecionados.has("nfe")) defaults.push("emitir_nfe");
   if (modelosSelecionados.has("nfce")) defaults.push("emitir_nfce");
   if (modelosSelecionados.has("mdfe")) defaults.push("emitir_mdfe");
+  if (modelosSelecionados.has("nfse")) defaults.push("emitir_nfse");
 
   const [nome, setNome] = useState(`Token ${empresa.nome_fantasia || empresa.razao_social}`);
   const [perms, setPerms] = useState<string[]>(defaults);

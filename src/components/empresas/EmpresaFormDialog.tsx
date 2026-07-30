@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Loader2, Building2, FileText, Settings, Search, MapPin, User, Building, Truck } from "lucide-react";
+import { Loader2, Building2, FileText, Settings, Search, MapPin, User, Building, Truck, FileSignature } from "lucide-react";
 import { SeriesFiscaisManager } from "./SeriesFiscaisManager";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -152,6 +152,19 @@ const empresaSchema = z.object({
   serie_nfe: z.string().min(1).max(3).default("001"),
   serie_mdfe: z.string().min(1).max(3).default("1"),
   rntrc: z.string().max(8).optional().nullable(),
+
+  // NFS-e Nacional (SEFIN/ADN)
+  nfse_ativo: z.boolean().default(false),
+  inscricao_municipal: z.string().max(20).optional().nullable(),
+  serie_nfse: z.string().min(1).max(5).default("1"),
+  nfse_op_simples: z.coerce.number().int().min(0).max(3).default(0),
+  nfse_reg_esp: z.coerce.number().int().min(0).max(6).default(0),
+  nfse_incentivo_cultural: z.boolean().default(false),
+  nfse_incluir_ibscbs: z.boolean().default(false),
+  nfse_aliquota_padrao: z.coerce.number().min(0).max(100).optional().nullable(),
+  nfse_ctribnac_padrao: z.string().max(10).optional().nullable(),
+  nfse_cnbs_padrao: z.string().max(20).optional().nullable(),
+
   
   // CSC (Código de Segurança do Contribuinte)
   csc_id: z.string().max(10).optional().nullable(),
@@ -249,6 +262,17 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       serie_nfe: "001",
       serie_mdfe: "1",
       rntrc: "",
+      nfse_ativo: false,
+      inscricao_municipal: "",
+      serie_nfse: "1",
+      nfse_op_simples: 0,
+      nfse_reg_esp: 0,
+      nfse_incentivo_cultural: false,
+      nfse_incluir_ibscbs: false,
+      nfse_aliquota_padrao: null,
+      nfse_ctribnac_padrao: "",
+      nfse_cnbs_padrao: "",
+
       csc_id: "",
       csc_token: "",
       resp_tec_cnpj: "",
@@ -286,6 +310,16 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         serie_nfce: empresa.serie_nfce,
         serie_nfe: (empresa as any).serie_nfe || "001",
         serie_mdfe: (empresa as any).serie_mdfe || "1",
+        nfse_ativo: (empresa as any).nfse_ativo ?? false,
+        inscricao_municipal: (empresa as any).inscricao_municipal || "",
+        serie_nfse: (empresa as any).serie_nfse || "1",
+        nfse_op_simples: (empresa as any).nfse_op_simples ?? 0,
+        nfse_reg_esp: (empresa as any).nfse_reg_esp ?? 0,
+        nfse_incentivo_cultural: (empresa as any).nfse_incentivo_cultural ?? false,
+        nfse_incluir_ibscbs: (empresa as any).nfse_incluir_ibscbs ?? false,
+        nfse_aliquota_padrao: (empresa as any).nfse_aliquota_padrao ?? null,
+        nfse_ctribnac_padrao: (empresa as any).nfse_ctribnac_padrao || "",
+        nfse_cnbs_padrao: (empresa as any).nfse_cnbs_padrao || "",
         rntrc: (empresa as any).rntrc || "",
         csc_id: empresa.csc_id || "",
         csc_token: empresa.csc_token || "",
@@ -320,6 +354,16 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         serie_nfe: "001",
         serie_mdfe: "1",
         rntrc: "",
+        nfse_ativo: false,
+        inscricao_municipal: "",
+        serie_nfse: "1",
+        nfse_op_simples: 0,
+        nfse_reg_esp: 0,
+        nfse_incentivo_cultural: false,
+        nfse_incluir_ibscbs: false,
+        nfse_aliquota_padrao: null,
+        nfse_ctribnac_padrao: "",
+        nfse_cnbs_padrao: "",
         csc_id: "",
         csc_token: "",
         resp_tec_cnpj: "",
@@ -470,6 +514,15 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         resp_tec_email: data.resp_tec_email || null,
         resp_tec_fone: data.resp_tec_fone?.replace(/\D/g, '') || null,
         enviar_ibs_cbs: data.enviar_ibs_cbs,
+        nfse_ativo: data.nfse_ativo,
+        inscricao_municipal: data.inscricao_municipal?.replace(/\D/g, '') || null,
+        nfse_op_simples: data.nfse_op_simples,
+        nfse_reg_esp: data.nfse_reg_esp,
+        nfse_incentivo_cultural: data.nfse_incentivo_cultural,
+        nfse_incluir_ibscbs: data.nfse_incluir_ibscbs,
+        nfse_aliquota_padrao: data.nfse_aliquota_padrao ?? null,
+        nfse_ctribnac_padrao: data.nfse_ctribnac_padrao || null,
+        nfse_cnbs_padrao: data.nfse_cnbs_padrao || null,
         ativo: data.ativo,
       };
 
@@ -484,6 +537,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
           serie_nfe: data.serie_nfe,
           serie_nfce: data.serie_nfce,
           serie_mdfe: data.serie_mdfe,
+          serie_nfse: data.serie_nfse,
         } as any);
         toast.success("Empresa cadastrada com sucesso!");
       }
@@ -516,7 +570,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
              <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-6">
+              <TabsList className="grid w-full grid-cols-7">
                 <TabsTrigger value="dados" className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Dados
@@ -540,6 +594,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                 <TabsTrigger value="mdfe" className="flex items-center gap-2">
                   <Truck className="h-4 w-4" />
                   MDF-e
+                </TabsTrigger>
+                <TabsTrigger value="nfse" className="flex items-center gap-2">
+                  <FileSignature className="h-4 w-4" />
+                  NFS-e
                 </TabsTrigger>
               </TabsList>
 
@@ -1216,6 +1274,213 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                     O MDF-e (Manifesto Eletrônico de Documentos Fiscais) usa o mesmo certificado digital A1 e ambiente
                     configurados na aba Fiscal. Atualmente apenas o modal rodoviário (modal=1) está suportado.
                     Lembre-se de habilitar a permissão <code className="text-xs bg-muted px-1 py-0.5 rounded">emitir_mdfe</code> nos tokens de API que devem emitir MDF-e.
+                  </p>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="nfse" className="space-y-4 mt-4">
+                <FormField
+                  control={form.control}
+                  name="nfse_ativo"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="space-y-0.5 pr-4">
+                        <FormLabel>Habilitar NFS-e Nacional</FormLabel>
+                        <FormDescription>
+                          Permite que o ERP emita NFS-e (padrão nacional SEFIN/ADN) para esta empresa.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="inscricao_municipal"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Inscrição Municipal *</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="Somente números"
+                            {...field}
+                            value={field.value || ""}
+                            onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 20))}
+                          />
+                        </FormControl>
+                        <FormDescription>Obrigatória para emitir NFS-e.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {!isEditing && (
+                    <FormField
+                      control={form.control}
+                      name="serie_nfse"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Série NFS-e (DPS)</FormLabel>
+                          <FormControl>
+                            <Input placeholder="1" maxLength={5} {...field} />
+                          </FormControl>
+                          <FormDescription>Série usada na numeração do DPS.</FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+
+                {isEditing && empresa && (
+                  <SeriesFiscaisManager empresaId={empresa.id} tipo="nfse" />
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="nfse_op_simples"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Situação no Simples Nacional</FormLabel>
+                        <Select value={String(field.value)} onValueChange={(v) => field.onChange(Number(v))}>
+                          <FormControl>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent className="bg-popover z-50">
+                            <SelectItem value="1">1 - Não optante</SelectItem>
+                            <SelectItem value="2">2 - Optante - MEI</SelectItem>
+                            <SelectItem value="3">3 - Optante - ME/EPP</SelectItem>
+                            <SelectItem value="0">0 - Não informar</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="nfse_reg_esp"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Regime Especial de Tributação</FormLabel>
+                        <Select value={String(field.value)} onValueChange={(v) => field.onChange(Number(v))}>
+                          <FormControl>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                          </FormControl>
+                          <SelectContent className="bg-popover z-50">
+                            <SelectItem value="0">Nenhum</SelectItem>
+                            <SelectItem value="1">1 - Ato Cooperado</SelectItem>
+                            <SelectItem value="2">2 - Estimativa</SelectItem>
+                            <SelectItem value="3">3 - Microempresa Municipal</SelectItem>
+                            <SelectItem value="4">4 - Notário/Registrador</SelectItem>
+                            <SelectItem value="5">5 - Profissional Autônomo</SelectItem>
+                            <SelectItem value="6">6 - Sociedade de Profissionais</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="nfse_aliquota_padrao"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Alíquota ISS padrão (%)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            placeholder="Ex.: 3.00"
+                            {...field}
+                            value={field.value ?? ""}
+                            onChange={(e) => field.onChange(e.target.value === "" ? null : Number(e.target.value))}
+                          />
+                        </FormControl>
+                        <FormDescription>Usada quando o ERP não enviar a alíquota.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="nfse_ctribnac_padrao"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Código de Tributação Nacional padrão</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Ex.: 010101" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormDescription>cTribNac usado quando o ERP não informar.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="nfse_cnbs_padrao"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Código NBS padrão</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Opcional" {...field} value={field.value || ""} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="nfse_incentivo_cultural"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="space-y-0.5 pr-4">
+                        <FormLabel>Incentivo fiscal / cultural</FormLabel>
+                        <FormDescription>Marque se a empresa possui incentivo fiscal municipal.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="nfse_incluir_ibscbs"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="space-y-0.5 pr-4">
+                        <FormLabel>Incluir IBS/CBS na NFS-e</FormLabel>
+                        <FormDescription>Reforma tributária — envie apenas se o ERP fornecer os dados.</FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
+                  <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
+                    <FileSignature className="h-4 w-4" />
+                    NFS-e Nacional (SEFIN/ADN)
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    Usa o mesmo certificado A1 e ambiente da aba Fiscal. O ERP emite via{" "}
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded">POST /nfse-api</code> com a permissão{" "}
+                    <code className="text-xs bg-muted px-1 py-0.5 rounded">emitir_nfse</code> no token.
                   </p>
                 </div>
               </TabsContent>

@@ -1,4 +1,12 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  handleNfseEmit,
+  handleNfseConsultar,
+  handleNfseCancelar,
+  handleNfseDanfse,
+  handleNfseXml,
+  handleNfseStatus,
+} from './nfse.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -2306,6 +2314,28 @@ Deno.serve(async (req) => {
     // ========================================================================
     if (action === 'cce_nfe') {
       return await handleCCe(supabase, nfe_id, body.correcao, body.sequencia);
+    }
+
+    // ========================================================================
+    // ACTION: NFS-e Nacional (SEFIN/ADN)
+    // ========================================================================
+    if (action === 'emit_nfse') {
+      return await handleNfseEmit(supabase, ensureRegistered, body.nfse_id);
+    }
+    if (action === 'consult_nfse') {
+      return await handleNfseConsultar(supabase, ensureRegistered, body.nfse_id);
+    }
+    if (action === 'cancel_nfse') {
+      return await handleNfseCancelar(supabase, ensureRegistered, body.nfse_id, body.justificativa, body.motivo);
+    }
+    if (action === 'danfse_nfse') {
+      return await handleNfseDanfse(supabase, ensureRegistered, body.nfse_id);
+    }
+    if (action === 'xml_nfse') {
+      return await handleNfseXml(supabase, ensureRegistered, body.nfse_id);
+    }
+    if (action === 'status_nfse') {
+      return await handleNfseStatus();
     }
 
     // ========================================================================
