@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { 
   Plus, Trash2, Loader2, Edit2, Check, X, 
-  FileText, ShoppingCart, Truck 
+  FileText, ShoppingCart, Truck, FileSignature 
 } from "lucide-react";
 import {
   AlertDialog,

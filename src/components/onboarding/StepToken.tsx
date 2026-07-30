@@ -19,7 +19,7 @@ const PERMS = [
 
 interface Props {
   empresa: Empresa;
-  modelosSelecionados: Set<"nfe" | "nfce" | "mdfe">;
+  modelosSelecionados: Set<"nfe" | "nfce" | "mdfe" | "nfse">;
   onDone: () => void;
   onSkip: () => void;
 }

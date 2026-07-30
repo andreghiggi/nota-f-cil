@@ -14,15 +14,15 @@ const modelos = [
 
 interface Props {
   empresa: Empresa;
-  selected: Set<"nfe" | "nfce" | "mdfe">;
-  onSelectedChange: (s: Set<"nfe" | "nfce" | "mdfe">) => void;
+  selected: Set<"nfe" | "nfce" | "mdfe" | "nfse">;
+  onSelectedChange: (s: Set<"nfe" | "nfce" | "mdfe" | "nfse">) => void;
   onContinue: () => void;
 }
 
 export function StepSeries({ empresa, selected, onSelectedChange, onContinue }: Props) {
   const [touched, setTouched] = useState(false);
 
-  const toggle = (id: "nfe" | "nfce" | "mdfe") => {
+  const toggle = (id: "nfe" | "nfce" | "mdfe" | "nfse") => {
     const next = new Set(selected);
     next.has(id) ? next.delete(id) : next.add(id);
     onSelectedChange(next);
