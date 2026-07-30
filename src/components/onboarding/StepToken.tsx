@@ -31,6 +31,7 @@ export function StepToken({ empresa, modelosSelecionados, onDone, onSkip }: Prop
   if (modelosSelecionados.has("nfe")) defaults.push("emitir_nfe");
   if (modelosSelecionados.has("nfce")) defaults.push("emitir_nfce");
   if (modelosSelecionados.has("mdfe")) defaults.push("emitir_mdfe");
+  if (modelosSelecionados.has("nfse")) defaults.push("emitir_nfse");
 
   const [nome, setNome] = useState(`Token ${empresa.nome_fantasia || empresa.razao_social}`);
   const [perms, setPerms] = useState<string[]>(defaults);
