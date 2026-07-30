@@ -152,6 +152,19 @@ const empresaSchema = z.object({
   serie_nfe: z.string().min(1).max(3).default("001"),
   serie_mdfe: z.string().min(1).max(3).default("1"),
   rntrc: z.string().max(8).optional().nullable(),
+
+  // NFS-e Nacional (SEFIN/ADN)
+  nfse_ativo: z.boolean().default(false),
+  inscricao_municipal: z.string().max(20).optional().nullable(),
+  serie_nfse: z.string().min(1).max(5).default("1"),
+  nfse_op_simples: z.coerce.number().int().min(0).max(3).default(0),
+  nfse_reg_esp: z.coerce.number().int().min(0).max(6).default(0),
+  nfse_incentivo_cultural: z.boolean().default(false),
+  nfse_incluir_ibscbs: z.boolean().default(false),
+  nfse_aliquota_padrao: z.coerce.number().min(0).max(100).optional().nullable(),
+  nfse_ctribnac_padrao: z.string().max(10).optional().nullable(),
+  nfse_cnbs_padrao: z.string().max(20).optional().nullable(),
+
   
   // CSC (Código de Segurança do Contribuinte)
   csc_id: z.string().max(10).optional().nullable(),
