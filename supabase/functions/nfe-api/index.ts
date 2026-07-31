@@ -480,12 +480,16 @@ Deno.serve(async (req) => {
           nome: `Token principal - ${razao_social}`,
           token_hash: newTokenHash,
           token_prefix: tokenPrefix,
-          permissoes: ['emitir_nfce', 'emitir_nfe', 'emitir', 'consultar', 'cancelar', 'gerenciar'],
+          permissoes: ['emitir_nfce', 'emitir_nfe', 'emitir_mdfe', 'emitir_nfse', 'emitir', 'consultar', 'cancelar', 'inutilizar', 'manifestar', 'gerenciar'],
           status: 'ativo',
         });
 
       if (tokenInsertError) {
         console.error('Register token error:', tokenInsertError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Empresa criada, mas falha ao gerar token.', code: 'TOKEN_ERROR', details: tokenInsertError.message, data: { empresa_id: novaEmpresa.id } }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       // Séries fiscais NÃO são mais criadas automaticamente no cadastro da empresa.
