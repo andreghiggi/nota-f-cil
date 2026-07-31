@@ -522,8 +522,10 @@ Deno.serve(async (req) => {
             razao_social: novaEmpresa.razao_social,
             ambiente: novaEmpresa.ambiente,
             empresa_id: novaEmpresa.id,
-
+            created_at: novaEmpresa.created_at,
+            message: 'Empresa registrada com sucesso. Guarde a api_key, ela não será exibida novamente.',
           },
+
         }),
         { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
