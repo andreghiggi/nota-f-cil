@@ -1303,7 +1303,11 @@ Deno.serve(async (req) => {
       }
 
       // Update status to processing
-      await supabase.from('nfe').update({ status: 'processando' }).eq('id', nfeId);
+      // Reconstrução de XML autorizado (recuperar DANFE) — não transmite nem altera status
+      const reconstruirXml = !!(body?.reconstruir_xml);
+      if (!reconstruirXml) {
+        await supabase.from('nfe').update({ status: 'processando' }).eq('id', nfeId);
+      }
 
       const isPF = empresa.tipo_pessoa === 'PF';
       const empresaCRT = ({ simples_nacional: 1, lucro_presumido: 3, lucro_real: 3 } as Record<string, number>)[empresa.regime_tributario] || 1;
