@@ -437,10 +437,18 @@ Deno.serve(async (req) => {
         uf: uf || 'SP',
         municipio: municipio || 'SAO PAULO',
         codigo_municipio: codigo_municipio || '3550308',
+        regime_tributario: regimeTributario,
+        logradouro: body.logradouro || null,
+        numero: body.numero || null,
+        complemento: body.complemento || null,
+        bairro: body.bairro || null,
+        cep: body.cep ? String(body.cep).replace(/\D/g, '') : null,
+        telefone: body.telefone ? String(body.telefone).replace(/\D/g, '') : null,
         ambiente: 'homologacao',
       };
       if (tipoPessoa === 'PF') {
         empresaInsert.cpf = cnpjClean;
+        empresaInsert.inscricao_estadual = inscricao_estadual || null;
       } else {
         empresaInsert.cnpj = cnpjClean;
         empresaInsert.inscricao_estadual = inscricao_estadual || null;
