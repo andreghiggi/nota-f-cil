@@ -387,7 +387,14 @@ Deno.serve(async (req) => {
 
     if (req.method === 'POST' && subPath === 'register') {
       const body = await req.json();
-      const { cnpj, razao_social, email, nome_fantasia, inscricao_estadual, uf, municipio, codigo_municipio } = body;
+      const { cnpj, razao_social, email, nome_fantasia, inscricao_estadual, uf, codigo_municipio } = body;
+      const municipio = body.municipio || body.cidade;
+      const regimeIn = String(body.regime_tributario || '').toLowerCase();
+      const crtIn = Number(body.crt ?? body.codigo_regime_tributario ?? 0);
+      const regimeTributario =
+        ['simples_nacional', 'lucro_presumido', 'lucro_real'].includes(regimeIn)
+          ? regimeIn
+          : crtIn === 3 ? 'lucro_presumido' : crtIn === 2 ? 'simples_nacional' : 'simples_nacional';
 
       if (!cnpj || !razao_social) {
         return new Response(
@@ -430,10 +437,18 @@ Deno.serve(async (req) => {
         uf: uf || 'SP',
         municipio: municipio || 'SAO PAULO',
         codigo_municipio: codigo_municipio || '3550308',
+        regime_tributario: regimeTributario,
+        logradouro: body.logradouro || null,
+        numero: body.numero || null,
+        complemento: body.complemento || null,
+        bairro: body.bairro || null,
+        cep: body.cep ? String(body.cep).replace(/\D/g, '') : null,
+        telefone: body.telefone ? String(body.telefone).replace(/\D/g, '') : null,
         ambiente: 'homologacao',
       };
       if (tipoPessoa === 'PF') {
         empresaInsert.cpf = cnpjClean;
+        empresaInsert.inscricao_estadual = inscricao_estadual || null;
       } else {
         empresaInsert.cnpj = cnpjClean;
         empresaInsert.inscricao_estadual = inscricao_estadual || null;
@@ -465,12 +480,16 @@ Deno.serve(async (req) => {
           nome: `Token principal - ${razao_social}`,
           token_hash: newTokenHash,
           token_prefix: tokenPrefix,
-          permissoes: ['emitir_nfce', 'emitir_nfe', 'emitir', 'consultar', 'cancelar', 'gerenciar'],
+          permissoes: ['emitir_nfce', 'emitir_nfe', 'emitir_mdfe', 'emitir_nfse', 'emitir', 'consultar', 'cancelar', 'inutilizar', 'manifestar', 'gerenciar'],
           status: 'ativo',
         });
 
       if (tokenInsertError) {
         console.error('Register token error:', tokenInsertError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Empresa criada, mas falha ao gerar token.', code: 'TOKEN_ERROR', details: tokenInsertError.message, data: { empresa_id: novaEmpresa.id } }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
 
       // Séries fiscais NÃO são mais criadas automaticamente no cadastro da empresa.
