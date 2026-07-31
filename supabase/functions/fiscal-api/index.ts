@@ -2445,7 +2445,7 @@ Deno.serve(async (req) => {
 
       const { data: nfe } = await supabase
         .from('nfe')
-        .select('id, numero, chave_acesso, xml_retorno, xml_envio, empresa_id')
+        .select('id, numero, chave_acesso, xml_retorno, xml_envio, empresa_id, status, protocolo')
         .eq('id', nfe_id)
         .maybeSingle();
 
@@ -2456,13 +2456,43 @@ Deno.serve(async (req) => {
         );
       }
 
-      const xml = normalizeXmlForDanfe(nfe.xml_retorno) || normalizeXmlForDanfe(nfe.xml_envio);
+      let xml = normalizeXmlForDanfe(nfe.xml_retorno) || normalizeXmlForDanfe(nfe.xml_envio);
+
+      // Fallback: nota autorizada sem XML gravado (ex.: recuperada por consulta de chave)
+      // → remonta o XML a partir do payload original e anexa o protocolo autorizado.
+      if (!xml && nfe.status === 'autorizada' && nfe.protocolo && String(nfe.chave_acesso || '').replace(/\D/g, '').length === 44) {
+        try {
+          console.log(`🔧 DANFE ${nfe.numero}: XML ausente, reconstruindo a partir do payload...`);
+          const recResp = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/fiscal-api`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify({ action: 'emit_nfe', nfe_id: nfe.id, reconstruir_xml: true }),
+          });
+          const recText = await recResp.text();
+          console.log(`🔧 Reconstrução DANFE ${nfe.numero}: ${recResp.status} ${recText.substring(0, 300)}`);
+          if (recResp.ok) {
+            const { data: nfeRec } = await supabase
+              .from('nfe')
+              .select('xml_retorno')
+              .eq('id', nfe.id)
+              .maybeSingle();
+            xml = normalizeXmlForDanfe(nfeRec?.xml_retorno);
+          }
+        } catch (err) {
+          console.error('❌ Falha ao reconstruir XML para DANFE:', err);
+        }
+      }
+
       if (!xml) {
         return new Response(
           JSON.stringify({ error: 'XML autorizado indisponível para esta NF-e' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
 
       const detCount = (xml.match(/<det\s/gi) || []).length;
       const compactDanfe = detCount > 120;
