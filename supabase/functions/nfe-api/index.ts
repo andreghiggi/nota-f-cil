@@ -387,7 +387,14 @@ Deno.serve(async (req) => {
 
     if (req.method === 'POST' && subPath === 'register') {
       const body = await req.json();
-      const { cnpj, razao_social, email, nome_fantasia, inscricao_estadual, uf, municipio, codigo_municipio } = body;
+      const { cnpj, razao_social, email, nome_fantasia, inscricao_estadual, uf, codigo_municipio } = body;
+      const municipio = body.municipio || body.cidade;
+      const regimeIn = String(body.regime_tributario || '').toLowerCase();
+      const crtIn = Number(body.crt ?? body.codigo_regime_tributario ?? 0);
+      const regimeTributario =
+        ['simples_nacional', 'lucro_presumido', 'lucro_real'].includes(regimeIn)
+          ? regimeIn
+          : crtIn === 3 ? 'lucro_presumido' : crtIn === 2 ? 'simples_nacional' : 'simples_nacional';
 
       if (!cnpj || !razao_social) {
         return new Response(
