@@ -1998,7 +1998,11 @@ Deno.serve(async (req) => {
         payload.ambiente = nfe.ambiente;
         payload.cNF = cNFRec;
         payload.nota.cNF = cNFRec;
-        payload.nota.dhEmi = payload.nota.dhEmi || nfe.data_emissao;
+        // dhEmi precisa do formato exigido pelo schema (sem microssegundos, offset -03:00)
+        const dhBase = new Date(String(payload.nota.dhEmi || nfe.data_emissao));
+        const dhLocal = new Date(dhBase.getTime() - 3 * 60 * 60 * 1000);
+        payload.nota.dhEmi = `${dhLocal.toISOString().slice(0, 19)}-03:00`;
+        payload.dhEmi = payload.nota.dhEmi;
 
         const { response: rResp, data: rData, text: rText } = await postWithRetry(emitUrl, payload, {
           maxAttempts: 3,
