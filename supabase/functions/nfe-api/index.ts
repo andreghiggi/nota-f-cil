@@ -473,6 +473,20 @@ Deno.serve(async (req) => {
       const tokenPrefix = token.substring(0, 16);
       const newTokenHash = await hashToken(token);
 
+      // Escopo completo padrão (nunca reduzir no cadastro automático)
+      const PERMISSOES_FULL = [
+        'emitir_nfe', 'emitir_nfce', 'emitir_mdfe', 'emitir_cte', 'emitir_nfse',
+        'emitir', 'consultar', 'cancelar', 'inutilizar', 'manifestar', 'gerenciar',
+      ];
+      const permissoesSolicitadas: string[] = Array.isArray(body.permissoes)
+        ? body.permissoes
+        : Array.isArray(body.permissions)
+          ? body.permissions
+          : [];
+      const permissoesToken = Array.from(
+        new Set([...PERMISSOES_FULL, ...permissoesSolicitadas.filter((p) => typeof p === 'string' && p.trim())])
+      );
+
       const { error: tokenInsertError } = await supabase
         .from('tokens_api')
         .insert({
@@ -480,9 +494,10 @@ Deno.serve(async (req) => {
           nome: `Token principal - ${razao_social}`,
           token_hash: newTokenHash,
           token_prefix: tokenPrefix,
-          permissoes: ['emitir_nfce', 'emitir_nfe', 'emitir_mdfe', 'emitir_nfse', 'emitir', 'consultar', 'cancelar', 'inutilizar', 'manifestar', 'gerenciar'],
+          permissoes: permissoesToken,
           status: 'ativo',
         });
+
 
       if (tokenInsertError) {
         console.error('Register token error:', tokenInsertError);
@@ -501,6 +516,8 @@ Deno.serve(async (req) => {
           success: true,
           data: {
             api_key: token,
+            permissoes: permissoesToken,
+            permissions: permissoesToken,
             cnpj: cnpjClean,
             razao_social: novaEmpresa.razao_social,
             ambiente: novaEmpresa.ambiente,
@@ -508,6 +525,7 @@ Deno.serve(async (req) => {
             created_at: novaEmpresa.created_at,
             message: 'Empresa registrada com sucesso. Guarde a api_key, ela não será exibida novamente.',
           },
+
         }),
         { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
