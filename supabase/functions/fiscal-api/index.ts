@@ -1981,6 +1981,55 @@ Deno.serve(async (req) => {
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfe/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
 
+      // ===== Modo reconstrução: remonta/assina o XML e anexa o protocolo já autorizado =====
+      if (reconstruirXml) {
+        const chaveRec = String(nfe.chave_acesso || '').replace(/\D/g, '');
+        if (chaveRec.length !== 44 || !nfe.protocolo) {
+          return new Response(
+            JSON.stringify({ error: 'Reconstrução exige chave de acesso (44 dígitos) e protocolo de autorização' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        const cNFRec = chaveRec.substring(35, 43);
+        payload.apenas_xml = true;
+        payload.reconstruir_xml = true;
+        payload.protocolo = nfe.protocolo;
+        payload.data_autorizacao = nfe.data_autorizacao || nfe.data_emissao;
+        payload.ambiente = nfe.ambiente;
+        payload.cNF = cNFRec;
+        payload.nota.cNF = cNFRec;
+        payload.nota.dhEmi = payload.nota.dhEmi || nfe.data_emissao;
+
+        const { response: rResp, data: rData, text: rText } = await postWithRetry(emitUrl, payload, {
+          maxAttempts: 3,
+          label: `NF-e ${nfe.numero} reconstruir_xml`,
+        });
+        const xmlRec = normalizeFiscalXml(rData?.xml || rData?.xml_retorno || '');
+        if (!rResp.ok || !xmlRec) {
+          return new Response(
+            JSON.stringify({ error: rData?.erro || rData?.error || 'Falha ao reconstruir XML', details: rText?.substring(0, 500) }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        const chaveGerada = extractChaveNfeFromXml(xmlRec);
+        if (chaveGerada !== chaveRec) {
+          return new Response(
+            JSON.stringify({
+              error: 'XML reconstruído não confere com a chave autorizada',
+              chave_esperada: chaveRec,
+              chave_gerada: chaveGerada,
+            }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        await supabase.from('nfe').update({ xml_retorno: xmlRec }).eq('id', nfeId);
+        return new Response(
+          JSON.stringify({ success: true, reconstruido: true, chave_acesso: chaveRec }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+
       const { response, text: responseText, data: responseDataParsed } = await postWithRetry(
         emitUrl,
         payload,
