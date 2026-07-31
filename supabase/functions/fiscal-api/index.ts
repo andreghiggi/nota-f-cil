@@ -1303,7 +1303,11 @@ Deno.serve(async (req) => {
       }
 
       // Update status to processing
-      await supabase.from('nfe').update({ status: 'processando' }).eq('id', nfeId);
+      // Reconstrução de XML autorizado (recuperar DANFE) — não transmite nem altera status
+      const reconstruirXml = !!(body?.reconstruir_xml);
+      if (!reconstruirXml) {
+        await supabase.from('nfe').update({ status: 'processando' }).eq('id', nfeId);
+      }
 
       const isPF = empresa.tipo_pessoa === 'PF';
       const empresaCRT = ({ simples_nacional: 1, lucro_presumido: 3, lucro_real: 3 } as Record<string, number>)[empresa.regime_tributario] || 1;
@@ -1977,6 +1981,59 @@ Deno.serve(async (req) => {
 
       const emitUrl = `${FISCAL_API_BASE_URL}/nfe/emitir?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`;
 
+      // ===== Modo reconstrução: remonta/assina o XML e anexa o protocolo já autorizado =====
+      if (reconstruirXml) {
+        const chaveRec = String(nfe.chave_acesso || '').replace(/\D/g, '');
+        if (chaveRec.length !== 44 || !nfe.protocolo) {
+          return new Response(
+            JSON.stringify({ error: 'Reconstrução exige chave de acesso (44 dígitos) e protocolo de autorização' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        const cNFRec = chaveRec.substring(35, 43);
+        payload.apenas_xml = true;
+        payload.reconstruir_xml = true;
+        payload.protocolo = nfe.protocolo;
+        payload.data_autorizacao = nfe.data_autorizacao || nfe.data_emissao;
+        payload.ambiente = nfe.ambiente;
+        payload.cNF = cNFRec;
+        payload.nota.cNF = cNFRec;
+        // dhEmi precisa do formato exigido pelo schema (sem microssegundos, offset -03:00)
+        const dhBase = new Date(String(payload.nota.dhEmi || nfe.data_emissao));
+        const dhLocal = new Date(dhBase.getTime() - 3 * 60 * 60 * 1000);
+        payload.nota.dhEmi = `${dhLocal.toISOString().slice(0, 19)}-03:00`;
+        payload.dhEmi = payload.nota.dhEmi;
+
+        const { response: rResp, data: rData, text: rText } = await postWithRetry(emitUrl, payload, {
+          maxAttempts: 3,
+          label: `NF-e ${nfe.numero} reconstruir_xml`,
+        });
+        const xmlRec = normalizeFiscalXml(rData?.xml || rData?.xml_retorno || '');
+        if (!rResp.ok || !xmlRec) {
+          return new Response(
+            JSON.stringify({ error: rData?.erro || rData?.error || 'Falha ao reconstruir XML', details: rText?.substring(0, 500) }),
+            { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        const chaveGerada = extractChaveNfeFromXml(xmlRec);
+        if (chaveGerada !== chaveRec) {
+          return new Response(
+            JSON.stringify({
+              error: 'XML reconstruído não confere com a chave autorizada',
+              chave_esperada: chaveRec,
+              chave_gerada: chaveGerada,
+            }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+        await supabase.from('nfe').update({ xml_retorno: xmlRec }).eq('id', nfeId);
+        return new Response(
+          JSON.stringify({ success: true, reconstruido: true, chave_acesso: chaveRec }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+
       const { response, text: responseText, data: responseDataParsed } = await postWithRetry(
         emitUrl,
         payload,
@@ -2392,7 +2449,7 @@ Deno.serve(async (req) => {
 
       const { data: nfe } = await supabase
         .from('nfe')
-        .select('id, numero, chave_acesso, xml_retorno, xml_envio, empresa_id')
+        .select('id, numero, chave_acesso, xml_retorno, xml_envio, empresa_id, status, protocolo')
         .eq('id', nfe_id)
         .maybeSingle();
 
@@ -2403,13 +2460,43 @@ Deno.serve(async (req) => {
         );
       }
 
-      const xml = normalizeXmlForDanfe(nfe.xml_retorno) || normalizeXmlForDanfe(nfe.xml_envio);
+      let xml = normalizeXmlForDanfe(nfe.xml_retorno) || normalizeXmlForDanfe(nfe.xml_envio);
+
+      // Fallback: nota autorizada sem XML gravado (ex.: recuperada por consulta de chave)
+      // → remonta o XML a partir do payload original e anexa o protocolo autorizado.
+      if (!xml && nfe.status === 'autorizada' && nfe.protocolo && String(nfe.chave_acesso || '').replace(/\D/g, '').length === 44) {
+        try {
+          console.log(`🔧 DANFE ${nfe.numero}: XML ausente, reconstruindo a partir do payload...`);
+          const recResp = await fetch(`${Deno.env.get('SUPABASE_URL')}/functions/v1/fiscal-api`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+            },
+            body: JSON.stringify({ action: 'emit_nfe', nfe_id: nfe.id, reconstruir_xml: true }),
+          });
+          const recText = await recResp.text();
+          console.log(`🔧 Reconstrução DANFE ${nfe.numero}: ${recResp.status} ${recText.substring(0, 300)}`);
+          if (recResp.ok) {
+            const { data: nfeRec } = await supabase
+              .from('nfe')
+              .select('xml_retorno')
+              .eq('id', nfe.id)
+              .maybeSingle();
+            xml = normalizeXmlForDanfe(nfeRec?.xml_retorno);
+          }
+        } catch (err) {
+          console.error('❌ Falha ao reconstruir XML para DANFE:', err);
+        }
+      }
+
       if (!xml) {
         return new Response(
           JSON.stringify({ error: 'XML autorizado indisponível para esta NF-e' }),
           { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
 
       const detCount = (xml.match(/<det\s/gi) || []).length;
       const compactDanfe = detCount > 120;
