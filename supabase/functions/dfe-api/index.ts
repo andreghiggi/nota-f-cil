@@ -129,12 +129,18 @@ function parseDoc(nsu: number, schema: string, xml: string): ParsedDoc | null {
 async function extractDocs(retXmlBase64: string): Promise<ParsedDoc[]> {
   const retXml = new TextDecoder('utf-8').decode(Uint8Array.from(atob(retXmlBase64), c => c.charCodeAt(0)));
   const out: ParsedDoc[] = [];
-  const re = /<docZip\s+NSU="(\d+)"\s+schema="([^"]+)">([^<]+)<\/docZip>/g;
+  // A ordem dos atributos não é garantida (SEFAZ pode enviar schema antes de NSU).
+  const re = /<(?:\w+:)?docZip\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?docZip>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(retXml)) !== null) {
-    const nsu = Number(m[1]);
-    const schema = m[2];
-    const b64 = m[3];
+    const attrs = m[1];
+    const nsuMatch = attrs.match(/\bNSU=["'](\d+)["']/i);
+    const schemaMatch = attrs.match(/\bschema=["']([^"']+)["']/i);
+    if (!schemaMatch) continue;
+    // consChNFe pode retornar docZip sem NSU; ele só é obrigatório no distNSU.
+    const nsu = nsuMatch ? Number(nsuMatch[1]) : 0;
+    const schema = schemaMatch[1];
+    const b64 = m[2].trim();
     try {
       const xml = await gunzipBase64(b64);
       const doc = parseDoc(nsu, schema, xml);
@@ -264,6 +270,71 @@ async function syncEmpresa(supabase: any, empresaId: string, maxLoops = 10): Pro
   return { empresa_id: empresaId, ultimo_nsu: ultNSU, max_nsu: maxNSU, docs_processados: totalNovos, cStat: lastCStat, xMotivo: lastMotivo };
 }
 
+/** Consulta pontual por chave. Necessária quando o procNFe é liberado após uma
+ * manifestação, mas o distNSU incremental ainda responde ultNSU=maxNSU. */
+async function syncChave(supabase: any, empresaId: string, chave: string): Promise<any> {
+  const got = await ensureApiKey(supabase, empresaId) as { apiKey: string; empresa: any } | { error: string };
+  if ('error' in got) return { error: got.error };
+
+  const resp = await fetch(`${FISCAL_API_BASE_URL}/nfe/dist-dfe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${got.apiKey}` },
+    body: JSON.stringify({ chave, api_key: got.apiKey }),
+  });
+  const text = await resp.text();
+  let json: any; try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  if (!resp.ok || json.sucesso === false || json.error) {
+    return { error: json.error || json.erro || `api2 status ${resp.status}: ${text.substring(0, 300)}` };
+  }
+
+  const payload = json.dados || json.data || json;
+  let processados = 0;
+  let encontrados = 0;
+  const erros: string[] = [];
+  let cStat = String(payload.cStat || '');
+  let xMotivo = String(payload.xMotivo || '');
+  let docZipNoRetorno = 0;
+  let schemasNoRetorno: string[] = [];
+  if (payload.xml_retorno) {
+    try {
+      const retXml = new TextDecoder('utf-8').decode(Uint8Array.from(atob(payload.xml_retorno), c => c.charCodeAt(0)));
+      cStat ||= retXml.match(/<cStat>(\d+)<\/cStat>/)?.[1] || '';
+      xMotivo ||= retXml.match(/<xMotivo>([^<]+)<\/xMotivo>/)?.[1] || '';
+      docZipNoRetorno = (retXml.match(/docZip/gi) || []).length;
+      schemasNoRetorno = Array.from(retXml.matchAll(/schema=["']([^"']+)["']/gi)).map(m => m[1]).slice(0, 10);
+    } catch {}
+    const docs = await extractDocs(payload.xml_retorno);
+    encontrados = docs.length;
+    for (const d of docs) {
+      if (d.chave !== chave) continue;
+      const row: any = {
+        empresa_id: empresaId,
+        chave_acesso: d.chave,
+        nsu: d.nsu,
+        schema: d.schema,
+        tipo: d.tipo,
+        cnpj_emitente: d.cnpj_emitente,
+        nome_emitente: d.nome_emitente,
+        ie_emitente: d.ie_emitente,
+        numero_nfe: d.numero,
+        serie: d.serie,
+        data_emissao: d.data_emissao,
+        valor_total: d.valor_total,
+        tp_nf: d.tp_nf,
+        situacao_nfe: d.situacao,
+        digest_value: d.digest,
+      };
+      if (d.tipo === 'resumo') row.xml_resumo = d.xml;
+      if (d.tipo === 'completo') row.xml_completo = d.xml;
+      const { error } = await supabase.from('dfe_recebidas')
+        .upsert(row, { onConflict: 'empresa_id,chave_acesso', ignoreDuplicates: false });
+      if (!error) processados++;
+      else erros.push(error.message || 'Falha ao gravar documento');
+    }
+  }
+  return { cStat, xMotivo, doczip_tags: docZipNoRetorno, schemas: schemasNoRetorno, docs_encontrados: encontrados, docs_processados: processados, erros };
+}
+
 async function manifestar(supabase: any, dfeRow: any, tpEvento: TpEvento, justificativa: string) {
   const got = await ensureApiKey(supabase, dfeRow.empresa_id);
   if ('error' in got) throw new Error(got.error);
@@ -294,9 +365,12 @@ async function manifestar(supabase: any, dfeRow: any, tpEvento: TpEvento, justif
       status_manifestacao: STATUS_MAP[tpEvento],
       data_manifestacao: new Date().toISOString(),
     }).eq('id', dfeRow.id);
-    // A SEFAZ libera o procNFe completo em NSU novo após a manifestação — puxa já
+    // Consulta primeiro pela chave: o incremental pode continuar em ultNSU=maxNSU.
     if (!dfeRow.xml_completo) {
-      try { await syncEmpresa(supabase, dfeRow.empresa_id); } catch (e) { console.warn('sync pós-manifesto falhou:', (e as Error).message); }
+      try {
+        await syncChave(supabase, dfeRow.empresa_id, dfeRow.chave_acesso);
+        await syncEmpresa(supabase, dfeRow.empresa_id);
+      } catch (e) { console.warn('sync pós-manifesto falhou:', (e as Error).message); }
     }
   }
   return { aceito, duplicidade, ...p };
@@ -370,6 +444,17 @@ Deno.serve(async (req) => {
     // ---------- POST /dfe-api/sync ----------
     if (method === 'POST' && sub[0] === 'sync') {
       const denied = requirePerm('consultar_dfe'); if (denied) return denied;
+      const body = await req.json().catch(() => ({}));
+      const chave = String(body.chave || '').replace(/\D/g, '');
+      if (chave) {
+        if (chave.length !== 44) return err('chave deve conter 44 dígitos', 'VALIDATION_ERROR');
+        const { data: dfe } = await supabase.from('dfe_recebidas')
+          .select('id').eq('empresa_id', empresaId).eq('chave_acesso', chave).maybeSingle();
+        if (!dfe) return err('DF-e não encontrado para a empresa', 'NOT_FOUND', 404);
+        const pontual = await syncChave(supabase, empresaId!, chave);
+        if (pontual.error) return err(pontual.error, 'SYNC_ERROR', 502);
+        return ok({ empresa_id: empresaId, chave, consulta: 'consChNFe', ...pontual });
+      }
       const r = await syncEmpresa(supabase, empresaId!);
       if (r.error) return err(r.error, 'SYNC_ERROR', 502);
       return ok(r);
@@ -406,7 +491,10 @@ Deno.serve(async (req) => {
       let { data } = await supabase.from('dfe_recebidas')
         .select('*').eq('id', id).eq('empresa_id', empresaId).maybeSingle();
       if (!data || data.xml_completo) return data;
-      try { await syncEmpresa(supabase, empresaId!); } catch (e) { console.warn('sync on-demand falhou:', (e as Error).message); }
+      try {
+        await syncChave(supabase, empresaId!, data.chave_acesso);
+        await syncEmpresa(supabase, empresaId!);
+      } catch (e) { console.warn('sync on-demand falhou:', (e as Error).message); }
       const { data: fresh } = await supabase.from('dfe_recebidas')
         .select('*').eq('id', id).eq('empresa_id', empresaId).maybeSingle();
       return fresh || data;
