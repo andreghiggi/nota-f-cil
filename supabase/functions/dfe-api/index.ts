@@ -136,8 +136,9 @@ async function extractDocs(retXmlBase64: string): Promise<ParsedDoc[]> {
     const attrs = m[1];
     const nsuMatch = attrs.match(/\bNSU=["'](\d+)["']/i);
     const schemaMatch = attrs.match(/\bschema=["']([^"']+)["']/i);
-    if (!nsuMatch || !schemaMatch) continue;
-    const nsu = Number(nsuMatch[1]);
+    if (!schemaMatch) continue;
+    // consChNFe pode retornar docZip sem NSU; ele só é obrigatório no distNSU.
+    const nsu = nsuMatch ? Number(nsuMatch[1]) : 0;
     const schema = schemaMatch[1];
     const b64 = m[2].trim();
     try {
