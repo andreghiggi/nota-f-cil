@@ -280,11 +280,13 @@ async function manifestar(supabase: any, dfeRow: any, tpEvento: TpEvento, justif
     throw new Error(json.error || `api2 status ${resp.status}: ${text.substring(0, 300)}`);
   }
   const p = json.dados || json.data || json;
-  const aceito = ['135', '136', '155'].includes(String(p.cStat || ''));
+  const cStat = String(p.cStat || '');
+  const duplicidade = cStat === '573';
+  const aceito = ['135', '136', '155'].includes(cStat) || duplicidade;
   await supabase.from('dfe_eventos').insert({
     dfe_id: dfeRow.id, empresa_id: dfeRow.empresa_id, chave_acesso: dfeRow.chave_acesso,
     tp_evento: tpEvento, justificativa, protocolo: p.protocolo || null,
-    codigo_retorno: String(p.cStat || ''), motivo_retorno: p.xMotivo || null,
+    codigo_retorno: cStat, motivo_retorno: p.xMotivo || null,
     xml_retorno: p.xml_retorno ? new TextDecoder().decode(Uint8Array.from(atob(p.xml_retorno), c => c.charCodeAt(0))) : null,
   });
   if (aceito) {
@@ -292,9 +294,14 @@ async function manifestar(supabase: any, dfeRow: any, tpEvento: TpEvento, justif
       status_manifestacao: STATUS_MAP[tpEvento],
       data_manifestacao: new Date().toISOString(),
     }).eq('id', dfeRow.id);
+    // A SEFAZ libera o procNFe completo em NSU novo após a manifestação — puxa já
+    if (!dfeRow.xml_completo) {
+      try { await syncEmpresa(supabase, dfeRow.empresa_id); } catch (e) { console.warn('sync pós-manifesto falhou:', (e as Error).message); }
+    }
   }
-  return { aceito, ...p };
+  return { aceito, duplicidade, ...p };
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
