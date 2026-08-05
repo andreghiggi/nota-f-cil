@@ -130,12 +130,12 @@ async function extractDocs(retXmlBase64: string): Promise<ParsedDoc[]> {
   const retXml = new TextDecoder('utf-8').decode(Uint8Array.from(atob(retXmlBase64), c => c.charCodeAt(0)));
   const out: ParsedDoc[] = [];
   // A ordem dos atributos não é garantida (SEFAZ pode enviar schema antes de NSU).
-  const re = /<docZip\b([^>]*)>([^<]+)<\/docZip>/g;
+  const re = /<(?:\w+:)?docZip\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?docZip>/gi;
   let m: RegExpExecArray | null;
   while ((m = re.exec(retXml)) !== null) {
     const attrs = m[1];
-    const nsuMatch = attrs.match(/\bNSU="(\d+)"/i);
-    const schemaMatch = attrs.match(/\bschema="([^"]+)"/i);
+    const nsuMatch = attrs.match(/\bNSU=["'](\d+)["']/i);
+    const schemaMatch = attrs.match(/\bschema=["']([^"']+)["']/i);
     if (!nsuMatch || !schemaMatch) continue;
     const nsu = Number(nsuMatch[1]);
     const schema = schemaMatch[1];
