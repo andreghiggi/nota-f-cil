@@ -283,6 +283,8 @@ async function syncChave(supabase: any, empresaId: string, chave: string): Promi
 
   const payload = json.dados || json.data || json;
   let processados = 0;
+  let encontrados = 0;
+  const erros: string[] = [];
   let cStat = String(payload.cStat || '');
   let xMotivo = String(payload.xMotivo || '');
   if (payload.xml_retorno) {
@@ -292,6 +294,7 @@ async function syncChave(supabase: any, empresaId: string, chave: string): Promi
       xMotivo ||= retXml.match(/<xMotivo>([^<]+)<\/xMotivo>/)?.[1] || '';
     } catch {}
     const docs = await extractDocs(payload.xml_retorno);
+    encontrados = docs.length;
     for (const d of docs) {
       if (d.chave !== chave) continue;
       const row: any = {
@@ -316,9 +319,10 @@ async function syncChave(supabase: any, empresaId: string, chave: string): Promi
       const { error } = await supabase.from('dfe_recebidas')
         .upsert(row, { onConflict: 'empresa_id,chave_acesso', ignoreDuplicates: false });
       if (!error) processados++;
+      else erros.push(error.message || 'Falha ao gravar documento');
     }
   }
-  return { cStat, xMotivo, docs_processados: processados };
+  return { cStat, xMotivo, docs_encontrados: encontrados, docs_processados: processados, erros };
 }
 
 async function manifestar(supabase: any, dfeRow: any, tpEvento: TpEvento, justificativa: string) {
