@@ -292,11 +292,15 @@ async function syncChave(supabase: any, empresaId: string, chave: string): Promi
   const erros: string[] = [];
   let cStat = String(payload.cStat || '');
   let xMotivo = String(payload.xMotivo || '');
+  let docZipNoRetorno = 0;
+  let schemasNoRetorno: string[] = [];
   if (payload.xml_retorno) {
     try {
       const retXml = new TextDecoder('utf-8').decode(Uint8Array.from(atob(payload.xml_retorno), c => c.charCodeAt(0)));
       cStat ||= retXml.match(/<cStat>(\d+)<\/cStat>/)?.[1] || '';
       xMotivo ||= retXml.match(/<xMotivo>([^<]+)<\/xMotivo>/)?.[1] || '';
+      docZipNoRetorno = (retXml.match(/docZip/gi) || []).length;
+      schemasNoRetorno = Array.from(retXml.matchAll(/schema=["']([^"']+)["']/gi)).map(m => m[1]).slice(0, 10);
     } catch {}
     const docs = await extractDocs(payload.xml_retorno);
     encontrados = docs.length;
@@ -327,7 +331,7 @@ async function syncChave(supabase: any, empresaId: string, chave: string): Promi
       else erros.push(error.message || 'Falha ao gravar documento');
     }
   }
-  return { cStat, xMotivo, docs_encontrados: encontrados, docs_processados: processados, erros };
+  return { cStat, xMotivo, doczip_tags: docZipNoRetorno, schemas: schemasNoRetorno, docs_encontrados: encontrados, docs_processados: processados, erros };
 }
 
 async function manifestar(supabase: any, dfeRow: any, tpEvento: TpEvento, justificativa: string) {
