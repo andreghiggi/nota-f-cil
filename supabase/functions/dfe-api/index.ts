@@ -423,6 +423,17 @@ Deno.serve(async (req) => {
     // ---------- POST /dfe-api/sync ----------
     if (method === 'POST' && sub[0] === 'sync') {
       const denied = requirePerm('consultar_dfe'); if (denied) return denied;
+      const body = await req.json().catch(() => ({}));
+      const chave = String(body.chave || '').replace(/\D/g, '');
+      if (chave) {
+        if (chave.length !== 44) return err('chave deve conter 44 dígitos', 'VALIDATION_ERROR');
+        const { data: dfe } = await supabase.from('dfe_recebidas')
+          .select('id').eq('empresa_id', empresaId).eq('chave_acesso', chave).maybeSingle();
+        if (!dfe) return err('DF-e não encontrado para a empresa', 'NOT_FOUND', 404);
+        const pontual = await syncChave(supabase, empresaId!, chave);
+        if (pontual.error) return err(pontual.error, 'SYNC_ERROR', 502);
+        return ok({ empresa_id: empresaId, chave, consulta: 'consChNFe', ...pontual });
+      }
       const r = await syncEmpresa(supabase, empresaId!);
       if (r.error) return err(r.error, 'SYNC_ERROR', 502);
       return ok(r);
