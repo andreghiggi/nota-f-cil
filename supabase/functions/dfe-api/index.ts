@@ -283,7 +283,14 @@ async function syncChave(supabase: any, empresaId: string, chave: string): Promi
 
   const payload = json.dados || json.data || json;
   let processados = 0;
+  let cStat = String(payload.cStat || '');
+  let xMotivo = String(payload.xMotivo || '');
   if (payload.xml_retorno) {
+    try {
+      const retXml = new TextDecoder('utf-8').decode(Uint8Array.from(atob(payload.xml_retorno), c => c.charCodeAt(0)));
+      cStat ||= retXml.match(/<cStat>(\d+)<\/cStat>/)?.[1] || '';
+      xMotivo ||= retXml.match(/<xMotivo>([^<]+)<\/xMotivo>/)?.[1] || '';
+    } catch {}
     const docs = await extractDocs(payload.xml_retorno);
     for (const d of docs) {
       if (d.chave !== chave) continue;
@@ -311,7 +318,7 @@ async function syncChave(supabase: any, empresaId: string, chave: string): Promi
       if (!error) processados++;
     }
   }
-  return { cStat: String(payload.cStat || ''), xMotivo: String(payload.xMotivo || ''), docs_processados: processados };
+  return { cStat, xMotivo, docs_processados: processados };
 }
 
 async function manifestar(supabase: any, dfeRow: any, tpEvento: TpEvento, justificativa: string) {
