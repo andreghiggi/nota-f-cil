@@ -264,6 +264,56 @@ async function syncEmpresa(supabase: any, empresaId: string, maxLoops = 10): Pro
   return { empresa_id: empresaId, ultimo_nsu: ultNSU, max_nsu: maxNSU, docs_processados: totalNovos, cStat: lastCStat, xMotivo: lastMotivo };
 }
 
+/** Consulta pontual por chave. Necessária quando o procNFe é liberado após uma
+ * manifestação, mas o distNSU incremental ainda responde ultNSU=maxNSU. */
+async function syncChave(supabase: any, empresaId: string, chave: string): Promise<any> {
+  const got = await ensureApiKey(supabase, empresaId) as { apiKey: string; empresa: any } | { error: string };
+  if ('error' in got) return { error: got.error };
+
+  const resp = await fetch(`${FISCAL_API_BASE_URL}/nfe/dist-dfe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${got.apiKey}` },
+    body: JSON.stringify({ chave, api_key: got.apiKey }),
+  });
+  const text = await resp.text();
+  let json: any; try { json = JSON.parse(text); } catch { json = { raw: text }; }
+  if (!resp.ok || json.sucesso === false || json.error) {
+    return { error: json.error || json.erro || `api2 status ${resp.status}: ${text.substring(0, 300)}` };
+  }
+
+  const payload = json.dados || json.data || json;
+  let processados = 0;
+  if (payload.xml_retorno) {
+    const docs = await extractDocs(payload.xml_retorno);
+    for (const d of docs) {
+      if (d.chave !== chave) continue;
+      const row: any = {
+        empresa_id: empresaId,
+        chave_acesso: d.chave,
+        nsu: d.nsu,
+        schema: d.schema,
+        tipo: d.tipo,
+        cnpj_emitente: d.cnpj_emitente,
+        nome_emitente: d.nome_emitente,
+        ie_emitente: d.ie_emitente,
+        numero_nfe: d.numero,
+        serie: d.serie,
+        data_emissao: d.data_emissao,
+        valor_total: d.valor_total,
+        tp_nf: d.tp_nf,
+        situacao_nfe: d.situacao,
+        digest_value: d.digest,
+      };
+      if (d.tipo === 'resumo') row.xml_resumo = d.xml;
+      if (d.tipo === 'completo') row.xml_completo = d.xml;
+      const { error } = await supabase.from('dfe_recebidas')
+        .upsert(row, { onConflict: 'empresa_id,chave_acesso', ignoreDuplicates: false });
+      if (!error) processados++;
+    }
+  }
+  return { cStat: String(payload.cStat || ''), xMotivo: String(payload.xMotivo || ''), docs_processados: processados };
+}
+
 async function manifestar(supabase: any, dfeRow: any, tpEvento: TpEvento, justificativa: string) {
   const got = await ensureApiKey(supabase, dfeRow.empresa_id);
   if ('error' in got) throw new Error(got.error);
@@ -294,9 +344,12 @@ async function manifestar(supabase: any, dfeRow: any, tpEvento: TpEvento, justif
       status_manifestacao: STATUS_MAP[tpEvento],
       data_manifestacao: new Date().toISOString(),
     }).eq('id', dfeRow.id);
-    // A SEFAZ libera o procNFe completo em NSU novo após a manifestação — puxa já
+    // Consulta primeiro pela chave: o incremental pode continuar em ultNSU=maxNSU.
     if (!dfeRow.xml_completo) {
-      try { await syncEmpresa(supabase, dfeRow.empresa_id); } catch (e) { console.warn('sync pós-manifesto falhou:', (e as Error).message); }
+      try {
+        await syncChave(supabase, dfeRow.empresa_id, dfeRow.chave_acesso);
+        await syncEmpresa(supabase, dfeRow.empresa_id);
+      } catch (e) { console.warn('sync pós-manifesto falhou:', (e as Error).message); }
     }
   }
   return { aceito, duplicidade, ...p };
@@ -406,7 +459,10 @@ Deno.serve(async (req) => {
       let { data } = await supabase.from('dfe_recebidas')
         .select('*').eq('id', id).eq('empresa_id', empresaId).maybeSingle();
       if (!data || data.xml_completo) return data;
-      try { await syncEmpresa(supabase, empresaId!); } catch (e) { console.warn('sync on-demand falhou:', (e as Error).message); }
+      try {
+        await syncChave(supabase, empresaId!, data.chave_acesso);
+        await syncEmpresa(supabase, empresaId!);
+      } catch (e) { console.warn('sync on-demand falhou:', (e as Error).message); }
       const { data: fresh } = await supabase.from('dfe_recebidas')
         .select('*').eq('id', id).eq('empresa_id', empresaId).maybeSingle();
       return fresh || data;
