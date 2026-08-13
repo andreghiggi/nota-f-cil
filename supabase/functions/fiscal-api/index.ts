@@ -284,6 +284,193 @@ function extractChaveNfeFromSefazMessage(raw: any): string {
   return '';
 }
 
+// ============================================================================
+// DUPLICIDADE (539): cNF determinístico + montagem de chave + recuperação
+// ============================================================================
+
+const UF_CODIGO: Record<string, string> = {
+  RO: '11', AC: '12', AM: '13', RR: '14', PA: '15', AP: '16', TO: '17',
+  MA: '21', PI: '22', CE: '23', RN: '24', PB: '25', PE: '26', AL: '27', SE: '28', BA: '29',
+  MG: '31', ES: '32', RJ: '33', SP: '35',
+  PR: '41', SC: '42', RS: '43',
+  MS: '50', MT: '51', GO: '52', DF: '53',
+};
+
+/**
+ * cNF estável derivado do id do documento (+ número/série).
+ * Garante que retransmissões gerem XML idêntico → evita 539 "digest diferentes".
+ */
+function cNFDeterministico(id: string, numero: string | number, serie: string | number): string {
+  const base = `${id}|${String(numero)}|${String(serie)}`;
+  let h1 = 2166136261;
+  let h2 = 5381;
+  for (let i = 0; i < base.length; i++) {
+    const c = base.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 16777619) >>> 0;
+    h2 = ((h2 * 33) ^ c) >>> 0;
+  }
+  const num = (h1 ^ h2) >>> 0;
+  let cnf = String(num % 100000000).padStart(8, '0');
+  // cNF não pode ser igual ao nNF (rejeição 539 em algumas UFs) nem só zeros
+  const nNF = String(parseInt(String(numero), 10) || 0).padStart(8, '0');
+  if (cnf === nNF || cnf === '00000000') cnf = String((num % 99999998) + 1).padStart(8, '0');
+  return cnf;
+}
+
+function digitoVerificadorChave(chave43: string): string {
+  const pesos = [2, 3, 4, 5, 6, 7, 8, 9];
+  let soma = 0;
+  let p = 0;
+  for (let i = chave43.length - 1; i >= 0; i--) {
+    soma += Number(chave43[i]) * pesos[p % 8];
+    p++;
+  }
+  const resto = soma % 11;
+  const dv = 11 - resto;
+  return String(dv >= 10 ? 0 : dv);
+}
+
+/** Monta a chave de acesso de 44 dígitos localmente (necessário p/ consultar após 539). */
+function montarChaveAcesso(params: {
+  uf: string;
+  dataEmissao: string | Date;
+  cpfCnpj: string;
+  modelo: '55' | '65';
+  serie: string | number;
+  numero: string | number;
+  tpEmis: number;
+  cNF: string;
+}): string {
+  const cUF = UF_CODIGO[String(params.uf || '').toUpperCase()];
+  if (!cUF) return '';
+  const doc = String(params.cpfCnpj || '').replace(/\D/g, '').padStart(14, '0');
+  if (doc.replace(/0/g, '') === '') return '';
+  const d = new Date(params.dataEmissao);
+  if (isNaN(d.getTime())) return '';
+  // Data de emissão em horário de Brasília (AAMM)
+  const dBr = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+  const aamm = `${String(dBr.getUTCFullYear()).slice(2)}${String(dBr.getUTCMonth() + 1).padStart(2, '0')}`;
+  const serie = String(parseInt(String(params.serie), 10) || 0).padStart(3, '0');
+  const numero = String(parseInt(String(params.numero), 10) || 0).padStart(9, '0');
+  const cNF = String(params.cNF || '').replace(/\D/g, '').padStart(8, '0');
+  const base = `${cUF}${aamm}${doc}${params.modelo}${serie}${numero}${String(params.tpEmis || 1)}${cNF}`;
+  if (base.length !== 43) return '';
+  return base + digitoVerificadorChave(base);
+}
+
+function respostaIndicaDuplicidade(raw: any): boolean {
+  let txt = '';
+  try { txt = typeof raw === 'string' ? raw : JSON.stringify(raw || {}); } catch { txt = String(raw); }
+  const lower = txt.toLowerCase();
+  return /\b539\b/.test(txt) || /duplicidade/.test(lower) || /duplicada/.test(lower) || /digest s[aã]o diferentes/.test(lower);
+}
+
+function respostaIndicaSefazIndisponivel(raw: any): boolean {
+  let txt = '';
+  try { txt = typeof raw === 'string' ? raw : JSON.stringify(raw || {}); } catch { txt = String(raw); }
+  const lower = txt.toLowerCase();
+  if (/\b(108|109)\b/.test(txt) && /(paralis|indispon)/.test(lower)) return true;
+  return /timed out|timeout|connection reset|recv failure|could not resolve|empty reply|failed to fetch|ssl connect|502 bad gateway|503 service/.test(lower);
+}
+
+/**
+ * Após rejeição 539 (duplicidade), consulta a chave na SEFAZ. Se a nota já está
+ * autorizada, grava chave/protocolo/XML e devolve o updateData para persistir.
+ * Retorna null quando a SEFAZ não confirma autorização.
+ */
+async function recuperarDuplicidade539(opts: {
+  empresaApiKey: string;
+  uf: string;
+  cpfCnpj: string;
+  modelo: '55' | '65';
+  numero: string | number;
+  serie: string | number;
+  dataEmissao: string;
+  tpEmis?: number;
+  cNF: string;
+  chaveConhecida?: string;
+  respostaErro?: any;
+  label: string;
+}): Promise<{ updateData: any; chave: string; consultData: any } | null> {
+  const candidatas: string[] = [];
+  const chaveMsg = extractChaveNfeFromSefazMessage(opts.respostaErro);
+  if (chaveMsg.length === 44) candidatas.push(chaveMsg);
+  const chaveConhecida = String(opts.chaveConhecida || '').replace(/\D/g, '');
+  if (chaveConhecida.length === 44) candidatas.push(chaveConhecida);
+  const chaveCalc = montarChaveAcesso({
+    uf: opts.uf,
+    dataEmissao: opts.dataEmissao,
+    cpfCnpj: opts.cpfCnpj,
+    modelo: opts.modelo,
+    serie: opts.serie,
+    numero: opts.numero,
+    tpEmis: opts.tpEmis || 1,
+    cNF: opts.cNF,
+  });
+  if (chaveCalc) candidatas.push(chaveCalc);
+
+  const unicas = [...new Set(candidatas)];
+  const consultUrl = `${FISCAL_API_BASE_URL}/nfe/consulta-chave?api_key=${encodeURIComponent(opts.empresaApiKey)}`;
+
+  for (const chave of unicas) {
+    try {
+      const { response, data } = await postWithRetry(consultUrl, {
+        chave,
+        modelo: opts.modelo,
+        mod: opts.modelo,
+        numero: opts.numero,
+        serie: opts.serie,
+        dhEmi: opts.dataEmissao,
+        cNF: opts.cNF,
+      }, { maxAttempts: 3, label: `${opts.label} recuperar539` });
+
+      const cStat = String(data?.cStat || data?.codigo_retorno || '');
+      const status = String(data?.status || '');
+      if (response.ok && (cStat === '100' || cStat === '150' || status === 'autorizada')) {
+        const updateData = buildNfUpdateData({ ...data, status: 'autorizada' });
+        updateData.status = 'autorizada';
+        updateData.chave_acesso = updateData.chave_acesso || chave;
+        updateData.codigo_retorno = cStat || '100';
+        updateData.erro_processamento = null;
+        if (updateData.xml_retorno && !xmlContemNfeCompleta(updateData.xml_retorno)) delete updateData.xml_retorno;
+        console.log(`♻️ ${opts.label}: 539 recuperado — chave ${chave} autorizada na SEFAZ`);
+        return { updateData, chave, consultData: data };
+      }
+      console.log(`🔎 ${opts.label}: chave ${chave} não autorizada (cStat=${cStat || 'n/d'})`);
+    } catch (e) {
+      console.error(`⚠️ ${opts.label}: falha ao consultar chave ${chave}:`, (e as Error)?.message);
+    }
+  }
+  return null;
+}
+
+/** Devolve o número ao pool de reuso para não abrir buraco na numeração. */
+async function devolverNumeroAoPool(
+  supabase: ReturnType<typeof createClient>,
+  empresaId: string,
+  tipo: 'nfe' | 'nfce' | 'mdfe',
+  serie: string | number,
+  numero: string | number,
+  motivo: string,
+  origemId: string,
+): Promise<void> {
+  try {
+    const n = parseInt(String(numero), 10);
+    if (!n || n <= 0) return;
+    await supabase.from('series_numeros_liberados').insert({
+      empresa_id: empresaId,
+      tipo,
+      serie: String(serie),
+      numero: n,
+      motivo: String(motivo).substring(0, 200),
+      origem_id: origemId,
+    });
+  } catch (e) {
+    // conflito (já liberado) é esperado — ignorar
+    console.log(`ℹ️ Numero ${numero} série ${serie} (${tipo}) não devolvido ao pool: ${(e as Error)?.message}`);
+  }
+}
+
 async function resolverDuplicatasNfeInternas(
   supabase: ReturnType<typeof createClient>,
   empresaId: string,
