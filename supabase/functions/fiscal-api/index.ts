@@ -2565,7 +2565,157 @@ Deno.serve(async (req) => {
       );
     }
 
+
     // ========================================================================
+    // ACTION: inutilizar_rejeitadas_do_dia — rotina diária (00:01 Brasília).
+    // Varre NF-e (55) e NFC-e (65) rejeitadas do dia anterior, confirma na
+    // SEFAZ que o documento realmente não existe e inutiliza a numeração.
+    // ========================================================================
+    if (action === 'inutilizar_rejeitadas_do_dia') {
+      const JUST_PADRAO = 'Nota nao consta na base de dados da SEFAZ';
+      const dryRun = body?.dry_run === true;
+
+      // Janela do dia em America/Sao_Paulo (UTC-3, sem horário de verão)
+      let alvo = String(body?.data || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(alvo)) {
+        const ontemBrt = new Date(Date.now() - 3 * 3600_000 - 24 * 3600_000);
+        alvo = ontemBrt.toISOString().slice(0, 10);
+      }
+      const inicio = new Date(`${alvo}T00:00:00-03:00`).toISOString();
+      const fim = new Date(new Date(`${alvo}T00:00:00-03:00`).getTime() + 24 * 3600_000).toISOString();
+
+      const resumo = {
+        data: alvo,
+        dry_run: dryRun,
+        analisadas: 0,
+        inutilizadas: 0,
+        recuperadas_autorizadas: 0,
+        ignoradas_duplicidade: 0,
+        falhas: 0,
+        itens: [] as any[],
+      };
+
+      for (const tabela of ['nfe', 'nfce'] as const) {
+        const modelo: '55' | '65' = tabela === 'nfce' ? '65' : '55';
+        let q = supabase
+          .from(tabela)
+          .select('id, empresa_id, numero, serie, data_emissao, chave_acesso, motivo_retorno, erro_processamento' + (tabela === 'nfce' ? ', tp_emis' : ''))
+          .eq('status', 'rejeitada')
+          .gte('data_emissao', inicio)
+          .lt('data_emissao', fim)
+          .limit(500);
+        if (empresa_id) q = q.eq('empresa_id', empresa_id);
+        const { data: docs, error: docsErr } = await q;
+        if (docsErr) {
+          console.error(`inutilizar_rejeitadas_do_dia: erro ao listar ${tabela}:`, docsErr.message);
+          continue;
+        }
+
+        for (const doc of (docs || [])) {
+          const d: any = doc;
+          const msg = `${d.motivo_retorno || ''} ${d.erro_processamento || ''}`;
+          if (/539|duplicid/i.test(msg)) {
+            resumo.ignoradas_duplicidade++;
+            continue;
+          }
+          resumo.analisadas++;
+
+          const { data: empresa } = await supabase
+            .from('empresas')
+            .select('id, uf, cnpj, cpf, api_key_fiscal')
+            .eq('id', d.empresa_id)
+            .maybeSingle();
+          const emp: any = empresa;
+          if (!emp?.api_key_fiscal) {
+            resumo.falhas++;
+            resumo.itens.push({ tabela, numero: d.numero, serie: d.serie, resultado: 'empresa sem api_key_fiscal' });
+            continue;
+          }
+
+          // 1) Conferência na SEFAZ: se o documento existe, não pode ser inutilizado
+          let existeNaSefaz = false;
+          try {
+            const rec = await recuperarDuplicidade539({
+              empresaApiKey: emp.api_key_fiscal,
+              uf: emp.uf,
+              cpfCnpj: (emp.cnpj || emp.cpf || '').replace(/\D/g, ''),
+              modelo,
+              numero: d.numero,
+              serie: d.serie,
+              dataEmissao: d.data_emissao,
+              tpEmis: Number(d.tp_emis || 1),
+              cNF: '',
+              chaveConhecida: d.chave_acesso || '',
+              label: `${tabela.toUpperCase()} ${d.numero}`,
+            });
+            if (rec) {
+              existeNaSefaz = true;
+              resumo.recuperadas_autorizadas++;
+              resumo.itens.push({ tabela, numero: d.numero, serie: d.serie, resultado: 'autorizada na SEFAZ — status corrigido', chave: rec.chave });
+              if (!dryRun) {
+                await supabase.from(tabela).update(rec.updateData).eq('id', d.id)
+                  .neq('status', 'cancelada').neq('status', 'abortada');
+              }
+            }
+          } catch (e) {
+            console.warn(`Consulta SEFAZ falhou para ${tabela} ${d.numero}:`, (e as Error)?.message);
+            resumo.falhas++;
+            resumo.itens.push({ tabela, numero: d.numero, serie: d.serie, resultado: 'falha na consulta SEFAZ — não inutilizada' });
+            continue;
+          }
+          if (existeNaSefaz) continue;
+
+          if (dryRun) {
+            resumo.itens.push({ tabela, numero: d.numero, serie: d.serie, resultado: 'seria inutilizada' });
+            continue;
+          }
+
+          // 2) Inutiliza a numeração
+          try {
+            const numeroInt = parseInt(String(d.numero).replace(/\D/g, ''), 10);
+            const resp = await handleInutilizar(
+              supabase,
+              d.empresa_id,
+              d.serie,
+              numeroInt,
+              numeroInt,
+              JUST_PADRAO,
+              modelo,
+            );
+            const respJson = await resp.clone().json().catch(() => ({}));
+            if (resp.ok && (respJson as any)?.success) {
+              resumo.inutilizadas++;
+              resumo.itens.push({ tabela, numero: d.numero, serie: d.serie, resultado: 'inutilizada' });
+              await supabase.from(tabela).update({
+                status: 'inutilizada' as any,
+                motivo_retorno: JUST_PADRAO,
+                codigo_retorno: '102',
+                erro_processamento: null,
+              }).eq('id', d.id);
+            } else {
+              resumo.falhas++;
+              resumo.itens.push({
+                tabela, numero: d.numero, serie: d.serie,
+                resultado: 'falha na inutilização',
+                detalhe: String((respJson as any)?.error || '').substring(0, 200),
+              });
+            }
+          } catch (e) {
+            resumo.falhas++;
+            resumo.itens.push({ tabela, numero: d.numero, serie: d.serie, resultado: `erro: ${(e as Error)?.message}` });
+          }
+        }
+      }
+
+      console.log(`🧹 inutilizar_rejeitadas_do_dia ${alvo}:`, JSON.stringify({ ...resumo, itens: undefined }));
+      return new Response(
+        JSON.stringify({ success: true, ...resumo }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ========================================================================
+
 
     // ACTION: consult_nfe_sefaz — consulta situação na SEFAZ e atualiza o banco
     // ========================================================================
