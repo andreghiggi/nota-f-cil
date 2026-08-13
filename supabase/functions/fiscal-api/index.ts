@@ -1262,7 +1262,10 @@ Deno.serve(async (req) => {
 
       const tpAmb = empresa.ambiente === 'producao' ? 1 : 2;
       const { detPag: pagArray, primary: primaryPayment, pagamentosObj, pagBlock, vTroco } = buildNfcePaymentPayload(nfce);
+      // cNF estável: retransmissões geram XML idêntico → elimina 539 por digest diferente
+      const cNFEstavel = cNFDeterministico(nfce.id, nfce.numero, nfce.serie);
       const payload: any = {
+        cNF: cNFEstavel,
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
         tpAmb,
