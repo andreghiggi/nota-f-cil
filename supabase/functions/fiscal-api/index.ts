@@ -393,8 +393,8 @@ async function recuperarDuplicidade539(opts: {
   label: string;
 }): Promise<{ updateData: any; chave: string; consultData: any } | null> {
   const candidatas: string[] = [];
-  const chaveMsg = extractChaveNfeFromSefazMessage(opts.respostaErro);
-  if (chaveMsg.length === 44) candidatas.push(chaveMsg);
+  // A chave do próprio documento tem prioridade: na prática é ela que costuma
+  // estar autorizada na SEFAZ (a chave citada na mensagem é a da outra tentativa).
   const chaveConhecida = String(opts.chaveConhecida || '').replace(/\D/g, '');
   if (chaveConhecida.length === 44) candidatas.push(chaveConhecida);
   const chaveCalc = montarChaveAcesso({
@@ -408,6 +408,8 @@ async function recuperarDuplicidade539(opts: {
     cNF: opts.cNF,
   });
   if (chaveCalc) candidatas.push(chaveCalc);
+  const chaveMsg = extractChaveNfeFromSefazMessage(opts.respostaErro);
+  if (chaveMsg.length === 44) candidatas.push(chaveMsg);
 
   const unicas = [...new Set(candidatas)];
   const consultUrl = `${FISCAL_API_BASE_URL}/nfe/consulta-chave?api_key=${encodeURIComponent(opts.empresaApiKey)}`;
@@ -429,13 +431,18 @@ async function recuperarDuplicidade539(opts: {
       if (response.ok && (cStat === '100' || cStat === '150' || status === 'autorizada')) {
         const updateData = buildNfUpdateData({ ...data, status: 'autorizada' });
         updateData.status = 'autorizada';
-        updateData.chave_acesso = updateData.chave_acesso || chave;
+        // A chave/protocolo do infProt retornado pela SEFAZ mandam sobre a consultada
+        const chaveProt = String(data?.chave_acesso || data?.chave || '').replace(/\D/g, '');
+        updateData.chave_acesso = chaveProt.length === 44 ? chaveProt : (updateData.chave_acesso || chave);
+        if (!updateData.protocolo && data?.protocolo) updateData.protocolo = String(data.protocolo);
+        if (!updateData.data_autorizacao && data?.data_autorizacao) updateData.data_autorizacao = data.data_autorizacao;
         updateData.codigo_retorno = cStat || '100';
         updateData.erro_processamento = null;
         if (updateData.xml_retorno && !xmlContemNfeCompleta(updateData.xml_retorno)) delete updateData.xml_retorno;
-        console.log(`♻️ ${opts.label}: 539 recuperado — chave ${chave} autorizada na SEFAZ`);
-        return { updateData, chave, consultData: data };
+        console.log(`♻️ ${opts.label}: 539 recuperado — chave ${updateData.chave_acesso} autorizada na SEFAZ`);
+        return { updateData, chave: String(updateData.chave_acesso), consultData: data };
       }
+
       console.log(`🔎 ${opts.label}: chave ${chave} não autorizada (cStat=${cStat || 'n/d'})`);
     } catch (e) {
       console.error(`⚠️ ${opts.label}: falha ao consultar chave ${chave}:`, (e as Error)?.message);
