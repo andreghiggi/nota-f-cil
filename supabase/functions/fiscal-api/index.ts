@@ -1313,6 +1313,7 @@ Deno.serve(async (req) => {
         detPag: pagamentosObj,
         nota: {
           cNF: cNFEstavel,
+          ...contBlock,
           numero: parseInt(nfce.numero, 10).toString(),
           serie: parseInt(nfce.serie, 10).toString(),
           valor_total: nfce.valor_total,
