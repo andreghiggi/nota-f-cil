@@ -1,0 +1,1 @@
+- [Duplicidade 539 e Contingência](mem://tecnologia/duplicidade-539-contingencia)

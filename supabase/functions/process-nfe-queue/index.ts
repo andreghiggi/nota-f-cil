@@ -127,13 +127,29 @@ Deno.serve(async (req) => {
             continue;
           }
 
-          await supabase
+          const { data: rejeitadasNfe } = await supabase
             .from('nfe')
             .update({
               status: 'rejeitada',
               erro_processamento: `Máximo de tentativas atingido: ${err.message}`
             })
-            .eq('id', nfe.id);
+            .eq('id', nfe.id)
+            .neq('status', 'autorizada').neq('status', 'cancelada')
+            .select('id');
+
+          if (rejeitadasNfe?.length) {
+            const n = parseInt(String(nfe.numero), 10);
+            if (n > 0) {
+              await supabase.from('series_numeros_liberados').insert({
+                empresa_id: nfe.empresa_id,
+                tipo: 'nfe',
+                serie: String(nfe.serie),
+                numero: n,
+                motivo: 'rejeicao_definitiva_fila',
+                origem_id: nfe.id,
+              });
+            }
+          }
 
           await supabase.from('fila_processamento_nfe').delete().eq('id', item.id);
 

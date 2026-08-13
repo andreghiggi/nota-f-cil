@@ -131,13 +131,29 @@ Deno.serve(async (req) => {
           }
 
           // Max retries reached - mark as failed and remove from queue
-          await supabase
+          const { data: rejeitadas } = await supabase
             .from('nfce')
             .update({ 
               status: 'rejeitada', 
               erro_processamento: `Máximo de tentativas atingido: ${err.message}` 
             })
-            .eq('id', nfce.id).neq('status', 'abortada').neq('status', 'cancelada').neq('status', 'autorizada');
+            .eq('id', nfce.id).neq('status', 'abortada').neq('status', 'cancelada').neq('status', 'autorizada')
+            .select('id');
+
+          // Devolve a numeração ao pool de reuso para não abrir buraco na sequência
+          if (rejeitadas?.length) {
+            const n = parseInt(String(nfce.numero), 10);
+            if (n > 0) {
+              await supabase.from('series_numeros_liberados').insert({
+                empresa_id: nfce.empresa_id,
+                tipo: 'nfce',
+                serie: String(nfce.serie),
+                numero: n,
+                motivo: 'rejeicao_definitiva_fila',
+                origem_id: nfce.id,
+              });
+            }
+          }
 
           await supabase.from('fila_processamento').delete().eq('id', item.id);
 
