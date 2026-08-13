@@ -44,10 +44,28 @@ async function checkHealth(base: string, service: string) {
     let body: unknown = null;
     const text = await res.text();
     try { body = text ? JSON.parse(text) : null; } catch { body = text.slice(0, 200); }
-    const ok = res.ok && (body == null || typeof body !== 'object' || (body as Record<string, unknown>).status === 'ok' || (body as Record<string, unknown>).status === undefined);
-    return { service, url, ok, statusCode: res.status, latencyMs, body };
+
+    // 401/403 no /health = API no ar, rota exige token (nfe-api, nfce-api)
+    const authRequired = res.status === 401 || res.status === 403;
+    const ok =
+      authRequired ||
+      (res.ok &&
+        (body == null ||
+          typeof body !== 'object' ||
+          (body as Record<string, unknown>).status === 'ok' ||
+          (body as Record<string, unknown>).status === undefined));
+
+    return {
+      service,
+      url,
+      ok,
+      authRequired,
+      statusCode: res.status,
+      latencyMs,
+      body,
+    };
   } catch (e) {
-    return { service, url, ok: false, latencyMs: Date.now() - started, error: (e as Error).message };
+    return { service, url, ok: false, authRequired: false, latencyMs: Date.now() - started, error: (e as Error).message };
   }
 }
 
@@ -73,7 +91,9 @@ Deno.serve(async (req) => {
 
   for (const h of healthChecks) {
     if (!h.ok) {
-      findings.push({ severity: 'critical', source: 'fiscal_flow', category: 'health', title: `API ${h.service} indisponível`, detail: h.error ?? `HTTP ${h.statusCode}` });
+      findings.push({ severity: 'critical', source: 'fiscal_flow', category: 'health', title: `API ${h.service} indisponível`, detail: (h as { error?: string }).error ?? `HTTP ${h.statusCode}` });
+    } else if ((h as { authRequired?: boolean }).authRequired) {
+      // API respondendo; health protegido por token — não é falha
     } else if (h.latencyMs > 5000) {
       findings.push({ severity: 'warning', source: 'fiscal_flow', category: 'health', title: `API ${h.service} lenta (${h.latencyMs}ms)` });
     }
