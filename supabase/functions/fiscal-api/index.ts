@@ -393,8 +393,8 @@ async function recuperarDuplicidade539(opts: {
   label: string;
 }): Promise<{ updateData: any; chave: string; consultData: any } | null> {
   const candidatas: string[] = [];
-  const chaveMsg = extractChaveNfeFromSefazMessage(opts.respostaErro);
-  if (chaveMsg.length === 44) candidatas.push(chaveMsg);
+  // A chave do próprio documento tem prioridade: na prática é ela que costuma
+  // estar autorizada na SEFAZ (a chave citada na mensagem é a da outra tentativa).
   const chaveConhecida = String(opts.chaveConhecida || '').replace(/\D/g, '');
   if (chaveConhecida.length === 44) candidatas.push(chaveConhecida);
   const chaveCalc = montarChaveAcesso({
@@ -408,6 +408,8 @@ async function recuperarDuplicidade539(opts: {
     cNF: opts.cNF,
   });
   if (chaveCalc) candidatas.push(chaveCalc);
+  const chaveMsg = extractChaveNfeFromSefazMessage(opts.respostaErro);
+  if (chaveMsg.length === 44) candidatas.push(chaveMsg);
 
   const unicas = [...new Set(candidatas)];
   const consultUrl = `${FISCAL_API_BASE_URL}/nfe/consulta-chave?api_key=${encodeURIComponent(opts.empresaApiKey)}`;
@@ -429,13 +431,18 @@ async function recuperarDuplicidade539(opts: {
       if (response.ok && (cStat === '100' || cStat === '150' || status === 'autorizada')) {
         const updateData = buildNfUpdateData({ ...data, status: 'autorizada' });
         updateData.status = 'autorizada';
-        updateData.chave_acesso = updateData.chave_acesso || chave;
+        // A chave/protocolo do infProt retornado pela SEFAZ mandam sobre a consultada
+        const chaveProt = String(data?.chave_acesso || data?.chave || '').replace(/\D/g, '');
+        updateData.chave_acesso = chaveProt.length === 44 ? chaveProt : (updateData.chave_acesso || chave);
+        if (!updateData.protocolo && data?.protocolo) updateData.protocolo = String(data.protocolo);
+        if (!updateData.data_autorizacao && data?.data_autorizacao) updateData.data_autorizacao = data.data_autorizacao;
         updateData.codigo_retorno = cStat || '100';
         updateData.erro_processamento = null;
         if (updateData.xml_retorno && !xmlContemNfeCompleta(updateData.xml_retorno)) delete updateData.xml_retorno;
-        console.log(`♻️ ${opts.label}: 539 recuperado — chave ${chave} autorizada na SEFAZ`);
-        return { updateData, chave, consultData: data };
+        console.log(`♻️ ${opts.label}: 539 recuperado — chave ${updateData.chave_acesso} autorizada na SEFAZ`);
+        return { updateData, chave: String(updateData.chave_acesso), consultData: data };
       }
+
       console.log(`🔎 ${opts.label}: chave ${chave} não autorizada (cStat=${cStat || 'n/d'})`);
     } catch (e) {
       console.error(`⚠️ ${opts.label}: falha ao consultar chave ${chave}:`, (e as Error)?.message);
@@ -2494,6 +2501,72 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================================
+    // ACTION: sweep_539 — rede de segurança: varre documentos rejeitados por
+    // duplicidade nas últimas N horas (padrão 48h) e recupera os que já estão
+    // autorizados na SEFAZ.
+    // ========================================================================
+    if (action === 'sweep_539') {
+      const horas = Number(body?.horas || 48);
+      const desde = new Date(Date.now() - horas * 3600_000).toISOString();
+      const resultados: any[] = [];
+
+      for (const tabela of ['nfce', 'nfe'] as const) {
+        const { data: docs } = await supabase
+          .from(tabela)
+          .select('id, empresa_id, numero, serie, data_emissao, chave_acesso, motivo_retorno, erro_processamento' + (tabela === 'nfce' ? ', tp_emis' : ''))
+          .eq('status', 'rejeitada')
+          .gte('created_at', desde)
+          .limit(200);
+
+        for (const doc of (docs || [])) {
+          const msg = `${(doc as any).motivo_retorno || ''} ${(doc as any).erro_processamento || ''}`;
+          if (!/539|duplicid/i.test(msg)) continue;
+
+          const { data: empresa } = await supabase
+            .from('empresas')
+            .select('id, uf, cnpj, cpf, api_key_fiscal')
+            .eq('id', (doc as any).empresa_id)
+            .maybeSingle();
+          if (!empresa?.api_key_fiscal) continue;
+
+          const rec = await recuperarDuplicidade539({
+            empresaApiKey: (empresa as any).api_key_fiscal,
+            uf: (empresa as any).uf,
+            cpfCnpj: ((empresa as any).cnpj || (empresa as any).cpf || '').replace(/\D/g, ''),
+            modelo: tabela === 'nfce' ? '65' : '55',
+            numero: (doc as any).numero,
+            serie: (doc as any).serie,
+            dataEmissao: (doc as any).data_emissao,
+            tpEmis: Number((doc as any).tp_emis || 1),
+            cNF: '',
+            chaveConhecida: (doc as any).chave_acesso || '',
+            respostaErro: { xMotivo: msg },
+            label: `${tabela.toUpperCase()} ${(doc as any).numero}`,
+          });
+
+          if (rec) {
+            await supabase.from(tabela).update(rec.updateData).eq('id', (doc as any).id)
+              .neq('status', 'cancelada').neq('status', 'abortada');
+            resultados.push({ tabela, id: (doc as any).id, numero: (doc as any).numero, recuperada: true, chave: rec.chave });
+            try {
+              await supabase.functions.invoke('send-webhook', {
+                body: tabela === 'nfce'
+                  ? { nfce_id: (doc as any).id, evento: 'nfce.autorizada' }
+                  : { nfe_id: (doc as any).id, evento: 'nfe.autorizada' },
+              });
+            } catch { /* webhook é best-effort */ }
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, horas, recuperadas: resultados.length, resultados }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ========================================================================
+
     // ACTION: consult_nfe_sefaz — consulta situação na SEFAZ e atualiza o banco
     // ========================================================================
     if (action === 'consult_nfe_sefaz') {
