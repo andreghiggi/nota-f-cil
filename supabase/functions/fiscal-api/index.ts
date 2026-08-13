@@ -1392,6 +1392,64 @@ Deno.serve(async (req) => {
         );
       }
 
+      // ---- Recuperação automática de duplicidade [539] ----
+      const respostaFalhou = !response.ok
+        || String(responseData?.status || '') === 'rejeitada'
+        || ['539'].includes(String(responseData?.cStat || responseData?.codigo_retorno || ''));
+      if (respostaFalhou && respostaIndicaDuplicidade(responseData)) {
+        const rec = await recuperarDuplicidade539({
+          empresaApiKey: empresa.api_key_fiscal,
+          uf: empresa.uf,
+          cpfCnpj: (empresa.cnpj || (empresa as any).cpf || '').replace(/\D/g, ''),
+          modelo: '65',
+          numero: nfce.numero,
+          serie: nfce.serie,
+          dataEmissao: nfce.data_emissao,
+          tpEmis: Number((nfce as any).tp_emis || 1),
+          cNF: cNFEstavel,
+          respostaErro: responseData,
+          label: `NFC-e ${nfce.numero}`,
+        });
+        if (rec) {
+          await supabase.from('nfce').update(rec.updateData).eq('id', nfce_id).neq('status', 'abortada').neq('status', 'cancelada');
+          try { await supabase.functions.invoke('send-webhook', { body: { nfce_id, evento: 'nfce.autorizada' } }); } catch {}
+          return new Response(
+            JSON.stringify({ success: true, recuperada_539: true, data: { ...rec.updateData, id: nfce_id } }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+      }
+
+      // ---- Contingência automática quando a SEFAZ está fora do ar ----
+      if (!response.ok && respostaIndicaSefazIndisponivel(responseData) && Number((nfce as any).tp_emis || 1) !== 9) {
+        try {
+          const agora = new Date();
+          await supabase.from('nfce').update({
+            status: 'contingencia',
+            tp_emis: 9,
+            contingencia_dh: agora.toISOString(),
+            contingencia_justificativa: 'SEFAZ indisponível — contingência offline automática',
+            erro_processamento: null,
+            motivo_retorno: String(responseData?.erro || responseData?.error || 'SEFAZ indisponível').substring(0, 500),
+          }).eq('id', nfce_id).neq('status', 'abortada').neq('status', 'cancelada');
+          await supabase.from('nfce_contingencia_queue').insert({
+            nfce_id,
+            empresa_id: nfce.empresa_id,
+            status: 'pendente',
+            emitida_em: agora.toISOString(),
+            proxima_tentativa: new Date(agora.getTime() + 60_000).toISOString(),
+            prazo_final: new Date(agora.getTime() + 24 * 60 * 60 * 1000).toISOString(),
+          });
+          console.log(`🟠 NFC-e ${nfce.numero}: SEFAZ indisponível — entrou em contingência offline automática`);
+          return new Response(
+            JSON.stringify({ success: true, contingencia: true, data: { id: nfce_id, status: 'contingencia' } }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        } catch (contErr) {
+          console.error('⚠️ Falha ao acionar contingência automática:', (contErr as Error)?.message);
+        }
+      }
+
       if (!response.ok) {
         await supabase.from('nfce').update({
           status: 'rejeitada',
