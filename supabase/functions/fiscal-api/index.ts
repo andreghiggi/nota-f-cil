@@ -2316,6 +2316,35 @@ Deno.serve(async (req) => {
         );
       }
 
+      // ---- Recuperação automática de duplicidade [539] ----
+      const nfeFalhou = !response.ok
+        || String(responseData?.status || '') === 'rejeitada'
+        || String(responseData?.cStat || responseData?.codigo_retorno || '') === '539';
+      if (nfeFalhou && respostaIndicaDuplicidade(responseData)) {
+        const rec = await recuperarDuplicidade539({
+          empresaApiKey: empresa.api_key_fiscal,
+          uf: empresa.uf,
+          cpfCnpj: (empresa.cnpj || (empresa as any).cpf || '').replace(/\D/g, ''),
+          modelo: '55',
+          numero: nfe.numero,
+          serie: nfe.serie,
+          dataEmissao: nfe.data_emissao,
+          tpEmis: 1,
+          cNF: cNFEstavelNfe,
+          chaveConhecida: nfe.chave_acesso || '',
+          respostaErro: responseData,
+          label: `NF-e ${nfe.numero}`,
+        });
+        if (rec) {
+          await supabase.from('nfe').update(rec.updateData).eq('id', nfeId);
+          await resolverDuplicatasNfeInternas(supabase, nfe.empresa_id, nfeId, nfe.numero, nfe.serie, 'autorizada');
+          return new Response(
+            JSON.stringify({ success: true, recuperada_539: true, data: { ...rec.updateData, id: nfeId } }),
+            { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
+      }
+
       if (!response.ok) {
         await supabase.from('nfe').update({
           status: 'rejeitada',
