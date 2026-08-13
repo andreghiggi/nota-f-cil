@@ -2501,6 +2501,72 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================================
+    // ACTION: sweep_539 — rede de segurança: varre documentos rejeitados por
+    // duplicidade nas últimas N horas (padrão 48h) e recupera os que já estão
+    // autorizados na SEFAZ.
+    // ========================================================================
+    if (action === 'sweep_539') {
+      const horas = Number(body?.horas || 48);
+      const desde = new Date(Date.now() - horas * 3600_000).toISOString();
+      const resultados: any[] = [];
+
+      for (const tabela of ['nfce', 'nfe'] as const) {
+        const { data: docs } = await supabase
+          .from(tabela)
+          .select('id, empresa_id, numero, serie, data_emissao, chave_acesso, motivo_retorno, erro_processamento' + (tabela === 'nfce' ? ', tp_emis' : ''))
+          .eq('status', 'rejeitada')
+          .gte('created_at', desde)
+          .limit(200);
+
+        for (const doc of (docs || [])) {
+          const msg = `${(doc as any).motivo_retorno || ''} ${(doc as any).erro_processamento || ''}`;
+          if (!/539|duplicid/i.test(msg)) continue;
+
+          const { data: empresa } = await supabase
+            .from('empresas')
+            .select('id, uf, cnpj, cpf, api_key_fiscal')
+            .eq('id', (doc as any).empresa_id)
+            .maybeSingle();
+          if (!empresa?.api_key_fiscal) continue;
+
+          const rec = await recuperarDuplicidade539({
+            empresaApiKey: (empresa as any).api_key_fiscal,
+            uf: (empresa as any).uf,
+            cpfCnpj: ((empresa as any).cnpj || (empresa as any).cpf || '').replace(/\D/g, ''),
+            modelo: tabela === 'nfce' ? '65' : '55',
+            numero: (doc as any).numero,
+            serie: (doc as any).serie,
+            dataEmissao: (doc as any).data_emissao,
+            tpEmis: Number((doc as any).tp_emis || 1),
+            cNF: '',
+            chaveConhecida: (doc as any).chave_acesso || '',
+            respostaErro: { xMotivo: msg },
+            label: `${tabela.toUpperCase()} ${(doc as any).numero}`,
+          });
+
+          if (rec) {
+            await supabase.from(tabela).update(rec.updateData).eq('id', (doc as any).id)
+              .neq('status', 'cancelada').neq('status', 'abortada');
+            resultados.push({ tabela, id: (doc as any).id, numero: (doc as any).numero, recuperada: true, chave: rec.chave });
+            try {
+              await supabase.functions.invoke('send-webhook', {
+                body: tabela === 'nfce'
+                  ? { nfce_id: (doc as any).id, evento: 'nfce.autorizada' }
+                  : { nfe_id: (doc as any).id, evento: 'nfe.autorizada' },
+              });
+            } catch { /* webhook é best-effort */ }
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, horas, recuperadas: resultados.length, resultados }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ========================================================================
+
     // ACTION: consult_nfe_sefaz — consulta situação na SEFAZ e atualiza o banco
     // ========================================================================
     if (action === 'consult_nfe_sefaz') {
