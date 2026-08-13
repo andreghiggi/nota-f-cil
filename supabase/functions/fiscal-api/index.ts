@@ -1264,8 +1264,16 @@ Deno.serve(async (req) => {
       const { detPag: pagArray, primary: primaryPayment, pagamentosObj, pagBlock, vTroco } = buildNfcePaymentPayload(nfce);
       // cNF estável: retransmissões geram XML idêntico → elimina 539 por digest diferente
       const cNFEstavel = cNFDeterministico(nfce.id, nfce.numero, nfce.serie);
+      // Contingência offline (tpEmis=9) exige dhCont + xJust no XML
+      const tpEmisNfce = Number((body as any)?.tp_emis ?? (nfce as any).tp_emis ?? 1) === 9 ? 9 : 1;
+      const contBlock = tpEmisNfce === 9 ? {
+        tpEmis: 9,
+        dhCont: (nfce as any).contingencia_dh || nfce.data_emissao,
+        xJust: (nfce as any).contingencia_justificativa || 'SEFAZ indisponivel - emissao em contingencia offline',
+      } : { tpEmis: 1 };
       const payload: any = {
         cNF: cNFEstavel,
+        ...contBlock,
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
         tpAmb,
