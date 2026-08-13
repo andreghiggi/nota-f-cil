@@ -30,3 +30,6 @@ verify_jwt = false
 [functions.nfse-api]
 verify_jwt = false
 
+
+[functions.monitoring-snapshot]
+verify_jwt = false
