@@ -1946,10 +1946,12 @@ Deno.serve(async (req) => {
         fone: (rtSrc.fone || rtSrc.telefone || '').toString().replace(/\D/g, ''),
       } : null;
 
+      const cNFEstavelNfe = cNFDeterministico(nfe.id, nfe.numero, nfe.serie);
       const payload: any = {
         api_key: empresa.api_key_fiscal,
         ind_sinc: 1,
         modelo: 55,
+        cNF: cNFEstavelNfe,
         tipo_pessoa: isPF ? 'PF' : 'PJ',
         crt: empresaCRT,
         CRT: empresaCRT,
@@ -1959,6 +1961,7 @@ Deno.serve(async (req) => {
         codigo_municipio: empresa.codigo_municipio || '',
         municipio: empresa.municipio || '',
         nota: {
+          cNF: cNFEstavelNfe,
           numero: parseInt(nfe.numero, 10).toString(),
           serie: parseInt(nfe.serie, 10).toString(),
           crt: empresaCRT,
