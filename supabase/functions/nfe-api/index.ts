@@ -427,10 +427,20 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Create empresa (user_id will be a system UUID since this is API-driven)
-      const systemUserId = '00000000-0000-0000-0000-000000000000';
+      // Create empresa owned by the platform admin so it is manageable in the panel
+      // (API-driven registration has no authenticated user)
+      let ownerUserId = '00000000-0000-0000-0000-000000000000';
+      const { data: adminRole } = await supabase
+        .from('user_roles')
+        .select('user_id, created_at')
+        .eq('role', 'admin')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (adminRole?.user_id) ownerUserId = adminRole.user_id;
+
       const empresaInsert: any = {
-        user_id: systemUserId,
+        user_id: ownerUserId,
         razao_social,
         nome_fantasia: nome_fantasia || razao_social,
         tipo_pessoa: tipoPessoa,
