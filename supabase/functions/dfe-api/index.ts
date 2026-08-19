@@ -431,7 +431,11 @@ Deno.serve(async (req) => {
       empresaId = body.empresa_id || url.searchParams.get('empresa_id');
       if (!empresaId) return err('empresa_id é obrigatório', 'VALIDATION_ERROR');
       const { data: emp } = await supabase.from('empresas').select('id, user_id').eq('id', empresaId).maybeSingle();
-      if (!emp || emp.user_id !== user.id) return err('Forbidden', 'FORBIDDEN', 403);
+      if (!emp) return err('Forbidden', 'FORBIDDEN', 403);
+      if (emp.user_id !== user.id) {
+        const { data: isAdmin } = await supabase.rpc('has_role', { _user_id: user.id, _role: 'admin' });
+        if (!isAdmin) return err('Forbidden', 'FORBIDDEN', 403);
+      }
     }
 
     // Permission helper for x-api-key callers (ERP). JWT/cron sempre liberados.
