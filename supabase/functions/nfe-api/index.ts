@@ -1071,6 +1071,15 @@ Deno.serve(async (req) => {
 
       const dest = payload.destinatario || {};
 
+      // Data/hora de emissão retroativa informada pelo cliente (se houver)
+      const { dhEmi: dhEmiCliente, dhSaiEnt: dhSaiEntCliente } = extrairDatasCliente(payload);
+      if (dhEmiCliente) {
+        console.log(`[nfe-api] dhEmi informado pelo cliente: ${dhEmiCliente}${dhSaiEntCliente ? ` | dhSaiEnt: ${dhSaiEntCliente}` : ''}`);
+      }
+      const payloadPersistido: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
+      if (dhEmiCliente) payloadPersistido.dhEmi = dhEmiCliente;
+      if (dhSaiEntCliente) payloadPersistido.dhSaiEnt = dhSaiEntCliente;
+
       const { data: nfeData, error: nfeError } = await supabase
         .from('nfe')
         .insert({
@@ -1080,6 +1089,8 @@ Deno.serve(async (req) => {
           serie: serieNfe,
           status: 'pendente',
           ambiente,
+          ...(dhEmiCliente ? { data_emissao: dhEmiCliente } : {}),
+          ...(dhSaiEntCliente ? { dh_sai_ent: dhSaiEntCliente } : {}),
           valor_total: valorTotal,
           valor_produtos: valorProdutos,
           valor_desconto: payload.valor_desconto || 0,
@@ -1090,7 +1101,8 @@ Deno.serve(async (req) => {
           valor_ipi: valorIpi,
           valor_pis: valorPis,
           valor_cofins: valorCofins,
-          payload_entrada: payload,
+          payload_entrada: payloadPersistido,
+
           external_id: payload.external_id,
           natureza_operacao: payload.natureza_operacao || 'VENDA',
           finalidade: payload.finalidade || '1',
