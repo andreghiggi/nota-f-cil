@@ -665,6 +665,36 @@ function errorResponse(message: string, opts: { details?: any; httpStatus?: numb
   });
 }
 
+/** Converte data informada para ISO 8601 com offset -03:00 (America/Sao_Paulo). */
+function toSaoPauloIsoFiscal(value: unknown): string | null {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw}T12:00:00-03:00`;
+  const semOffset = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?$/);
+  if (semOffset) return `${semOffset[1]}T${semOffset[2]}${semOffset[3] || ':00'}-03:00`;
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return null;
+  const local = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+  return `${local.toISOString().slice(0, 19)}-03:00`;
+}
+
+/** Extrai dhEmi/dhSaiEnt explicitamente informados no payload_entrada do cliente. */
+function extrairDatasClienteFiscal(payload: any): { dhEmi: string | null; dhSaiEnt: string | null } {
+  const p = (payload || {}) as Record<string, any>;
+  const ide = { ...(p.extras?.ide || {}), ...(p.ide || {}) } as Record<string, any>;
+  return {
+    dhEmi: toSaoPauloIsoFiscal(
+      p.dhEmi ?? p.dh_emi ?? p.data_hora_emissao ?? ide.dhEmi ?? ide.dh_emi ?? ide.d_emi ?? p.data_emissao ?? p.dEmi,
+    ),
+    dhSaiEnt: toSaoPauloIsoFiscal(
+      p.dhSaiEnt ?? p.dh_sai_ent ?? ide.dhSaiEnt ?? ide.dh_sai_ent ?? p.data_saida ?? p.dSaiEnt,
+    ),
+  };
+}
+
+
+
 /**
  * Normaliza o conteúdo XML salvo em xml_retorno/xml_envio. Aceita:
  *  - string XML pura
