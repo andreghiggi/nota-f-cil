@@ -86,13 +86,13 @@ Deno.serve(async (req) => {
             token_prefix: prefix,
             status: 'ativo',
             permissoes: [
-              'nfce.emitir', 'nfce.consultar', 'nfce.cancelar', 'nfce.inutilizar',
-              'nfe.emitir', 'nfe.consultar', 'nfe.cancelar',
-              'mdfe.emitir', 'mdfe.consultar', 'mdfe.encerrar',
-              'dfe.sincronizar', 'dfe.manifestar', 'dfe.consultar',
+              // Formato legado exigido por nfe-api / nfce-api / mdfe-api / management-api
+              'emitir_nfe', 'emitir_nfce', 'emitir_mdfe', 'emitir_cte', 'emitir_nfse',
+              'emitir', 'consultar', 'cancelar', 'inutilizar', 'manifestar', 'gerenciar',
+              'reprocessar',
             ],
           })
-          .select('id, nome, token_prefix, created_at')
+          .select('id, nome, token_prefix, permissoes, created_at')
           .single()
         if (eIns) {
           item.token_novo_erro = eIns.message
@@ -102,6 +102,7 @@ Deno.serve(async (req) => {
             nome: novo!.nome,
             prefix: novo!.token_prefix,
             token_plain: plain, // VISÍVEL APENAS AGORA
+            permissoes: novo!.permissoes,
             aviso: 'Copie este token agora. Ele não poderá ser recuperado depois.',
           }
         }
