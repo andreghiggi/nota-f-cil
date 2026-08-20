@@ -126,6 +126,8 @@ Deno.serve(async (req) => {
       ['mdfe.emitir', ['emitir_mdfe', 'emitir']],
       ['mdfe.consultar', ['consultar']],
       ['mdfe.encerrar', ['cancelar']],
+      ['dfe.consultar', ['consultar']],
+      ['dfe.manifestar', ['manifestar']],
     ];
     for (const [dotted, legacy] of aliasPairs) {
       if (permissoes.includes(dotted)) {
