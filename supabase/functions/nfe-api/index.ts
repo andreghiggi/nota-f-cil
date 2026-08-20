@@ -290,6 +290,44 @@ function shouldDeferTransmit(payload: NFePayload): boolean {
     || p.preview === true;
 }
 
+/**
+ * Converte uma data informada pelo cliente para ISO 8601 com offset -03:00 (America/Sao_Paulo).
+ * - "YYYY-MM-DD"            -> "YYYY-MM-DDT12:00:00-03:00" (meio-dia local)
+ * - ISO completo com offset -> normalizado para -03:00 mantendo o instante
+ */
+export function toSaoPauloIso(value: unknown): string | null {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw}T12:00:00-03:00`;
+  // "YYYY-MM-DD HH:mm(:ss)" ou ISO sem offset -> assume horário local de SP
+  const semOffset = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?$/);
+  if (semOffset) return `${semOffset[1]}T${semOffset[2]}${semOffset[3] || ':00'}-03:00`;
+
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return null;
+  const local = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+  return `${local.toISOString().slice(0, 19)}-03:00`;
+}
+
+/** Extrai dhEmi/dhSaiEnt informados pelo cliente (aceita vários aliases). */
+export function extrairDatasCliente(payload: any): { dhEmi: string | null; dhSaiEnt: string | null } {
+  const p = (payload || {}) as Record<string, any>;
+  const ide = { ...(p.extras?.ide || {}), ...(p.ide || {}) } as Record<string, any>;
+
+  const dhEmi = toSaoPauloIso(
+    p.dhEmi ?? p.dh_emi ?? p.data_hora_emissao ?? ide.dhEmi ?? ide.dh_emi ?? ide.d_emi ?? p.data_emissao ?? p.dEmi,
+  );
+  const dhSaiEnt = toSaoPauloIso(
+    p.dhSaiEnt ?? p.dh_sai_ent ?? ide.dhSaiEnt ?? ide.dh_sai_ent ?? p.data_saida ?? p.dSaiEnt,
+  );
+
+  return { dhEmi, dhSaiEnt };
+}
+
+
+
 function decodeXmlBodyField(raw: unknown): string | null {
   if (!raw || typeof raw !== 'string') return null;
   const s = raw.trim();
@@ -1033,6 +1071,15 @@ Deno.serve(async (req) => {
 
       const dest = payload.destinatario || {};
 
+      // Data/hora de emissão retroativa informada pelo cliente (se houver)
+      const { dhEmi: dhEmiCliente, dhSaiEnt: dhSaiEntCliente } = extrairDatasCliente(payload);
+      if (dhEmiCliente) {
+        console.log(`[nfe-api] dhEmi informado pelo cliente: ${dhEmiCliente}${dhSaiEntCliente ? ` | dhSaiEnt: ${dhSaiEntCliente}` : ''}`);
+      }
+      const payloadPersistido: Record<string, unknown> = { ...(payload as Record<string, unknown>) };
+      if (dhEmiCliente) payloadPersistido.dhEmi = dhEmiCliente;
+      if (dhSaiEntCliente) payloadPersistido.dhSaiEnt = dhSaiEntCliente;
+
       const { data: nfeData, error: nfeError } = await supabase
         .from('nfe')
         .insert({
@@ -1042,6 +1089,8 @@ Deno.serve(async (req) => {
           serie: serieNfe,
           status: 'pendente',
           ambiente,
+          ...(dhEmiCliente ? { data_emissao: dhEmiCliente } : {}),
+          ...(dhSaiEntCliente ? { dh_sai_ent: dhSaiEntCliente } : {}),
           valor_total: valorTotal,
           valor_produtos: valorProdutos,
           valor_desconto: payload.valor_desconto || 0,
@@ -1052,7 +1101,8 @@ Deno.serve(async (req) => {
           valor_ipi: valorIpi,
           valor_pis: valorPis,
           valor_cofins: valorCofins,
-          payload_entrada: payload,
+          payload_entrada: payloadPersistido,
+
           external_id: payload.external_id,
           natureza_operacao: payload.natureza_operacao || 'VENDA',
           finalidade: payload.finalidade || '1',
