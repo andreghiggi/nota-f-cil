@@ -111,7 +111,26 @@ Deno.serve(async (req) => {
     const { data: tokenData } = await supabase.rpc('validar_token_api', { p_token_hash: tokenHash });
     if (!tokenData || tokenData.length === 0) return err('Invalid or expired API key', 'AUTH_INVALID', 401);
 
-    const { token_id, empresa_id, permissoes, ambiente } = tokenData[0];
+    const { token_id, empresa_id, ambiente } = tokenData[0];
+    let permissoes: string[] = Array.isArray(tokenData[0].permissoes) ? [...tokenData[0].permissoes] : [];
+    const aliasPairs: Array<[string, string[]]> = [
+      ['nfe.emitir', ['emitir_nfe', 'emitir']],
+      ['nfe.consultar', ['consultar']],
+      ['nfe.cancelar', ['cancelar']],
+      ['nfce.emitir', ['emitir_nfce', 'emitir']],
+      ['nfce.consultar', ['consultar']],
+      ['nfce.cancelar', ['cancelar']],
+      ['mdfe.emitir', ['emitir_mdfe', 'emitir']],
+      ['mdfe.consultar', ['consultar']],
+      ['mdfe.encerrar', ['cancelar']],
+    ];
+    for (const [dotted, legacy] of aliasPairs) {
+      if (permissoes.includes(dotted)) {
+        for (const p of legacy) {
+          if (!permissoes.includes(p)) permissoes.push(p);
+        }
+      }
+    }
     await supabase.from('tokens_api')
       .update({ ultimo_uso: new Date().toISOString(), ip_ultimo_uso: req.headers.get('x-forwarded-for') || 'unknown' })
       .eq('id', token_id);

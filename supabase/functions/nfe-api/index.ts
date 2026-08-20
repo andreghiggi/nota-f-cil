@@ -677,7 +677,30 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { token_id, empresa_id, permissoes, ambiente } = tokenData[0];
+    const { token_id, empresa_id, ambiente } = tokenData[0];
+    let permissoes: string[] = Array.isArray(tokenData[0].permissoes) ? [...tokenData[0].permissoes] : [];
+    // Compat: tokens gerados pelo migration-export antigo usavam nfe.emitir / nfce.emitir
+    const aliasPairs: Array<[string, string[]]> = [
+      ['nfe.emitir', ['emitir_nfe', 'emitir']],
+      ['nfe.consultar', ['consultar']],
+      ['nfe.cancelar', ['cancelar']],
+      ['nfce.emitir', ['emitir_nfce', 'emitir']],
+      ['nfce.consultar', ['consultar']],
+      ['nfce.cancelar', ['cancelar']],
+      ['nfce.inutilizar', ['inutilizar', 'cancelar']],
+      ['mdfe.emitir', ['emitir_mdfe', 'emitir']],
+      ['mdfe.consultar', ['consultar']],
+      ['mdfe.encerrar', ['cancelar']],
+      ['dfe.consultar', ['consultar']],
+      ['dfe.manifestar', ['manifestar']],
+    ];
+    for (const [dotted, legacy] of aliasPairs) {
+      if (permissoes.includes(dotted)) {
+        for (const p of legacy) {
+          if (!permissoes.includes(p)) permissoes.push(p);
+        }
+      }
+    }
 
     await supabase
       .from('tokens_api')
