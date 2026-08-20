@@ -38,13 +38,72 @@ Deno.serve(async (req) => {
     const url = new URL(req.url)
     // ?regenerate=1 => cria um novo token por empresa e devolve o valor em claro (só aparece agora)
     // ?regenerate=1&empresa_id=xxx => regenera só uma empresa
+    // ?fix_permissions=1 => atualiza tokens com permissões pontilhadas para o formato legado das APIs
     const regenerate = url.searchParams.get('regenerate') === '1'
+    const fixPermissions = url.searchParams.get('fix_permissions') === '1'
     const empresaFilter = url.searchParams.get('empresa_id')
+    const cnpjFilter = (url.searchParams.get('cnpj') || '').replace(/\D/g, '')
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
     )
+
+    const PERMISSOES_LEGADO = [
+      'emitir_nfe', 'emitir_nfce', 'emitir_mdfe', 'emitir_cte', 'emitir_nfse',
+      'emitir', 'consultar', 'cancelar', 'inutilizar', 'manifestar', 'gerenciar',
+      'reprocessar',
+    ]
+
+    if (fixPermissions) {
+      let tokensQuery = supabase
+        .from('tokens_api')
+        .select('id, empresa_id, token_prefix, permissoes, status')
+        .eq('status', 'ativo')
+      if (empresaFilter) tokensQuery = tokensQuery.eq('empresa_id', empresaFilter)
+
+      const { data: tokens, error: eTok } = await tokensQuery
+      if (eTok) throw eTok
+
+      let empresaIdsFilter: Set<string> | null = null
+      if (cnpjFilter) {
+        const { data: emps, error: eEmp } = await supabase
+          .from('empresas')
+          .select('id, cnpj')
+          .eq('cnpj', cnpjFilter)
+        if (eEmp) throw eEmp
+        empresaIdsFilter = new Set((emps ?? []).map((e: any) => e.id))
+      }
+
+      const atualizados: any[] = []
+      for (const t of tokens ?? []) {
+        if (empresaIdsFilter && !empresaIdsFilter.has(t.empresa_id)) continue
+        const current = Array.isArray(t.permissoes) ? t.permissoes : []
+        const hasDotted = current.some((p: string) => typeof p === 'string' && p.includes('.'))
+        const missingLegacy = PERMISSOES_LEGADO.some((p) => !current.includes(p))
+        if (!hasDotted && !missingLegacy) continue
+
+        const merged = Array.from(new Set([...current, ...PERMISSOES_LEGADO]))
+        const { error: eUp } = await supabase
+          .from('tokens_api')
+          .update({ permissoes: merged })
+          .eq('id', t.id)
+        if (eUp) {
+          atualizados.push({ id: t.id, prefix: t.token_prefix, erro: eUp.message })
+        } else {
+          atualizados.push({ id: t.id, prefix: t.token_prefix, permissoes: merged })
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          modo: 'fix_permissions',
+          atualizados: atualizados.length,
+          tokens: atualizados,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
 
     let empresasQuery = supabase
       .from('empresas')
@@ -52,6 +111,7 @@ Deno.serve(async (req) => {
       .order('razao_social', { ascending: true })
 
     if (empresaFilter) empresasQuery = empresasQuery.eq('id', empresaFilter)
+    if (cnpjFilter) empresasQuery = empresasQuery.eq('cnpj', cnpjFilter)
 
     const { data: empresas, error: e1 } = await empresasQuery
     if (e1) throw e1
