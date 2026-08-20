@@ -2038,6 +2038,9 @@ Deno.serve(async (req) => {
         ind_sinc: 1,
         modelo: 55,
         cNF: cNFEstavelNfe,
+        ...(dhEmiClienteNfe ? { dhEmi: dhEmiClienteNfe, dh_emi: dhEmiClienteNfe, data_emissao: dhEmiClienteNfe } : {}),
+        ...(dhSaiEntFinal ? { dhSaiEnt: dhSaiEntFinal, dh_sai_ent: dhSaiEntFinal } : {}),
+
         tipo_pessoa: isPF ? 'PF' : 'PJ',
         crt: empresaCRT,
         CRT: empresaCRT,
