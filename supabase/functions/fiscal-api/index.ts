@@ -1887,7 +1887,19 @@ Deno.serve(async (req) => {
 
       // ide opcionais
       const ideExtras: any = {};
-      if (nfe.dh_sai_ent) ideExtras.dhSaiEnt = nfe.dh_sai_ent;
+      // Data de emissão retroativa: só envia dhEmi quando o cliente informou explicitamente
+      const { dhEmi: dhEmiClienteNfe, dhSaiEnt: dhSaiEntClienteNfe } = extrairDatasClienteFiscal(payloadEntrada);
+      if (dhEmiClienteNfe) {
+        ideExtras.dhEmi = dhEmiClienteNfe;
+        ideExtras.dh_emi = dhEmiClienteNfe;
+        ideExtras.data_emissao = dhEmiClienteNfe;
+      }
+      const dhSaiEntFinal = dhSaiEntClienteNfe || (nfe.dh_sai_ent ? toSaoPauloIsoFiscal(nfe.dh_sai_ent) : null);
+      if (dhSaiEntFinal) {
+        ideExtras.dhSaiEnt = dhSaiEntFinal;
+        ideExtras.dh_sai_ent = dhSaiEntFinal;
+      }
+
       ideExtras.idDest = idDest;
       if (nfe.ind_final != null) ideExtras.indFinal = nfe.ind_final;
       if (nfe.ind_pres != null) ideExtras.indPres = nfe.ind_pres;
