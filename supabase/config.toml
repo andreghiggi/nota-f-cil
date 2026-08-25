@@ -33,3 +33,7 @@ verify_jwt = false
 
 [functions.monitoring-snapshot]
 verify_jwt = false
+
+[functions.fiscal-cron-tick]
+verify_jwt = false
+
