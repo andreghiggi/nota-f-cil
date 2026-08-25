@@ -290,26 +290,49 @@ function shouldDeferTransmit(payload: NFePayload): boolean {
     || p.preview === true;
 }
 
+/** Formata um Date como ISO com offset -03:00 (America/Sao_Paulo). */
+function isoSaoPaulo(d: Date): string {
+  const local = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+  return `${local.toISOString().slice(0, 19)}-03:00`;
+}
+
 /**
  * Converte uma data informada pelo cliente para ISO 8601 com offset -03:00 (America/Sao_Paulo).
- * - "YYYY-MM-DD"            -> "YYYY-MM-DDT12:00:00-03:00" (meio-dia local)
- * - ISO completo com offset -> normalizado para -03:00 mantendo o instante
+ * - "YYYY-MM-DD" no passado -> meio-dia local (retroativa)
+ * - "YYYY-MM-DD" de hoje    -> hora atual (evita rejeição 703 "emissão no futuro")
+ * - qualquer data futura    -> limitada ao instante atual (menos 1 min de folga)
  */
 export function toSaoPauloIso(value: unknown): string | null {
   if (value == null) return null;
   const raw = String(value).trim();
   if (!raw) return null;
 
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw}T12:00:00-03:00`;
-  // "YYYY-MM-DD HH:mm(:ss)" ou ISO sem offset -> assume horário local de SP
-  const semOffset = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?$/);
-  if (semOffset) return `${semOffset[1]}T${semOffset[2]}${semOffset[3] || ':00'}-03:00`;
+  const agora = new Date();
+  const limite = new Date(agora.getTime() - 60 * 1000);
 
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return null;
-  const local = new Date(d.getTime() - 3 * 60 * 60 * 1000);
-  return `${local.toISOString().slice(0, 19)}-03:00`;
+  let iso: string | null = null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const hojeSP = isoSaoPaulo(agora).slice(0, 10);
+    iso = raw >= hojeSP ? isoSaoPaulo(limite) : `${raw}T12:00:00-03:00`;
+  } else {
+    const semOffset = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?$/);
+    if (semOffset) {
+      iso = `${semOffset[1]}T${semOffset[2]}${semOffset[3] || ':00'}-03:00`;
+    } else {
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return null;
+      iso = isoSaoPaulo(d);
+    }
+  }
+
+  // Nunca permitir data/hora de emissão no futuro (rejeição 703)
+  const parsed = new Date(iso);
+  if (!isNaN(parsed.getTime()) && parsed.getTime() > agora.getTime()) {
+    iso = isoSaoPaulo(limite);
+  }
+  return iso;
 }
+
 
 /** Extrai dhEmi/dhSaiEnt informados pelo cliente (aceita vários aliases). */
 export function extrairDatasCliente(payload: any): { dhEmi: string | null; dhSaiEnt: string | null } {

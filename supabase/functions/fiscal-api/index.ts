@@ -665,19 +665,47 @@ function errorResponse(message: string, opts: { details?: any; httpStatus?: numb
   });
 }
 
-/** Converte data informada para ISO 8601 com offset -03:00 (America/Sao_Paulo). */
+/** Formata um Date como ISO com offset -03:00 (America/Sao_Paulo). */
+function isoSaoPauloFiscal(d: Date): string {
+  const local = new Date(d.getTime() - 3 * 60 * 60 * 1000);
+  return `${local.toISOString().slice(0, 19)}-03:00`;
+}
+
+/**
+ * Converte data informada para ISO 8601 com offset -03:00 (America/Sao_Paulo).
+ * Data-only de hoje (ou futura) e qualquer instante futuro são limitados ao
+ * momento atual — evita a rejeição 703 (emissão posterior ao recebimento).
+ */
 function toSaoPauloIsoFiscal(value: unknown): string | null {
   if (value == null) return null;
   const raw = String(value).trim();
   if (!raw) return null;
-  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw}T12:00:00-03:00`;
-  const semOffset = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?$/);
-  if (semOffset) return `${semOffset[1]}T${semOffset[2]}${semOffset[3] || ':00'}-03:00`;
-  const d = new Date(raw);
-  if (isNaN(d.getTime())) return null;
-  const local = new Date(d.getTime() - 3 * 60 * 60 * 1000);
-  return `${local.toISOString().slice(0, 19)}-03:00`;
+
+  const agora = new Date();
+  const limite = new Date(agora.getTime() - 60 * 1000);
+
+  let iso: string | null = null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+    const hojeSP = isoSaoPauloFiscal(agora).slice(0, 10);
+    iso = raw >= hojeSP ? isoSaoPauloFiscal(limite) : `${raw}T12:00:00-03:00`;
+  } else {
+    const semOffset = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?$/);
+    if (semOffset) {
+      iso = `${semOffset[1]}T${semOffset[2]}${semOffset[3] || ':00'}-03:00`;
+    } else {
+      const d = new Date(raw);
+      if (isNaN(d.getTime())) return null;
+      iso = isoSaoPauloFiscal(d);
+    }
+  }
+
+  const parsed = new Date(iso);
+  if (!isNaN(parsed.getTime()) && parsed.getTime() > agora.getTime()) {
+    iso = isoSaoPauloFiscal(limite);
+  }
+  return iso;
 }
+
 
 /** Extrai dhEmi/dhSaiEnt explicitamente informados no payload_entrada do cliente. */
 function extrairDatasClienteFiscal(payload: any): { dhEmi: string | null; dhSaiEnt: string | null } {
@@ -2347,7 +2375,7 @@ Deno.serve(async (req) => {
       }
 
 
-      const { response, text: responseText, data: responseDataParsed } = await postWithRetry(
+      let { response, text: responseText, data: responseDataParsed } = await postWithRetry(
         emitUrl,
         payload,
         {
@@ -2376,6 +2404,37 @@ Deno.serve(async (req) => {
           { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
+      // ---- Rejeição 703 (data/hora de emissão no futuro): reajusta dhEmi para agora e retransmite 1x ----
+      const cStat703 = String(responseData?.cStat || responseData?.codigo_retorno || '') === '703'
+        || /\b703\b/.test(String(responseData?.erro || responseData?.error || responseData?.xMotivo || ''));
+      if (cStat703) {
+        const dhAgora = isoSaoPauloFiscal(new Date(Date.now() - 60 * 1000));
+        console.log(`⏱️ NF-e ${nfe.numero}: rejeição 703 — reajustando dhEmi para ${dhAgora} e retransmitindo`);
+        payload.dhEmi = dhAgora;
+        payload.dh_emi = dhAgora;
+        payload.data_emissao = dhAgora;
+        if (payload.nota) payload.nota.dhEmi = dhAgora;
+        if (payload.ide) { payload.ide.dhEmi = dhAgora; payload.ide.dh_emi = dhAgora; }
+        await supabase.from('nfe').update({ data_emissao: dhAgora }).eq('id', nfeId);
+
+        const retry = await postWithRetry(emitUrl, payload, {
+          maxAttempts: 3,
+          label: `NF-e ${nfe.numero} emit (retry 703)`,
+          headers: {
+            'X-Api-Key': empresa.api_key_fiscal,
+            'Authorization': `Bearer ${empresa.api_key_fiscal}`,
+          },
+        });
+        response = retry.response;
+        responseText = retry.text;
+        responseData = retry.data;
+        try {
+          if (!responseData && responseText) responseData = JSON.parse(responseText);
+        } catch { /* tratado abaixo pelo fluxo normal */ }
+        console.log(`📡 NF-e emit retry 703 (status ${response.status}):`, (responseText || '').substring(0, 500));
+      }
+
 
       // ---- Recuperação automática de duplicidade [539] ----
       const nfeFalhou = !response.ok
