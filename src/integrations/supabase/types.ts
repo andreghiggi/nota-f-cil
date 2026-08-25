@@ -598,6 +598,90 @@ export type Database = {
           },
         ]
       }
+      job_circuit: {
+        Row: {
+          consecutive_failures: number
+          key: string
+          last_error: string | null
+          open_until: string | null
+          updated_at: string
+        }
+        Insert: {
+          consecutive_failures?: number
+          key: string
+          last_error?: string | null
+          open_until?: string | null
+          updated_at?: string
+        }
+        Update: {
+          consecutive_failures?: number
+          key?: string
+          last_error?: string | null
+          open_until?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      job_locks: {
+        Row: {
+          acquired_at: string
+          expires_at: string
+          key: string
+          owner: string
+        }
+        Insert: {
+          acquired_at?: string
+          expires_at: string
+          key: string
+          owner: string
+        }
+        Update: {
+          acquired_at?: string
+          expires_at?: string
+          key?: string
+          owner?: string
+        }
+        Relationships: []
+      }
+      job_runs: {
+        Row: {
+          detalhes: Json | null
+          duration_ms: number | null
+          erro: string | null
+          errors: number
+          finished_at: string | null
+          id: string
+          job: string
+          processed: number
+          started_at: string
+          status: string
+        }
+        Insert: {
+          detalhes?: Json | null
+          duration_ms?: number | null
+          erro?: string | null
+          errors?: number
+          finished_at?: string | null
+          id?: string
+          job: string
+          processed?: number
+          started_at?: string
+          status?: string
+        }
+        Update: {
+          detalhes?: Json | null
+          duration_ms?: number | null
+          erro?: string | null
+          errors?: number
+          finished_at?: string | null
+          id?: string
+          job?: string
+          processed?: number
+          started_at?: string
+          status?: string
+        }
+        Relationships: []
+      }
       logs_fiscais: {
         Row: {
           categoria: string
@@ -2213,6 +2297,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      acquire_job_lock: {
+        Args: { p_key: string; p_owner: string; p_ttl_seconds?: number }
+        Returns: boolean
+      }
+      circuit_is_open: { Args: { p_key: string }; Returns: boolean }
+      circuit_record: {
+        Args: {
+          p_cooldown_seconds?: number
+          p_error?: string
+          p_key: string
+          p_ok: boolean
+          p_threshold?: number
+        }
+        Returns: undefined
+      }
       dfe_sync_all_empresas: { Args: never; Returns: undefined }
       excluir_documento_nao_processado: {
         Args: { p_id: string; p_tipo: string }
@@ -2239,6 +2338,18 @@ export type Database = {
         }
         Returns: boolean
       }
+      job_run_finish: {
+        Args: {
+          p_detalhes?: Json
+          p_erro?: string
+          p_errors?: number
+          p_processed?: number
+          p_run_id: string
+          p_status: string
+        }
+        Returns: undefined
+      }
+      job_run_start: { Args: { p_job: string }; Returns: string }
       proximo_numero_fiscal: {
         Args: { p_empresa_id: string; p_serie: string; p_tipo: string }
         Returns: {
@@ -2248,6 +2359,7 @@ export type Database = {
           ultimo_numero: number
         }[]
       }
+      purge_operational_history: { Args: { p_dias?: number }; Returns: Json }
       registrar_log: {
         Args: {
           p_categoria: string
@@ -2260,6 +2372,10 @@ export type Database = {
           p_token_api_id: string
         }
         Returns: string
+      }
+      release_job_lock: {
+        Args: { p_key: string; p_owner: string }
+        Returns: undefined
       }
       validar_token_api: {
         Args: { p_token_hash: string }
