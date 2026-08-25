@@ -172,15 +172,8 @@ Deno.serve(async (req) => {
       }
     }
     
-    // Update last usage (fire-and-forget: nao bloqueia a resposta da API)
-    supabase
-      .from('tokens_api')
-      .update({
-        ultimo_uso: new Date().toISOString(),
-        ip_ultimo_uso: req.headers.get('x-forwarded-for') || 'unknown'
-      })
-      .eq('id', token_id)
-      .then(() => {}, (e: unknown) => console.warn('ultimo_uso update falhou:', e));
+    // Update last usage (fire-and-forget, no máximo 1 escrita/min por token)
+    marcarUltimoUso(supabase, token_id, req.headers.get('x-forwarded-for') || 'unknown');
 
     // Route handling
     const method = req.method;
