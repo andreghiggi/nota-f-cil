@@ -457,6 +457,15 @@ Deno.serve(async (req) => {
     // ===== PUBLIC ENDPOINT: POST /nfe-api/register =====
     const subPath = pathParts.length >= 2 ? pathParts.slice(1).join('/') : '';
 
+    // ===== Health leve (não consulta tabelas) =====
+    if (req.method === 'GET' && subPath === 'health') {
+      return new Response(
+        JSON.stringify({ status: 'ok', service: 'nfe-api', build: NFE_API_BUILD_ID, ts: new Date().toISOString() }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+
     if (req.method === 'POST' && subPath === 'register') {
       const body = await req.json();
       const { cnpj, razao_social, email, nome_fantasia, inscricao_estadual, uf, codigo_municipio } = body;
@@ -701,10 +710,9 @@ Deno.serve(async (req) => {
     }
 
     const tokenHash = await hashToken(apiKey);
-    const { data: tokenData, error: tokenError } = await supabase
-      .rpc('validar_token_api', { p_token_hash: tokenHash });
+    const tokenData = await validarTokenCached(supabase, tokenHash);
 
-    if (tokenError || !tokenData || tokenData.length === 0) {
+    if (!tokenData) {
       return new Response(
         JSON.stringify({ error: 'Invalid or expired API key', code: 'AUTH_INVALID' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -736,11 +744,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    supabase
-      .from('tokens_api')
-      .update({ ultimo_uso: new Date().toISOString(), ip_ultimo_uso: req.headers.get('x-forwarded-for') || 'unknown' })
-      .eq('id', token_id)
-      .then(() => {}, (e: unknown) => console.warn('ultimo_uso update falhou:', e));
+    marcarUltimoUso(supabase, token_id, req.headers.get('x-forwarded-for') || 'unknown');
+
 
     const method = req.method;
 
