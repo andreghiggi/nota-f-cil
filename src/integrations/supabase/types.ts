@@ -2350,6 +2350,18 @@ export type Database = {
         Returns: undefined
       }
       job_run_start: { Args: { p_job: string }; Returns: string }
+      pool_numero_sync: {
+        Args: {
+          p_devolver: boolean
+          p_empresa_id: string
+          p_motivo: string
+          p_numero: number
+          p_origem_id: string
+          p_serie: string
+          p_tipo: string
+        }
+        Returns: undefined
+      }
       proximo_numero_fiscal: {
         Args: { p_empresa_id: string; p_serie: string; p_tipo: string }
         Returns: {
