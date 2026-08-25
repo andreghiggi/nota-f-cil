@@ -2375,7 +2375,7 @@ Deno.serve(async (req) => {
       }
 
 
-      const { response, text: responseText, data: responseDataParsed } = await postWithRetry(
+      let { response, text: responseText, data: responseDataParsed } = await postWithRetry(
         emitUrl,
         payload,
         {
@@ -2404,6 +2404,37 @@ Deno.serve(async (req) => {
           { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
+
+      // ---- Rejeição 703 (data/hora de emissão no futuro): reajusta dhEmi para agora e retransmite 1x ----
+      const cStat703 = String(responseData?.cStat || responseData?.codigo_retorno || '') === '703'
+        || /\b703\b/.test(String(responseData?.erro || responseData?.error || responseData?.xMotivo || ''));
+      if (cStat703) {
+        const dhAgora = isoSaoPauloFiscal(new Date(Date.now() - 60 * 1000));
+        console.log(`⏱️ NF-e ${nfe.numero}: rejeição 703 — reajustando dhEmi para ${dhAgora} e retransmitindo`);
+        payload.dhEmi = dhAgora;
+        payload.dh_emi = dhAgora;
+        payload.data_emissao = dhAgora;
+        if (payload.nota) payload.nota.dhEmi = dhAgora;
+        if (payload.ide) { payload.ide.dhEmi = dhAgora; payload.ide.dh_emi = dhAgora; }
+        await supabase.from('nfe').update({ data_emissao: dhAgora }).eq('id', nfeId);
+
+        const retry = await postWithRetry(emitUrl, payload, {
+          maxAttempts: 3,
+          label: `NF-e ${nfe.numero} emit (retry 703)`,
+          headers: {
+            'X-Api-Key': empresa.api_key_fiscal,
+            'Authorization': `Bearer ${empresa.api_key_fiscal}`,
+          },
+        });
+        response = retry.response;
+        responseText = retry.text;
+        responseData = retry.data;
+        try {
+          if (!responseData && responseText) responseData = JSON.parse(responseText);
+        } catch { /* tratado abaixo pelo fluxo normal */ }
+        console.log(`📡 NF-e emit retry 703 (status ${response.status}):`, (responseText || '').substring(0, 500));
+      }
+
 
       // ---- Recuperação automática de duplicidade [539] ----
       const nfeFalhou = !response.ok
