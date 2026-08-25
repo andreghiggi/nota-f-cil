@@ -104,19 +104,17 @@ Deno.serve(async (req) => {
 
     const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace('Bearer ', '');
 
-    if (method === 'GET' && sub.length === 0 && !apiKey) {
-      return ok({ status: 'ok', service: 'nfse-api', modelo: 'NFS-e Nacional (SEFIN/ADN)' });
+    if (method === 'GET' && (sub[0] === 'health' || (sub.length === 0 && !apiKey))) {
+      return ok({ status: 'ok', service: 'nfse-api', modelo: 'NFS-e Nacional (SEFIN/ADN)', ts: new Date().toISOString() });
     }
 
     if (!apiKey) return err('API key required', 'AUTH_REQUIRED', 401);
     const tokenHash = await hashToken(apiKey);
-    const { data: tokenData } = await supabase.rpc('validar_token_api', { p_token_hash: tokenHash });
-    if (!tokenData || tokenData.length === 0) return err('Invalid or expired API key', 'AUTH_INVALID', 401);
+    const tokenData = await validarTokenCached(supabase, tokenHash);
+    if (!tokenData) return err('Invalid or expired API key', 'AUTH_INVALID', 401);
 
     const { token_id, empresa_id, permissoes, ambiente } = tokenData[0];
-    await supabase.from('tokens_api')
-      .update({ ultimo_uso: new Date().toISOString(), ip_ultimo_uso: req.headers.get('x-forwarded-for') || 'unknown' })
-      .eq('id', token_id);
+    marcarUltimoUso(supabase, token_id, req.headers.get('x-forwarded-for') || 'unknown');
 
     const has = (p: string) => permissoes.includes(p) || permissoes.includes('gerenciar');
 
