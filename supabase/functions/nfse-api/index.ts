@@ -14,6 +14,35 @@ async function hashToken(token: string): Promise<string> {
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/** Cache curto (60s) da validação de token e do carimbo de ultimo_uso. */
+const TOKEN_TTL_MS = 60_000;
+const tokenCache = new Map<string, { exp: number; data: any[] }>();
+const ultimoUsoCache = new Map<string, number>();
+
+async function validarTokenCached(supabase: any, tokenHash: string): Promise<any[] | null> {
+  const hit = tokenCache.get(tokenHash);
+  if (hit && hit.exp > Date.now()) return hit.data;
+  const { data, error } = await supabase.rpc('validar_token_api', { p_token_hash: tokenHash });
+  if (error || !data || data.length === 0) {
+    tokenCache.delete(tokenHash);
+    return null;
+  }
+  if (tokenCache.size > 500) tokenCache.clear();
+  tokenCache.set(tokenHash, { exp: Date.now() + TOKEN_TTL_MS, data });
+  return data;
+}
+
+function marcarUltimoUso(supabase: any, tokenId: string, ip: string) {
+  const last = ultimoUsoCache.get(tokenId) ?? 0;
+  if (Date.now() - last < TOKEN_TTL_MS) return;
+  ultimoUsoCache.set(tokenId, Date.now());
+  supabase
+    .from('tokens_api')
+    .update({ ultimo_uso: new Date().toISOString(), ip_ultimo_uso: ip })
+    .eq('id', tokenId)
+    .then(() => {}, (e: unknown) => console.warn('ultimo_uso update falhou:', e));
+}
+
 function err(msg: string, code: string, status = 400) {
   return new Response(JSON.stringify({ success: false, error: msg, code }),
     { status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
@@ -75,19 +104,17 @@ Deno.serve(async (req) => {
 
     const apiKey = req.headers.get('x-api-key') || req.headers.get('authorization')?.replace('Bearer ', '');
 
-    if (method === 'GET' && sub.length === 0 && !apiKey) {
-      return ok({ status: 'ok', service: 'nfse-api', modelo: 'NFS-e Nacional (SEFIN/ADN)' });
+    if (method === 'GET' && (sub[0] === 'health' || (sub.length === 0 && !apiKey))) {
+      return ok({ status: 'ok', service: 'nfse-api', modelo: 'NFS-e Nacional (SEFIN/ADN)', ts: new Date().toISOString() });
     }
 
     if (!apiKey) return err('API key required', 'AUTH_REQUIRED', 401);
     const tokenHash = await hashToken(apiKey);
-    const { data: tokenData } = await supabase.rpc('validar_token_api', { p_token_hash: tokenHash });
-    if (!tokenData || tokenData.length === 0) return err('Invalid or expired API key', 'AUTH_INVALID', 401);
+    const tokenData = await validarTokenCached(supabase, tokenHash);
+    if (!tokenData) return err('Invalid or expired API key', 'AUTH_INVALID', 401);
 
     const { token_id, empresa_id, permissoes, ambiente } = tokenData[0];
-    await supabase.from('tokens_api')
-      .update({ ultimo_uso: new Date().toISOString(), ip_ultimo_uso: req.headers.get('x-forwarded-for') || 'unknown' })
-      .eq('id', token_id);
+    marcarUltimoUso(supabase, token_id, req.headers.get('x-forwarded-for') || 'unknown');
 
     const has = (p: string) => permissoes.includes(p) || permissoes.includes('gerenciar');
 

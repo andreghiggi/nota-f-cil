@@ -348,6 +348,40 @@ async function hashToken(token: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Cache curto (60s) da validação de token e do carimbo de ultimo_uso.
+ * Toda chamada da API batia no banco — foi a primeira consulta a travar
+ * durante a saturação. O cache vive na instância da função e expira sozinho.
+ */
+const TOKEN_TTL_MS = 60_000;
+const tokenCache = new Map<string, { exp: number; data: any[] }>();
+const ultimoUsoCache = new Map<string, number>();
+
+async function validarTokenCached(supabase: any, tokenHash: string): Promise<any[] | null> {
+  const hit = tokenCache.get(tokenHash);
+  if (hit && hit.exp > Date.now()) return hit.data;
+  const { data, error } = await supabase.rpc('validar_token_api', { p_token_hash: tokenHash });
+  if (error || !data || data.length === 0) {
+    tokenCache.delete(tokenHash);
+    return null;
+  }
+  if (tokenCache.size > 500) tokenCache.clear();
+  tokenCache.set(tokenHash, { exp: Date.now() + TOKEN_TTL_MS, data });
+  return data;
+}
+
+function marcarUltimoUso(supabase: any, tokenId: string, ip: string) {
+  const last = ultimoUsoCache.get(tokenId) ?? 0;
+  if (Date.now() - last < TOKEN_TTL_MS) return; // no máximo 1 escrita/min por token
+  ultimoUsoCache.set(tokenId, Date.now());
+  supabase
+    .from('tokens_api')
+    .update({ ultimo_uso: new Date().toISOString(), ip_ultimo_uso: ip })
+    .eq('id', tokenId)
+    .then(() => {}, (e: unknown) => console.warn('ultimo_uso update falhou:', e));
+}
+
+
 function extractXmlCandidate(value: any): string {
   if (!value) return '';
   if (typeof value === 'string') return value;
@@ -422,6 +456,15 @@ Deno.serve(async (req) => {
 
     // ===== PUBLIC ENDPOINT: POST /nfe-api/register =====
     const subPath = pathParts.length >= 2 ? pathParts.slice(1).join('/') : '';
+
+    // ===== Health leve (não consulta tabelas) =====
+    if (req.method === 'GET' && subPath === 'health') {
+      return new Response(
+        JSON.stringify({ status: 'ok', service: 'nfe-api', build: NFE_API_BUILD_ID, ts: new Date().toISOString() }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
 
     if (req.method === 'POST' && subPath === 'register') {
       const body = await req.json();
@@ -667,10 +710,9 @@ Deno.serve(async (req) => {
     }
 
     const tokenHash = await hashToken(apiKey);
-    const { data: tokenData, error: tokenError } = await supabase
-      .rpc('validar_token_api', { p_token_hash: tokenHash });
+    const tokenData = await validarTokenCached(supabase, tokenHash);
 
-    if (tokenError || !tokenData || tokenData.length === 0) {
+    if (!tokenData) {
       return new Response(
         JSON.stringify({ error: 'Invalid or expired API key', code: 'AUTH_INVALID' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -702,11 +744,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    supabase
-      .from('tokens_api')
-      .update({ ultimo_uso: new Date().toISOString(), ip_ultimo_uso: req.headers.get('x-forwarded-for') || 'unknown' })
-      .eq('id', token_id)
-      .then(() => {}, (e: unknown) => console.warn('ultimo_uso update falhou:', e));
+    marcarUltimoUso(supabase, token_id, req.headers.get('x-forwarded-for') || 'unknown');
+
 
     const method = req.method;
 
