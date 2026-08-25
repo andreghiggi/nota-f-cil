@@ -348,6 +348,40 @@ async function hashToken(token: string): Promise<string> {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Cache curto (60s) da validação de token e do carimbo de ultimo_uso.
+ * Toda chamada da API batia no banco — foi a primeira consulta a travar
+ * durante a saturação. O cache vive na instância da função e expira sozinho.
+ */
+const TOKEN_TTL_MS = 60_000;
+const tokenCache = new Map<string, { exp: number; data: any[] }>();
+const ultimoUsoCache = new Map<string, number>();
+
+async function validarTokenCached(supabase: any, tokenHash: string): Promise<any[] | null> {
+  const hit = tokenCache.get(tokenHash);
+  if (hit && hit.exp > Date.now()) return hit.data;
+  const { data, error } = await supabase.rpc('validar_token_api', { p_token_hash: tokenHash });
+  if (error || !data || data.length === 0) {
+    tokenCache.delete(tokenHash);
+    return null;
+  }
+  if (tokenCache.size > 500) tokenCache.clear();
+  tokenCache.set(tokenHash, { exp: Date.now() + TOKEN_TTL_MS, data });
+  return data;
+}
+
+function marcarUltimoUso(supabase: any, tokenId: string, ip: string) {
+  const last = ultimoUsoCache.get(tokenId) ?? 0;
+  if (Date.now() - last < TOKEN_TTL_MS) return; // no máximo 1 escrita/min por token
+  ultimoUsoCache.set(tokenId, Date.now());
+  supabase
+    .from('tokens_api')
+    .update({ ultimo_uso: new Date().toISOString(), ip_ultimo_uso: ip })
+    .eq('id', tokenId)
+    .then(() => {}, (e: unknown) => console.warn('ultimo_uso update falhou:', e));
+}
+
+
 function extractXmlCandidate(value: any): string {
   if (!value) return '';
   if (typeof value === 'string') return value;
