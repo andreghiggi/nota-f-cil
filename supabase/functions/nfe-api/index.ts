@@ -702,10 +702,11 @@ Deno.serve(async (req) => {
       }
     }
 
-    await supabase
+    supabase
       .from('tokens_api')
       .update({ ultimo_uso: new Date().toISOString(), ip_ultimo_uso: req.headers.get('x-forwarded-for') || 'unknown' })
-      .eq('id', token_id);
+      .eq('id', token_id)
+      .then(() => {}, (e: unknown) => console.warn('ultimo_uso update falhou:', e));
 
     const method = req.method;
 
