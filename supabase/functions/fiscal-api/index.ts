@@ -3069,6 +3069,24 @@ Deno.serve(async (req) => {
     }
 
     // ========================================================================
+    // ACTION: CT-e (57) e CT-e OS (67)
+    // ========================================================================
+    if (action === 'emit_cte') {
+      return await handleCteEmit(supabase, body.cte_id);
+    }
+    if (action === 'cancel_cte') {
+      return await handleCteCancelar(supabase, body.cte_id, body.justificativa);
+    }
+    if (action === 'cce_cte') {
+      return await handleCteCce(supabase, body.cte_id, body.correcoes || [], body.sequencia || 1);
+    }
+    if (action === 'dacte_cte') {
+      return await handleCteDacte(supabase, body.cte_id);
+    }
+
+
+
+    // ========================================================================
     // ACTION: inutilizar_nfe (inutilização de numeração NF-e modelo 55)
     // ========================================================================
     if (action === 'inutilizar_nfe') {
