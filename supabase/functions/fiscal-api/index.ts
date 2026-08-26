@@ -1244,7 +1244,7 @@ Deno.serve(async (req) => {
       }
 
       // Auto-register empresa (ensures api_key, syncs with PHP, loads certificate)
-      const { empresa, certificate, error: regError } = await ensureRegistered(supabase, nfce.empresa_id);
+      const { empresa, certificate, error: regError } = await ensureRegistered(supabase, nfce.empresa_id, { force: (nfce.tentativas || 0) > 0 });
 
       if (regError || !empresa) {
         return new Response(
@@ -1657,7 +1657,7 @@ Deno.serve(async (req) => {
       }
 
       // Auto-register empresa
-      const { empresa, certificate, error: regError } = await ensureRegistered(supabase, nfe.empresa_id);
+      const { empresa, certificate, error: regError } = await ensureRegistered(supabase, nfe.empresa_id, { force: (nfe.tentativas || 0) > 0 });
 
       if (regError || !empresa) {
         return new Response(
