@@ -905,12 +905,30 @@ function buildRegisterPayload(empresa: any, apiKey: string, certificate: { base6
 }
 
 /**
+ * Cache de registro na API2. O cadastro/sync envia o certificado inteiro em
+ * base64 a cada chamada — repetir isso em toda emissão custava segundos.
+ * Só refaz o sync quando o TTL expira, quando a assinatura (api_key/certificado/
+ * dados da empresa) muda, ou quando é forçado (ex.: rejeição 593).
+ */
+const REGISTER_TTL_MS = 10 * 60 * 1000;
+const registerCache = new Map<string, { at: number; sig: string }>();
+
+export function invalidarRegistroEmpresa(empresaId: string) {
+  registerCache.delete(empresaId);
+}
+
+/**
  * Ensure an empresa is registered on the PHP fiscal API.
  * - Generates api_key_fiscal in Supabase if missing (Supabase = source of truth)
  * - Sends registration to PHP (which uses INSERT ... ON DUPLICATE KEY UPDATE)
  * - Returns the empresa with api_key_fiscal guaranteed
  */
-async function ensureRegistered(supabase: any, empresaId: string): Promise<{ empresa: any; certificate: { base64: string; senha: string } | null; error?: string }> {
+async function ensureRegistered(
+  supabase: any,
+  empresaId: string,
+  opts: { force?: boolean } = {},
+): Promise<{ empresa: any; certificate: { base64: string; senha: string } | null; error?: string }> {
+  const tStart = Date.now();
   // Fetch empresa
   const { data: empresa, error: empresaError } = await supabase
     .from('empresas')
@@ -931,6 +949,20 @@ async function ensureRegistered(supabase: any, empresaId: string): Promise<{ emp
     await supabase.from('empresas').update({ api_key_fiscal: newKey }).eq('id', empresaId);
     empresa.api_key_fiscal = newKey;
     console.log(`   🔑 Gerada nova api_key_fiscal: ${newKey.substring(0, 8)}...`);
+    registerCache.delete(empresaId);
+  }
+
+  const sig = [
+    empresa.api_key_fiscal,
+    empresa.updated_at,
+    empresa.ambiente,
+    certificate?.base64?.length ?? 0,
+  ].join('|');
+
+  const cached = registerCache.get(empresaId);
+  if (!opts.force && cached && cached.sig === sig && Date.now() - cached.at < REGISTER_TTL_MS) {
+    console.log(`⏩ Registro API2 em cache (${Date.now() - tStart}ms, sem re-envio de certificado)`);
+    return { empresa, certificate };
   }
 
   // Register/sync with PHP fiscal API and get the api_key PHP uses
@@ -940,6 +972,7 @@ async function ensureRegistered(supabase: any, empresaId: string): Promise<{ emp
     const isPF = empresa.tipo_pessoa === 'PF';
     const doc = isPF ? empresa.cpf : empresa.cnpj;
     console.log(`📡 Syncing ${isPF ? 'PF' : 'PJ'} ${doc} with fiscal API...`);
+
 
     const response = await fetch(`${FISCAL_API_BASE_URL}/empresa/cadastrar`, {
       method: 'POST',
