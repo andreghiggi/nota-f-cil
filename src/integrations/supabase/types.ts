@@ -117,6 +117,298 @@ export type Database = {
           },
         ]
       }
+      cte: {
+        Row: {
+          aliquota_icms: number | null
+          ambiente: Database["public"]["Enums"]["ambiente_sefaz"]
+          base_calculo_icms: number | null
+          cfop: string | null
+          chave_acesso: string | null
+          codigo_municipio_fim: string | null
+          codigo_municipio_ini: string | null
+          codigo_retorno: string | null
+          created_at: string
+          cst_icms: string | null
+          data_autorizacao: string | null
+          data_cancelamento: string | null
+          data_emissao: string
+          destinatario_documento: string | null
+          destinatario_nome: string | null
+          empresa_id: string
+          erro_processamento: string | null
+          expedidor_documento: string | null
+          expedidor_nome: string | null
+          external_id: string | null
+          id: string
+          info_adicional: string | null
+          mod_tomador: number | null
+          modelo: number
+          motivo_retorno: string | null
+          municipio_fim: string | null
+          municipio_ini: string | null
+          natureza_operacao: string | null
+          numero: string
+          payload_entrada: Json
+          peso_bruto: number | null
+          processado_em: string | null
+          produto_predominante: string | null
+          protocolo: string | null
+          protocolo_cancelamento: string | null
+          recebedor_documento: string | null
+          recebedor_nome: string | null
+          remetente_documento: string | null
+          remetente_nome: string | null
+          rntrc: string | null
+          serie: string
+          status: Database["public"]["Enums"]["nfce_status"]
+          tentativas: number
+          token_api_id: string | null
+          tomador_documento: string | null
+          tomador_nome: string | null
+          tp_cte: number
+          tp_serv: number
+          uf_fim: string | null
+          uf_ini: string | null
+          updated_at: string
+          valor_carga: number | null
+          valor_icms: number | null
+          valor_receber: number | null
+          valor_total: number
+          xml_envio: string | null
+          xml_retorno: string | null
+        }
+        Insert: {
+          aliquota_icms?: number | null
+          ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          base_calculo_icms?: number | null
+          cfop?: string | null
+          chave_acesso?: string | null
+          codigo_municipio_fim?: string | null
+          codigo_municipio_ini?: string | null
+          codigo_retorno?: string | null
+          created_at?: string
+          cst_icms?: string | null
+          data_autorizacao?: string | null
+          data_cancelamento?: string | null
+          data_emissao?: string
+          destinatario_documento?: string | null
+          destinatario_nome?: string | null
+          empresa_id: string
+          erro_processamento?: string | null
+          expedidor_documento?: string | null
+          expedidor_nome?: string | null
+          external_id?: string | null
+          id?: string
+          info_adicional?: string | null
+          mod_tomador?: number | null
+          modelo?: number
+          motivo_retorno?: string | null
+          municipio_fim?: string | null
+          municipio_ini?: string | null
+          natureza_operacao?: string | null
+          numero: string
+          payload_entrada?: Json
+          peso_bruto?: number | null
+          processado_em?: string | null
+          produto_predominante?: string | null
+          protocolo?: string | null
+          protocolo_cancelamento?: string | null
+          recebedor_documento?: string | null
+          recebedor_nome?: string | null
+          remetente_documento?: string | null
+          remetente_nome?: string | null
+          rntrc?: string | null
+          serie: string
+          status?: Database["public"]["Enums"]["nfce_status"]
+          tentativas?: number
+          token_api_id?: string | null
+          tomador_documento?: string | null
+          tomador_nome?: string | null
+          tp_cte?: number
+          tp_serv?: number
+          uf_fim?: string | null
+          uf_ini?: string | null
+          updated_at?: string
+          valor_carga?: number | null
+          valor_icms?: number | null
+          valor_receber?: number | null
+          valor_total?: number
+          xml_envio?: string | null
+          xml_retorno?: string | null
+        }
+        Update: {
+          aliquota_icms?: number | null
+          ambiente?: Database["public"]["Enums"]["ambiente_sefaz"]
+          base_calculo_icms?: number | null
+          cfop?: string | null
+          chave_acesso?: string | null
+          codigo_municipio_fim?: string | null
+          codigo_municipio_ini?: string | null
+          codigo_retorno?: string | null
+          created_at?: string
+          cst_icms?: string | null
+          data_autorizacao?: string | null
+          data_cancelamento?: string | null
+          data_emissao?: string
+          destinatario_documento?: string | null
+          destinatario_nome?: string | null
+          empresa_id?: string
+          erro_processamento?: string | null
+          expedidor_documento?: string | null
+          expedidor_nome?: string | null
+          external_id?: string | null
+          id?: string
+          info_adicional?: string | null
+          mod_tomador?: number | null
+          modelo?: number
+          motivo_retorno?: string | null
+          municipio_fim?: string | null
+          municipio_ini?: string | null
+          natureza_operacao?: string | null
+          numero?: string
+          payload_entrada?: Json
+          peso_bruto?: number | null
+          processado_em?: string | null
+          produto_predominante?: string | null
+          protocolo?: string | null
+          protocolo_cancelamento?: string | null
+          recebedor_documento?: string | null
+          recebedor_nome?: string | null
+          remetente_documento?: string | null
+          remetente_nome?: string | null
+          rntrc?: string | null
+          serie?: string
+          status?: Database["public"]["Enums"]["nfce_status"]
+          tentativas?: number
+          token_api_id?: string | null
+          tomador_documento?: string | null
+          tomador_nome?: string | null
+          tp_cte?: number
+          tp_serv?: number
+          uf_fim?: string | null
+          uf_ini?: string | null
+          updated_at?: string
+          valor_carga?: number | null
+          valor_icms?: number | null
+          valor_receber?: number | null
+          valor_total?: number
+          xml_envio?: string | null
+          xml_retorno?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cte_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cte_token_api_id_fkey"
+            columns: ["token_api_id"]
+            isOneToOne: false
+            referencedRelation: "tokens_api"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cte_documentos: {
+        Row: {
+          chave: string | null
+          created_at: string
+          cte_id: string
+          id: string
+          numero: string | null
+          peso: number | null
+          serie: string | null
+          tipo: string
+          valor: number | null
+        }
+        Insert: {
+          chave?: string | null
+          created_at?: string
+          cte_id: string
+          id?: string
+          numero?: string | null
+          peso?: number | null
+          serie?: string | null
+          tipo?: string
+          valor?: number | null
+        }
+        Update: {
+          chave?: string | null
+          created_at?: string
+          cte_id?: string
+          id?: string
+          numero?: string | null
+          peso?: number | null
+          serie?: string | null
+          tipo?: string
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cte_documentos_cte_id_fkey"
+            columns: ["cte_id"]
+            isOneToOne: false
+            referencedRelation: "cte"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cte_eventos: {
+        Row: {
+          codigo_retorno: string | null
+          created_at: string
+          cte_id: string
+          data_evento: string
+          id: string
+          justificativa: string | null
+          motivo_retorno: string | null
+          protocolo: string | null
+          sequencia: number
+          tipo_evento: string
+          xml_evento: string | null
+          xml_retorno: string | null
+        }
+        Insert: {
+          codigo_retorno?: string | null
+          created_at?: string
+          cte_id: string
+          data_evento?: string
+          id?: string
+          justificativa?: string | null
+          motivo_retorno?: string | null
+          protocolo?: string | null
+          sequencia?: number
+          tipo_evento: string
+          xml_evento?: string | null
+          xml_retorno?: string | null
+        }
+        Update: {
+          codigo_retorno?: string | null
+          created_at?: string
+          cte_id?: string
+          data_evento?: string
+          id?: string
+          justificativa?: string | null
+          motivo_retorno?: string | null
+          protocolo?: string | null
+          sequencia?: number
+          tipo_evento?: string
+          xml_evento?: string | null
+          xml_retorno?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cte_eventos_cte_id_fkey"
+            columns: ["cte_id"]
+            isOneToOne: false
+            referencedRelation: "cte"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dfe_distribuicao_controle: {
         Row: {
           ativo: boolean
@@ -325,6 +617,7 @@ export type Database = {
           created_at: string
           csc_id: string | null
           csc_token: string | null
+          cte_ativo: boolean
           enviar_ibs_cbs: boolean
           id: string
           inscricao_estadual: string | null
@@ -341,6 +634,8 @@ export type Database = {
           nfse_reg_esp: number
           nome_fantasia: string | null
           numero: string | null
+          numero_cte_atual: number
+          numero_cteos_atual: number
           numero_mdfe_atual: number
           numero_nfce_atual: number
           numero_nfe_atual: number
@@ -352,6 +647,8 @@ export type Database = {
           resp_tec_email: string | null
           resp_tec_fone: string | null
           rntrc: string | null
+          serie_cte: string
+          serie_cteos: string
           serie_mdfe: string
           serie_nfce: string
           serie_nfe: string
@@ -376,6 +673,7 @@ export type Database = {
           created_at?: string
           csc_id?: string | null
           csc_token?: string | null
+          cte_ativo?: boolean
           enviar_ibs_cbs?: boolean
           id?: string
           inscricao_estadual?: string | null
@@ -392,6 +690,8 @@ export type Database = {
           nfse_reg_esp?: number
           nome_fantasia?: string | null
           numero?: string | null
+          numero_cte_atual?: number
+          numero_cteos_atual?: number
           numero_mdfe_atual?: number
           numero_nfce_atual?: number
           numero_nfe_atual?: number
@@ -403,6 +703,8 @@ export type Database = {
           resp_tec_email?: string | null
           resp_tec_fone?: string | null
           rntrc?: string | null
+          serie_cte?: string
+          serie_cteos?: string
           serie_mdfe?: string
           serie_nfce?: string
           serie_nfe?: string
@@ -427,6 +729,7 @@ export type Database = {
           created_at?: string
           csc_id?: string | null
           csc_token?: string | null
+          cte_ativo?: boolean
           enviar_ibs_cbs?: boolean
           id?: string
           inscricao_estadual?: string | null
@@ -443,6 +746,8 @@ export type Database = {
           nfse_reg_esp?: number
           nome_fantasia?: string | null
           numero?: string | null
+          numero_cte_atual?: number
+          numero_cteos_atual?: number
           numero_mdfe_atual?: number
           numero_nfce_atual?: number
           numero_nfe_atual?: number
@@ -454,6 +759,8 @@ export type Database = {
           resp_tec_email?: string | null
           resp_tec_fone?: string | null
           rntrc?: string | null
+          serie_cte?: string
+          serie_cteos?: string
           serie_mdfe?: string
           serie_nfce?: string
           serie_nfe?: string
@@ -506,6 +813,50 @@ export type Database = {
             columns: ["nfce_id"]
             isOneToOne: true
             referencedRelation: "nfce"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fila_processamento_cte: {
+        Row: {
+          created_at: string
+          cte_id: string
+          erro_ultimo: string | null
+          id: string
+          max_tentativas: number
+          prioridade: number
+          proximo_processamento: string
+          tentativas: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          cte_id: string
+          erro_ultimo?: string | null
+          id?: string
+          max_tentativas?: number
+          prioridade?: number
+          proximo_processamento?: string
+          tentativas?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          cte_id?: string
+          erro_ultimo?: string | null
+          id?: string
+          max_tentativas?: number
+          prioridade?: number
+          proximo_processamento?: string
+          tentativas?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fila_processamento_cte_cte_id_fkey"
+            columns: ["cte_id"]
+            isOneToOne: false
+            referencedRelation: "cte"
             referencedColumns: ["id"]
           },
         ]
@@ -2316,6 +2667,10 @@ export type Database = {
       excluir_documento_nao_processado: {
         Args: { p_id: string; p_tipo: string }
         Returns: Json
+      }
+      gerar_numero_cte: {
+        Args: { p_empresa_id: string; p_serie: string; p_tipo: string }
+        Returns: string
       }
       gerar_numero_mdfe: {
         Args: { p_empresa_id: string; p_serie?: string }
