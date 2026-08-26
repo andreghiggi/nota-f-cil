@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { PeriodFilter, usePeriodoFilter, applyPeriodo } from "@/components/fiscal/PeriodFilter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DANFeDialog } from "@/components/nfe/DANFeDialog";
 import { CancelNFeDialog } from "@/components/nfe/CancelNFeDialog";
@@ -121,6 +122,7 @@ export default function NFe() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [empresaFilter, setEmpresaFilter] = useState("todas");
   const [search, setSearch] = useState("");
+  const periodo = usePeriodoFilter();
   const [danfeNfeId, setDanfeNfeId] = useState<string | null>(null);
   const [danfeOpen, setDanfeOpen] = useState(false);
   const [danfeAutoPrint, setDanfeAutoPrint] = useState(false);
@@ -136,7 +138,7 @@ export default function NFe() {
   const { data: empresas = [] } = useEmpresas();
 
   const { data: nfeList = [], isLoading } = useQuery({
-    queryKey: ["nfe", statusFilter, empresaFilter, ambiente, search],
+    queryKey: ["nfe", statusFilter, empresaFilter, ambiente, search, periodo.range],
     queryFn: async () => {
       let query = supabase
         .from("nfe")
@@ -156,8 +158,10 @@ export default function NFe() {
         query = query.eq("ambiente", ambiente);
       }
 
+      query = applyPeriodo(query, periodo.range, "data_emissao");
+
       if (search.trim()) {
-        query = query.or(`numero.ilike.%${search}%,chave_acesso.ilike.%${search}%,dest_nome.ilike.%${search}%`);
+        query = query.or(`numero.ilike.%${search}%,chave_acesso.ilike.%${search}%,dest_nome.ilike.%${search}%,external_id.ilike.%${search}%`);
       }
 
       const { data, error } = await query;
@@ -294,6 +298,7 @@ export default function NFe() {
                 />
               </div>
             </div>
+            <PeriodFilter preset={periodo.preset} setPreset={periodo.setPreset} inicio={periodo.inicio} setInicio={periodo.setInicio} fim={periodo.fim} setFim={periodo.setFim} />
             <div className="w-56">
               <label className="text-sm font-medium text-foreground mb-1.5 block">Empresa</label>
               <Select value={empresaFilter} onValueChange={setEmpresaFilter}>

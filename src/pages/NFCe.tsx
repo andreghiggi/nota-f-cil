@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { PeriodFilter, usePeriodoFilter, applyPeriodo } from "@/components/fiscal/PeriodFilter";
 import { useQuery } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
 import { DANFCeDialog } from "@/components/nfce/DANFCeDialog";
@@ -74,6 +75,7 @@ export default function NFCe() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [empresaFilter, setEmpresaFilter] = useState("todas");
   const [search, setSearch] = useState("");
+  const periodo = usePeriodoFilter();
   const [danfceNfceId, setDanfceNfceId] = useState<string | null>(null);
   const [danfceOpen, setDanfceOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -86,7 +88,7 @@ export default function NFCe() {
   const { data: empresas = [] } = useEmpresas();
 
   const { data: nfceList = [], isLoading } = useQuery({
-    queryKey: ["nfce", statusFilter, empresaFilter, ambiente, search],
+    queryKey: ["nfce", statusFilter, empresaFilter, ambiente, search, periodo.range],
     queryFn: async () => {
       let query = supabase
         .from("nfce")
@@ -106,8 +108,10 @@ export default function NFCe() {
         query = query.eq("ambiente", ambiente);
       }
 
+      query = applyPeriodo(query, periodo.range, "data_emissao");
+
       if (search.trim()) {
-        query = query.or(`numero.ilike.%${search}%,chave_acesso.ilike.%${search}%`);
+        query = query.or(`numero.ilike.%${search}%,chave_acesso.ilike.%${search}%,external_id.ilike.%${search}%`);
       }
 
       const { data, error } = await query;
@@ -250,6 +254,7 @@ export default function NFCe() {
                 />
               </div>
             </div>
+            <PeriodFilter preset={periodo.preset} setPreset={periodo.setPreset} inicio={periodo.inicio} setInicio={periodo.setInicio} fim={periodo.fim} setFim={periodo.setFim} />
             <div className="w-56">
               <label className="text-sm font-medium text-foreground mb-1.5 block">Empresa</label>
               <Select value={empresaFilter} onValueChange={setEmpresaFilter}>

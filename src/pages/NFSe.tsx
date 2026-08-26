@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { PeriodFilter, usePeriodoFilter, applyPeriodo } from "@/components/fiscal/PeriodFilter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -70,6 +71,7 @@ export default function NFSe() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [empresaFilter, setEmpresaFilter] = useState("todas");
   const [search, setSearch] = useState("");
+  const periodo = usePeriodoFilter();
   const [cancelTarget, setCancelTarget] = useState<NfseRow | null>(null);
   const [justificativa, setJustificativa] = useState("");
   const [loading, setLoading] = useState(false);
@@ -79,7 +81,7 @@ export default function NFSe() {
   const { data: empresas = [] } = useEmpresas();
 
   const { data: lista = [], isLoading } = useQuery({
-    queryKey: ["nfse", statusFilter, empresaFilter, ambiente, search],
+    queryKey: ["nfse", statusFilter, empresaFilter, ambiente, search, periodo.range],
     queryFn: async () => {
       let query = supabase
         .from("nfse")
@@ -90,9 +92,11 @@ export default function NFSe() {
       if (statusFilter !== "todos") query = query.eq("status", statusFilter as NfseRow["status"]);
       if (empresaFilter !== "todas") query = query.eq("empresa_id", empresaFilter);
       if (ambiente !== "todos") query = query.eq("ambiente", ambiente);
+      query = applyPeriodo(query, periodo.range, "data_emissao");
+
       if (search.trim()) {
         query = query.or(
-          `tomador_nome.ilike.%${search}%,tomador_documento.ilike.%${search}%,chave_acesso.ilike.%${search}%`,
+          `tomador_nome.ilike.%${search}%,tomador_documento.ilike.%${search}%,chave_acesso.ilike.%${search}%,external_id.ilike.%${search}%`,
         );
       }
 
@@ -206,6 +210,7 @@ export default function NFSe() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <PeriodFilter preset={periodo.preset} setPreset={periodo.setPreset} inicio={periodo.inicio} setInicio={periodo.setInicio} fim={periodo.fim} setFim={periodo.setFim} />
           <Select value={empresaFilter} onValueChange={setEmpresaFilter}>
             <SelectTrigger className="w-full md:w-60"><SelectValue placeholder="Empresa" /></SelectTrigger>
             <SelectContent>

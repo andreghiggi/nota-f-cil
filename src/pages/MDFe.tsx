@@ -40,6 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { PeriodFilter, usePeriodoFilter, applyPeriodo } from "@/components/fiscal/PeriodFilter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -76,6 +77,7 @@ export default function MDFe() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [empresaFilter, setEmpresaFilter] = useState("todas");
   const [search, setSearch] = useState("");
+  const periodo = usePeriodoFilter();
   const [actionMdfe, setActionMdfe] = useState<{ id: string; numero: string; action: "encerrar" | "cancelar" } | null>(null);
   const [justificativa, setJustificativa] = useState("");
   const [loading, setLoading] = useState(false);
@@ -85,7 +87,7 @@ export default function MDFe() {
   const { data: empresas = [] } = useEmpresas();
 
   const { data: mdfeList = [], isLoading } = useQuery({
-    queryKey: ["mdfe", statusFilter, empresaFilter, ambiente, search],
+    queryKey: ["mdfe", statusFilter, empresaFilter, ambiente, search, periodo.range],
     queryFn: async () => {
       let query = supabase
         .from("mdfe")
@@ -102,8 +104,10 @@ export default function MDFe() {
       if (ambiente !== "todos") {
         query = query.eq("ambiente", ambiente);
       }
+      query = applyPeriodo(query, periodo.range, "data_emissao");
+
       if (search.trim()) {
-        query = query.or(`numero.ilike.%${search}%,chave_acesso.ilike.%${search}%`);
+        query = query.or(`numero.ilike.%${search}%,chave_acesso.ilike.%${search}%,external_id.ilike.%${search}%`);
       }
 
       const { data, error } = await query;
@@ -218,6 +222,7 @@ export default function MDFe() {
                 />
               </div>
             </div>
+            <PeriodFilter preset={periodo.preset} setPreset={periodo.setPreset} inicio={periodo.inicio} setInicio={periodo.setInicio} fim={periodo.fim} setFim={periodo.setFim} />
             <div className="w-56">
               <label className="text-sm font-medium text-foreground mb-1.5 block">
                 Empresa
