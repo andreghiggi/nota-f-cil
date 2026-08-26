@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { PeriodFilter, usePeriodoFilter, applyPeriodo } from "@/components/fiscal/PeriodFilter";
 import { useQuery } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
 import { DANFCeDialog } from "@/components/nfce/DANFCeDialog";
@@ -74,6 +75,7 @@ export default function NFCe() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [empresaFilter, setEmpresaFilter] = useState("todas");
   const [search, setSearch] = useState("");
+  const periodo = usePeriodoFilter();
   const [danfceNfceId, setDanfceNfceId] = useState<string | null>(null);
   const [danfceOpen, setDanfceOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
@@ -86,7 +88,7 @@ export default function NFCe() {
   const { data: empresas = [] } = useEmpresas();
 
   const { data: nfceList = [], isLoading } = useQuery({
-    queryKey: ["nfce", statusFilter, empresaFilter, ambiente, search],
+    queryKey: ["nfce", statusFilter, empresaFilter, ambiente, search, periodo.range],
     queryFn: async () => {
       let query = supabase
         .from("nfce")

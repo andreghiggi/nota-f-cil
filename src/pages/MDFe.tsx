@@ -40,6 +40,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { PeriodFilter, usePeriodoFilter, applyPeriodo } from "@/components/fiscal/PeriodFilter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -76,6 +77,7 @@ export default function MDFe() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [empresaFilter, setEmpresaFilter] = useState("todas");
   const [search, setSearch] = useState("");
+  const periodo = usePeriodoFilter();
   const [actionMdfe, setActionMdfe] = useState<{ id: string; numero: string; action: "encerrar" | "cancelar" } | null>(null);
   const [justificativa, setJustificativa] = useState("");
   const [loading, setLoading] = useState(false);
@@ -85,7 +87,7 @@ export default function MDFe() {
   const { data: empresas = [] } = useEmpresas();
 
   const { data: mdfeList = [], isLoading } = useQuery({
-    queryKey: ["mdfe", statusFilter, empresaFilter, ambiente, search],
+    queryKey: ["mdfe", statusFilter, empresaFilter, ambiente, search, periodo.range],
     queryFn: async () => {
       let query = supabase
         .from("mdfe")

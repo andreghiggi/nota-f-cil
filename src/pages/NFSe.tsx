@@ -40,6 +40,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { PeriodFilter, usePeriodoFilter, applyPeriodo } from "@/components/fiscal/PeriodFilter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -70,6 +71,7 @@ export default function NFSe() {
   const [statusFilter, setStatusFilter] = useState("todos");
   const [empresaFilter, setEmpresaFilter] = useState("todas");
   const [search, setSearch] = useState("");
+  const periodo = usePeriodoFilter();
   const [cancelTarget, setCancelTarget] = useState<NfseRow | null>(null);
   const [justificativa, setJustificativa] = useState("");
   const [loading, setLoading] = useState(false);
@@ -79,7 +81,7 @@ export default function NFSe() {
   const { data: empresas = [] } = useEmpresas();
 
   const { data: lista = [], isLoading } = useQuery({
-    queryKey: ["nfse", statusFilter, empresaFilter, ambiente, search],
+    queryKey: ["nfse", statusFilter, empresaFilter, ambiente, search, periodo.range],
     queryFn: async () => {
       let query = supabase
         .from("nfse")
