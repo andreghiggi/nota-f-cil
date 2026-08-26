@@ -92,6 +92,8 @@ export default function NFSe() {
       if (statusFilter !== "todos") query = query.eq("status", statusFilter as NfseRow["status"]);
       if (empresaFilter !== "todas") query = query.eq("empresa_id", empresaFilter);
       if (ambiente !== "todos") query = query.eq("ambiente", ambiente);
+      query = applyPeriodo(query, periodo.range, "data_emissao");
+
       if (search.trim()) {
         query = query.or(
           `tomador_nome.ilike.%${search}%,tomador_documento.ilike.%${search}%,chave_acesso.ilike.%${search}%`,
@@ -208,6 +210,7 @@ export default function NFSe() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <PeriodFilter preset={periodo.preset} setPreset={periodo.setPreset} inicio={periodo.inicio} setInicio={periodo.setInicio} fim={periodo.fim} setFim={periodo.setFim} />
           <Select value={empresaFilter} onValueChange={setEmpresaFilter}>
             <SelectTrigger className="w-full md:w-60"><SelectValue placeholder="Empresa" /></SelectTrigger>
             <SelectContent>

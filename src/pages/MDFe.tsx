@@ -104,6 +104,8 @@ export default function MDFe() {
       if (ambiente !== "todos") {
         query = query.eq("ambiente", ambiente);
       }
+      query = applyPeriodo(query, periodo.range, "data_emissao");
+
       if (search.trim()) {
         query = query.or(`numero.ilike.%${search}%,chave_acesso.ilike.%${search}%`);
       }
@@ -220,6 +222,7 @@ export default function MDFe() {
                 />
               </div>
             </div>
+            <PeriodFilter preset={periodo.preset} setPreset={periodo.setPreset} inicio={periodo.inicio} setInicio={periodo.setInicio} fim={periodo.fim} setFim={periodo.setFim} />
             <div className="w-56">
               <label className="text-sm font-medium text-foreground mb-1.5 block">
                 Empresa

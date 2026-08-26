@@ -158,6 +158,8 @@ export default function NFe() {
         query = query.eq("ambiente", ambiente);
       }
 
+      query = applyPeriodo(query, periodo.range, "data_emissao");
+
       if (search.trim()) {
         query = query.or(`numero.ilike.%${search}%,chave_acesso.ilike.%${search}%,dest_nome.ilike.%${search}%`);
       }
@@ -296,6 +298,7 @@ export default function NFe() {
                 />
               </div>
             </div>
+            <PeriodFilter preset={periodo.preset} setPreset={periodo.setPreset} inicio={periodo.inicio} setInicio={periodo.setInicio} fim={periodo.fim} setFim={periodo.setFim} />
             <div className="w-56">
               <label className="text-sm font-medium text-foreground mb-1.5 block">Empresa</label>
               <Select value={empresaFilter} onValueChange={setEmpresaFilter}>
