@@ -96,7 +96,7 @@ export default function NFSe() {
 
       if (search.trim()) {
         query = query.or(
-          `tomador_nome.ilike.%${search}%,tomador_documento.ilike.%${search}%,chave_acesso.ilike.%${search}%`,
+          `tomador_nome.ilike.%${search}%,tomador_documento.ilike.%${search}%,chave_acesso.ilike.%${search}%,external_id.ilike.%${search}%`,
         );
       }
 

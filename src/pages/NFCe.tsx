@@ -111,7 +111,7 @@ export default function NFCe() {
       query = applyPeriodo(query, periodo.range, "data_emissao");
 
       if (search.trim()) {
-        query = query.or(`numero.ilike.%${search}%,chave_acesso.ilike.%${search}%`);
+        query = query.or(`numero.ilike.%${search}%,chave_acesso.ilike.%${search}%,external_id.ilike.%${search}%`);
       }
 
       const { data, error } = await query;
