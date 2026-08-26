@@ -996,12 +996,20 @@ async function ensureRegistered(
         }
       }
     } catch {}
+
+    registerCache.set(empresaId, {
+      at: Date.now(),
+      sig: [empresa.api_key_fiscal, empresa.updated_at, empresa.ambiente, certificate?.base64?.length ?? 0].join('|'),
+    });
+    console.log(`   ⏱️ registro/sync API2: ${Date.now() - tStart}ms`);
   } catch (err: any) {
+    registerCache.delete(empresaId);
     console.warn(`⚠️ PHP registration failed (non-fatal): ${err.message}`);
   }
 
   return { empresa, certificate };
 }
+
 
 function buildNfceClientePayload(rawCliente: any, ambiente: string) {
   const cliente = rawCliente && typeof rawCliente === 'object' ? rawCliente : {};
