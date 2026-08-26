@@ -45,6 +45,8 @@ const App = () => (
             <Route path="/nfce" element={<ProtectedRoute><NFCe /></ProtectedRoute>} />
             <Route path="/mdfe" element={<ProtectedRoute><MDFe /></ProtectedRoute>} />
             <Route path="/nfse" element={<ProtectedRoute><NFSe /></ProtectedRoute>} />
+            <Route path="/cte" element={<ProtectedRoute><CTe /></ProtectedRoute>} />
+            <Route path="/cte-os" element={<ProtectedRoute><CTeOS /></ProtectedRoute>} />
             <Route path="/notas-recebidas" element={<ProtectedRoute><NotasRecebidas /></ProtectedRoute>} />
             <Route path="/certificados" element={<ProtectedRoute><Certificados /></ProtectedRoute>} />
             <Route path="/tokens" element={<ProtectedRoute><Tokens /></ProtectedRoute>} />
