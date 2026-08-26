@@ -526,6 +526,7 @@ async function postWithRetry(
   let lastErr: any = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const tReq = Date.now();
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -555,6 +556,7 @@ async function postWithRetry(
         continue;
       }
 
+      console.log(`⏱️ ${label} attempt ${attempt}: ${Date.now() - tReq}ms (HTTP ${response.status})`);
       return { response, text, data };
     } catch (err: any) {
       lastErr = err;
