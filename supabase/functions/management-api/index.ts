@@ -281,7 +281,7 @@ Deno.serve(async (req) => {
 
       const { data: empresa, error: empErr } = await supabase
         .from('empresas')
-        .select('id')
+        .select('*')
         .eq('id', empresa_id)
         .maybeSingle();
 
@@ -299,6 +299,45 @@ Deno.serve(async (req) => {
         return jsonResponse({ success: false, error: 'Erro ao salvar CSC.' }, 500);
       }
 
+      // Propaga o CSC para a API2 (PHP) — sem isso o QR Code da NFC-e continuaria
+      // sendo assinado com o CSC antigo até o próximo sync completo da empresa.
+      let sincronizado_api2 = false;
+      if (empresa.api_key_fiscal && empresa.api_key_fiscal !== 'pending') {
+        try {
+          const isPF = empresa.tipo_pessoa === 'PF';
+          const crtMap: Record<string, number> = {
+            simples_nacional: 1,
+            lucro_presumido: 3,
+            lucro_real: 3,
+          };
+          const resp = await fetch('https://api2.agilizeerp.com.br/empresa/cadastrar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              api_key: empresa.api_key_fiscal,
+              tipo_pessoa: isPF ? 'PF' : 'PJ',
+              razao_social: empresa.razao_social,
+              cnpj: isPF
+                ? (empresa.cpf || '').replace(/\D/g, '').padStart(14, '0')
+                : (empresa.cnpj || '').replace(/\D/g, ''),
+              cpf: isPF ? (empresa.cpf || '').replace(/\D/g, '') : '',
+              tpAmb: empresa.ambiente === 'producao' ? 1 : 2,
+              siglaUF: empresa.uf,
+              uf: empresa.uf,
+              crt: crtMap[empresa.regime_tributario] || 1,
+              CSC: cscRaw,
+              CSCid: idCscRaw,
+            }),
+          });
+          sincronizado_api2 = resp.ok;
+          if (!resp.ok) {
+            console.warn('Falha ao propagar CSC para api2:', resp.status, (await resp.text()).slice(0, 200));
+          }
+        } catch (e) {
+          console.warn('Erro ao propagar CSC para api2:', (e as Error).message);
+        }
+      }
+
       await supabase.rpc('registrar_log', {
         p_empresa_id: empresa_id,
         p_nfce_id: null,
@@ -306,15 +345,16 @@ Deno.serve(async (req) => {
         p_tipo: 'info',
         p_categoria: 'configuracao',
         p_mensagem: `CSC da NFC-e atualizado (idCSC ${idCscRaw})`,
-        p_detalhes: null,
+        p_detalhes: { sincronizado_api2 },
         p_ip_origem: req.headers.get('x-forwarded-for') || null,
       });
 
       return jsonResponse({
         success: true,
-        data: { id_csc: idCscRaw, configurado: true },
+        data: { id_csc: idCscRaw, configurado: true, sincronizado_api2 },
       });
     }
+
 
     // =====================================================================
     // POST /certificado/upload
