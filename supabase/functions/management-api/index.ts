@@ -195,9 +195,10 @@ Deno.serve(async (req) => {
 
       const { data: empresa } = await supabase
         .from('empresas')
-        .select('razao_social, cnpj, cpf, tipo_pessoa')
+        .select('razao_social, cnpj, cpf, tipo_pessoa, csc_id, csc_token')
         .eq('id', empresa_id)
         .single();
+
 
       const vencimento = new Date(cert.data_vencimento);
       const hoje = new Date();
@@ -216,7 +217,102 @@ Deno.serve(async (req) => {
           expira_em: cert.data_vencimento,
           dias_restantes: diasRestantes,
           status,
+          csc: {
+            id_csc: empresa?.csc_id || null,
+            configurado: !!(empresa?.csc_id && empresa?.csc_token),
+          },
         },
+
+      });
+    }
+
+    // =====================================================================
+    // GET /csc  — status do CSC (nunca retorna o CSC completo)
+    // =====================================================================
+    if (method === 'GET' && (route === 'csc' || route === 'nfce/csc')) {
+      const { data: empresa, error: empErr } = await supabase
+        .from('empresas')
+        .select('csc_id, csc_token')
+        .eq('id', empresa_id)
+        .maybeSingle();
+
+      if (empErr || !empresa) {
+        return jsonResponse({ success: false, error: 'CNPJ não encontrado.' }, 404);
+      }
+
+      const csc = (empresa.csc_token || '').toString();
+      const configurado = !!(empresa.csc_id && csc);
+
+      return jsonResponse({
+        success: true,
+        data: {
+          id_csc: empresa.csc_id || null,
+          configurado,
+          csc_mascarado: configurado
+            ? `${csc.slice(0, 4)}${'*'.repeat(Math.max(csc.length - 8, 4))}${csc.slice(-4)}`
+            : null,
+        },
+      });
+    }
+
+    // =====================================================================
+    // POST /csc  { id_csc, csc }
+    // =====================================================================
+    if (method === 'POST' && (route === 'csc' || route === 'nfce/csc')) {
+      let body: Record<string, unknown> = {};
+      try {
+        body = await req.json();
+      } catch {
+        return jsonResponse({ success: false, error: 'JSON inválido.' }, 400);
+      }
+
+      const idCscRaw = (body.id_csc ?? body.idCsc ?? body.csc_id ?? '').toString().trim();
+      const cscRaw = (body.csc ?? body.csc_token ?? body.token ?? '').toString().trim();
+
+      if (!/^\d{6}$/.test(idCscRaw)) {
+        return jsonResponse({ success: false, error: 'Campo id_csc inválido: informe exatamente 6 dígitos (ex.: "000001").' }, 400);
+      }
+      if (!cscRaw) {
+        return jsonResponse({ success: false, error: 'Campo csc é obrigatório e não pode ser vazio.' }, 400);
+      }
+      if (cscRaw.length < 8 || cscRaw.length > 64) {
+        return jsonResponse({ success: false, error: 'Campo csc inválido: deve ter entre 8 e 64 caracteres.' }, 400);
+      }
+
+      const { data: empresa, error: empErr } = await supabase
+        .from('empresas')
+        .select('id')
+        .eq('id', empresa_id)
+        .maybeSingle();
+
+      if (empErr || !empresa) {
+        return jsonResponse({ success: false, error: 'CNPJ não encontrado.' }, 404);
+      }
+
+      const { error: updErr } = await supabase
+        .from('empresas')
+        .update({ csc_id: idCscRaw, csc_token: cscRaw })
+        .eq('id', empresa_id);
+
+      if (updErr) {
+        console.error('Erro ao salvar CSC:', updErr);
+        return jsonResponse({ success: false, error: 'Erro ao salvar CSC.' }, 500);
+      }
+
+      await supabase.rpc('registrar_log', {
+        p_empresa_id: empresa_id,
+        p_nfce_id: null,
+        p_token_api_id: token_id,
+        p_tipo: 'info',
+        p_categoria: 'configuracao',
+        p_mensagem: `CSC da NFC-e atualizado (idCSC ${idCscRaw})`,
+        p_detalhes: null,
+        p_ip_origem: req.headers.get('x-forwarded-for') || null,
+      });
+
+      return jsonResponse({
+        success: true,
+        data: { id_csc: idCscRaw, configurado: true },
       });
     }
 
