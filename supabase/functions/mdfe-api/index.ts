@@ -244,18 +244,20 @@ Deno.serve(async (req) => {
           cap_kg: payload.veiculo.cap_kg ?? null,
           cap_m3: payload.veiculo.cap_m3 ?? null,
           rntrc: payload.veiculo.rntrc ?? null,
-          condutor_nome: payload.condutor.nome,
-          condutor_cpf: payload.condutor.cpf.replace(/\D/g, ''),
+          condutor_nome: condutoresNorm[0].nome,
+          condutor_cpf: condutoresNorm[0].cpf,
           valor_carga: payload.totais.valor_carga,
           peso_bruto: payload.totais.peso_bruto,
           unidade_peso: payload.totais.unidade_peso === '02' ? 2 : 1,
-          qtd_documentos: payload.documentos.length,
+          qtd_documentos: documentosNorm.length,
+          tp_emit: Number(payload.tp_emit ?? 2),
+          data_emissao: payload.data_emissao || new Date().toISOString(),
           produto_predominante: payload.produto_predominante ?? null,
           cep_carregamento: payload.cep_carregamento ?? null,
           cep_descarregamento: payload.cep_descarregamento ?? null,
           info_adicional: payload.info_adicional ?? null,
           external_id: payload.external_id ?? null,
-          payload_entrada: payload as any,
+          payload_entrada: { ...payload, condutores: condutoresNorm } as any,
         })
         .select()
         .single();
@@ -263,14 +265,15 @@ Deno.serve(async (req) => {
       if (insError || !mdfeRow) return err('Erro ao criar MDF-e: ' + (insError?.message || ''), 'INTERNAL_ERROR', 500);
 
       // Documentos vinculados
-      const docsToInsert = payload.documentos.map(d => ({
+      const docsToInsert = documentosNorm.map(d => ({
         mdfe_id: mdfeRow.id,
         tipo: d.tipo,
-        chave: d.chave.replace(/\D/g, ''),
+        chave: d.chave,
         c_mun_descarga: d.c_mun_descarga,
         x_mun_descarga: d.x_mun_descarga,
       }));
       await supabase.from('mdfe_documentos').insert(docsToInsert);
+
 
       // Fila como fallback
       await supabase.from('fila_processamento_mdfe').insert({ mdfe_id: mdfeRow.id, prioridade: 5 });
