@@ -50,22 +50,29 @@ interface MDFePayload {
     renavam?: string;
     rntrc?: string;
   };
-  condutor: { nome: string; cpf: string };
+  condutor?: { nome: string; cpf: string };
+  condutores?: Array<{ nome: string; cpf: string }>;
+  reboques?: Array<Record<string, unknown>>;
+  municipios_carregamento?: Array<Record<string, unknown>>;
+  municipios_descarregamento?: Array<Record<string, unknown>>;
   documentos: Array<{
     tipo: 'nfe' | 'cte';
     chave: string;
-    c_mun_descarga: string;
-    x_mun_descarga: string;
+    c_mun_descarga?: string;
+    x_mun_descarga?: string;
   }>;
   totais: {
     valor_carga: number;
     peso_bruto: number;
     unidade_peso?: '01' | '02'; // 01=KG, 02=TON
   };
+  tp_emit?: number;
+  data_emissao?: string;
   produto_predominante?: string;
   cep_carregamento?: string;
   cep_descarregamento?: string;
   info_adicional?: string;
+
 }
 
 async function hashToken(token: string): Promise<string> {
