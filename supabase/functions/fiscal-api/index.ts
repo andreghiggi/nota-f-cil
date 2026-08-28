@@ -556,7 +556,16 @@ async function postWithRetry(
         continue;
       }
 
-      console.log(`⏱️ ${label} attempt ${attempt}: ${Date.now() - tReq}ms (HTTP ${response.status})`);
+      // Instrumentação de fases: total observado aqui vs. tempo gasto dentro da API2
+      // (header X-Perf-Total-Ms). A diferença é rede/TLS entre edge function e VPS.
+      const totalMs = Date.now() - tReq;
+      const api2Ms = Number(response.headers.get('x-perf-total-ms') || 0) || null;
+      const marks = response.headers.get('x-perf-marks');
+      console.log(
+        `⏱️ ${label} attempt ${attempt}: ${totalMs}ms (HTTP ${response.status})` +
+        (api2Ms !== null ? ` | api2=${api2Ms}ms rede=${Math.max(0, totalMs - api2Ms)}ms` : '') +
+        (marks ? ` | fases: ${marks}` : '')
+      );
       return { response, text, data };
     } catch (err: any) {
       lastErr = err;
