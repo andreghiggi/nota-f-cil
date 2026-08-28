@@ -50,22 +50,29 @@ interface MDFePayload {
     renavam?: string;
     rntrc?: string;
   };
-  condutor: { nome: string; cpf: string };
+  condutor?: { nome: string; cpf: string };
+  condutores?: Array<{ nome: string; cpf: string }>;
+  reboques?: Array<Record<string, unknown>>;
+  municipios_carregamento?: Array<Record<string, unknown>>;
+  municipios_descarregamento?: Array<Record<string, unknown>>;
   documentos: Array<{
     tipo: 'nfe' | 'cte';
     chave: string;
-    c_mun_descarga: string;
-    x_mun_descarga: string;
+    c_mun_descarga?: string;
+    x_mun_descarga?: string;
   }>;
   totais: {
     valor_carga: number;
     peso_bruto: number;
     unidade_peso?: '01' | '02'; // 01=KG, 02=TON
   };
+  tp_emit?: number;
+  data_emissao?: string;
   produto_predominante?: string;
   cep_carregamento?: string;
   cep_descarregamento?: string;
   info_adicional?: string;
+
 }
 
 async function hashToken(token: string): Promise<string> {
@@ -177,17 +184,38 @@ Deno.serve(async (req) => {
       if (!payload.uf_ini || !payload.uf_fim) return err('uf_ini e uf_fim são obrigatórios', 'VALIDATION_ERROR');
       if (!payload.veiculo?.placa || !payload.veiculo?.tara || !payload.veiculo?.tipo_rodado || !payload.veiculo?.tipo_carroceria)
         return err('veiculo.placa, tara, tipo_rodado e tipo_carroceria são obrigatórios', 'VALIDATION_ERROR');
-      if (!payload.condutor?.nome || !payload.condutor?.cpf) return err('condutor.nome e condutor.cpf são obrigatórios', 'VALIDATION_ERROR');
+
+      // Condutores: aceita `condutor` (objeto) ou `condutores` (lista)
+      const condutoresIn = (Array.isArray(payload.condutores) && payload.condutores.length > 0)
+        ? payload.condutores
+        : (payload.condutor ? [payload.condutor] : []);
+      const condutoresNorm = condutoresIn
+        .map((c: any) => ({ nome: String(c?.nome || c?.xNome || '').trim(), cpf: String(c?.cpf || c?.CPF || '').replace(/\D/g, '') }))
+        .filter((c) => c.nome && c.cpf.length === 11);
+      if (condutoresNorm.length === 0)
+        return err('Informe ao menos um condutor com nome e CPF (condutor{} ou condutores[])', 'VALIDATION_ERROR');
+
       if (!Array.isArray(payload.documentos) || payload.documentos.length === 0)
         return err('documentos[] é obrigatório (mín. 1 NF-e ou CT-e)', 'VALIDATION_ERROR');
-      for (const d of payload.documentos) {
-        if (!d.chave || d.chave.replace(/\D/g, '').length !== 44)
-          return err('Cada documento precisa de chave de 44 dígitos', 'VALIDATION_ERROR');
+
+      // Município de descarga: por documento ou herdado de municipios_descarregamento[0]
+      const munDescFb: any = Array.isArray(payload.municipios_descarregamento) ? payload.municipios_descarregamento[0] : null;
+      const fbCod = String(munDescFb?.codigo ?? munDescFb?.c_mun ?? munDescFb?.codigo_municipio ?? '').replace(/\D/g, '');
+      const fbNom = String(munDescFb?.nome ?? munDescFb?.x_mun ?? munDescFb?.municipio ?? '').trim();
+      const documentosNorm = payload.documentos.map((d: any) => ({
+        tipo: (d.tipo || (String(d.chave || '').replace(/\D/g, '').substr(20, 2) === '57' ? 'cte' : 'nfe')) as 'nfe' | 'cte',
+        chave: String(d.chave || '').replace(/\D/g, ''),
+        c_mun_descarga: String(d.c_mun_descarga ?? d.codigo_municipio_descarga ?? fbCod).replace(/\D/g, ''),
+        x_mun_descarga: String(d.x_mun_descarga ?? d.municipio_descarga ?? fbNom).trim(),
+      }));
+      for (const d of documentosNorm) {
+        if (d.chave.length !== 44) return err('Cada documento precisa de chave de 44 dígitos', 'VALIDATION_ERROR');
         if (!d.c_mun_descarga || !d.x_mun_descarga)
-          return err('Cada documento precisa de c_mun_descarga e x_mun_descarga', 'VALIDATION_ERROR');
+          return err('Informe c_mun_descarga e x_mun_descarga no documento ou em municipios_descarregamento[]', 'VALIDATION_ERROR');
       }
       if (!payload.totais || typeof payload.totais.valor_carga !== 'number' || typeof payload.totais.peso_bruto !== 'number')
         return err('totais.valor_carga e totais.peso_bruto são obrigatórios', 'VALIDATION_ERROR');
+
 
       const serie = payload.serie || '1';
 
@@ -216,18 +244,20 @@ Deno.serve(async (req) => {
           cap_kg: payload.veiculo.cap_kg ?? null,
           cap_m3: payload.veiculo.cap_m3 ?? null,
           rntrc: payload.veiculo.rntrc ?? null,
-          condutor_nome: payload.condutor.nome,
-          condutor_cpf: payload.condutor.cpf.replace(/\D/g, ''),
+          condutor_nome: condutoresNorm[0].nome,
+          condutor_cpf: condutoresNorm[0].cpf,
           valor_carga: payload.totais.valor_carga,
           peso_bruto: payload.totais.peso_bruto,
           unidade_peso: payload.totais.unidade_peso === '02' ? 2 : 1,
-          qtd_documentos: payload.documentos.length,
+          qtd_documentos: documentosNorm.length,
+          tp_emit: Number(payload.tp_emit ?? 2),
+          data_emissao: payload.data_emissao || new Date().toISOString(),
           produto_predominante: payload.produto_predominante ?? null,
           cep_carregamento: payload.cep_carregamento ?? null,
           cep_descarregamento: payload.cep_descarregamento ?? null,
           info_adicional: payload.info_adicional ?? null,
           external_id: payload.external_id ?? null,
-          payload_entrada: payload as any,
+          payload_entrada: { ...payload, condutores: condutoresNorm } as any,
         })
         .select()
         .single();
@@ -235,14 +265,15 @@ Deno.serve(async (req) => {
       if (insError || !mdfeRow) return err('Erro ao criar MDF-e: ' + (insError?.message || ''), 'INTERNAL_ERROR', 500);
 
       // Documentos vinculados
-      const docsToInsert = payload.documentos.map(d => ({
+      const docsToInsert = documentosNorm.map(d => ({
         mdfe_id: mdfeRow.id,
         tipo: d.tipo,
-        chave: d.chave.replace(/\D/g, ''),
+        chave: d.chave,
         c_mun_descarga: d.c_mun_descarga,
         x_mun_descarga: d.x_mun_descarga,
       }));
       await supabase.from('mdfe_documentos').insert(docsToInsert);
+
 
       // Fila como fallback
       await supabase.from('fila_processamento_mdfe').insert({ mdfe_id: mdfeRow.id, prioridade: 5 });
