@@ -195,9 +195,10 @@ Deno.serve(async (req) => {
 
       const { data: empresa } = await supabase
         .from('empresas')
-        .select('razao_social, cnpj, cpf, tipo_pessoa')
+        .select('razao_social, cnpj, cpf, tipo_pessoa, csc_id, csc_token')
         .eq('id', empresa_id)
         .single();
+
 
       const vencimento = new Date(cert.data_vencimento);
       const hoje = new Date();
