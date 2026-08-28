@@ -3623,6 +3623,12 @@ async function handleMdfeEmit(supabase: any, mdfeId: string) {
   const nMDF = String(parseInt(mdfe.numero, 10)); // strip zeros
   const serie = String(parseInt(mdfe.serie, 10));
 
+  const pe: any = mdfe.payload_entrada || {};
+  // condutores: aceita condutor único (legado) ou lista
+  const condutoresList = Array.isArray(pe.condutores) && pe.condutores.length > 0
+    ? pe.condutores.map((c: any) => ({ nome: c.nome || c.xNome, cpf: String(c.cpf || c.CPF || '').replace(/\D/g, '') }))
+    : [{ nome: mdfe.condutor_nome, cpf: mdfe.condutor_cpf }];
+
   const phpPayload: any = {
     api_key: empresa.api_key_fiscal,
     cnpj: cnpjEmit,
@@ -3633,19 +3639,25 @@ async function handleMdfeEmit(supabase: any, mdfeId: string) {
       uf_ini: mdfe.uf_ini,
       uf_fim: mdfe.uf_fim,
       uf_percurso: mdfe.uf_percurso || [],
-      dh_ini_viagem: mdfe.payload_entrada?.data_inicio_viagem || new Date().toISOString().replace(/\.\d{3}Z$/, '-03:00'),
+      data_emissao: pe.data_emissao || mdfe.data_emissao || null,
+      dh_ini_viagem: pe.data_inicio_viagem || pe.dh_ini_viagem || new Date().toISOString().replace(/\.\d{3}Z$/, '-03:00'),
       veiculo: {
         placa: mdfe.placa,
         uf: mdfe.uf_placa || mdfe.uf_ini,
         tara: mdfe.tara,
         cap_kg: mdfe.cap_kg || 0,
         cap_m3: mdfe.cap_m3 || 0,
-        tipo_rodado: mdfe.payload_entrada?.veiculo?.tipo_rodado || '06',
-        tipo_carroceria: mdfe.payload_entrada?.veiculo?.tipo_carroceria || '02',
-        renavam: mdfe.payload_entrada?.veiculo?.renavam || null,
-        rntrc: mdfe.rntrc || mdfe.payload_entrada?.veiculo?.rntrc || null,
+        tipo_rodado: pe.veiculo?.tipo_rodado || '06',
+        tipo_carroceria: pe.veiculo?.tipo_carroceria || '02',
+        renavam: pe.veiculo?.renavam || null,
+        rntrc: mdfe.rntrc || pe.veiculo?.rntrc || null,
+        prop: pe.veiculo?.prop || null,
       },
-      condutor: { nome: mdfe.condutor_nome, cpf: mdfe.condutor_cpf },
+      reboques: Array.isArray(pe.reboques) ? pe.reboques : [],
+      condutor: condutoresList[0],
+      condutores: condutoresList,
+      municipios_carregamento: Array.isArray(pe.municipios_carregamento) ? pe.municipios_carregamento : [],
+      municipios_descarregamento: Array.isArray(pe.municipios_descarregamento) ? pe.municipios_descarregamento : [],
       documentos: (mdfe.mdfe_documentos || []).map((d: any) => ({
         tipo: d.tipo, chave: d.chave,
         c_mun_descarga: d.c_mun_descarga, x_mun_descarga: d.x_mun_descarga,
@@ -3655,16 +3667,20 @@ async function handleMdfeEmit(supabase: any, mdfeId: string) {
         peso_bruto: Number(mdfe.peso_bruto),
         unidade_peso: mdfe.unidade_peso === 2 ? '02' : '01',
       },
+      tipo_carga: pe.tipo_carga || pe.tpCarga || '05',
       produto_predominante: mdfe.produto_predominante || null,
       cep_carregamento: mdfe.cep_carregamento || null,
       cep_descarregamento: mdfe.cep_descarregamento || null,
       info_adicional: mdfe.info_adicional || null,
+      lacres: Array.isArray(pe.lacres) ? pe.lacres : [],
+      ciot: Array.isArray(pe.ciot) ? pe.ciot : [],
       // tpEmit SEFAZ: 1=Prestador de Serviço de Transporte (exige seguro), 2=Carga Própria, 3=Prestador CT-e Globalizado
       // Default seguro = carga própria (2) para evitar rejeição 698 quando ERP não envia o campo
-      tp_emit: Number(mdfe.tp_emit ?? mdfe.payload_entrada?.tp_emit ?? 2),
-      seguros: mdfe.seguros || mdfe.payload_entrada?.seguros || [],
+      tp_emit: Number(mdfe.tp_emit ?? pe.tp_emit ?? 2),
+      seguros: mdfe.seguros || pe.seguros || [],
     },
   };
+
   if (certificate) phpPayload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
 
   console.log(`📡 Emitting MDF-e ${mdfe.numero} via fiscal API...`);
