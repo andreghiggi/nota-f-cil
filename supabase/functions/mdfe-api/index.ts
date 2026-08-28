@@ -370,8 +370,17 @@ Deno.serve(async (req) => {
         return err('Erro ao encerrar na SEFAZ: ' + detalhe, 'SEFAZ_ERROR', 502);
       }
 
-      return new Response(JSON.stringify({ success: true, data: { id: mdfe.id, evento_id: evento?.id, status: 'encerrado', ...fr.data } }),
+      const evData: any = fr.data || {};
+      await supabase.from('mdfe_eventos').update({
+        protocolo: evData.protocolo || null,
+        codigo_retorno: evData.cStat || '135',
+        motivo_retorno: evData.xMotivo || 'Evento registrado e vinculado ao MDF-e',
+        xml_retorno: evData.xml_retorno ? String(evData.xml_retorno).substring(0, 200000) : null,
+      }).eq('id', evento?.id);
+
+      return new Response(JSON.stringify({ success: true, data: { id: mdfe.id, evento_id: evento?.id, status: 'encerrado', ...evData } }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+
     }
 
     // ---------- POST /mdfe-api/:id/cancelar ----------
