@@ -3772,13 +3772,48 @@ async function handleMdfeEncerrar(supabase: any, mdfeId: string, cMunDescarga: s
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
+  const chave = String(mdfe.chave_acesso || '').replace(/\D/g, '');
+  if (chave.length !== 44) {
+    return new Response(JSON.stringify({ error: 'MDF-e sem chave de acesso autorizada' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  if (!mdfe.protocolo) {
+    return new Response(JSON.stringify({ error: 'MDF-e sem protocolo de autorização' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  // cUF do encerramento = código IBGE da UF onde encerrou.
+  // Deriva do código do município (2 primeiros dígitos); fallback: UF fim / chave.
+  const cMun = String(cMunDescarga || '').replace(/\D/g, '');
+  if (cMun.length !== 7) {
+    return new Response(JSON.stringify({ error: 'c_mun_descarga deve ter 7 dígitos (IBGE)' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const cUF = cMun.substring(0, 2) || UF_CODIGO[String(mdfe.uf_fim || '').toUpperCase()] || chave.substring(0, 2);
+
+  // dtEnc precisa ser YYYY-MM-DD (sped-mdfe monta <dtEnc> direto)
+  const dtEncNorm = (() => {
+    const raw = String(dtEnc || '').trim();
+    const m = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (m) return m[1];
+    const d = raw ? new Date(raw) : new Date();
+    const brt = new Date((isNaN(d.getTime()) ? new Date() : d).getTime() - 3 * 3600_000);
+    return brt.toISOString().slice(0, 10);
+  })();
+
   const payload: any = {
     api_key: empresa.api_key_fiscal,
     cnpj: (empresa.cnpj || '').replace(/\D/g, ''),
-    chave: mdfe.chave_acesso, protocolo: mdfe.protocolo,
+    chave,
+    protocolo: String(mdfe.protocolo),
+    // nomes esperados pela API2 (sped-mdfe sefazEncerra)
+    cUF,
+    cMun,
+    dtEnc: dtEncNorm,
+    // aliases legados (compatibilidade)
     uf_descarga: mdfe.uf_fim,
-    c_mun_descarga: cMunDescarga,
-    data_encerramento: dtEnc,
+    c_mun_descarga: cMun,
+    data_encerramento: dtEncNorm,
   };
   if (certificate) payload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
 
@@ -3791,10 +3826,13 @@ async function handleMdfeEncerrar(supabase: any, mdfeId: string, cMunDescarga: s
   let data: any; try { data = JSON.parse(text); } catch { data = { raw: text }; }
   console.log(`📡 MDF-e encerrar (${resp.status}):`, text.substring(0, 400));
 
-  if (!resp.ok || data.erro) {
-    return new Response(JSON.stringify({ error: 'Erro ao encerrar', details: data }),
+  const jaEncerrado = JSON.stringify(data).includes('duplicidade') || String(data.cStat || '') === '573';
+  if ((!resp.ok || data.erro || data.error) && !jaEncerrado) {
+    const motivo = data.erro || data.error || data.mensagem || data.xMotivo || data.raw || 'Erro ao encerrar';
+    return new Response(JSON.stringify({ error: String(motivo).substring(0, 500), details: data }),
       { status: resp.status || 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
+
 
   await supabase.from('mdfe').update({
     status: 'encerrada' as any, // status enum genérico — usa string livre se enum não tiver
