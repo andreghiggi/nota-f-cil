@@ -2768,6 +2768,7 @@ export type Database = {
         | "contingencia"
         | "inutilizada"
         | "abortada"
+        | "encerrada"
       regime_tributario: "simples_nacional" | "lucro_presumido" | "lucro_real"
       token_status: "ativo" | "inativo" | "revogado"
     }
@@ -2910,6 +2911,7 @@ export const Constants = {
         "contingencia",
         "inutilizada",
         "abortada",
+        "encerrada",
       ],
       regime_tributario: ["simples_nacional", "lucro_presumido", "lucro_real"],
       token_status: ["ativo", "inativo", "revogado"],
