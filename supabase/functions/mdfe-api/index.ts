@@ -184,17 +184,38 @@ Deno.serve(async (req) => {
       if (!payload.uf_ini || !payload.uf_fim) return err('uf_ini e uf_fim são obrigatórios', 'VALIDATION_ERROR');
       if (!payload.veiculo?.placa || !payload.veiculo?.tara || !payload.veiculo?.tipo_rodado || !payload.veiculo?.tipo_carroceria)
         return err('veiculo.placa, tara, tipo_rodado e tipo_carroceria são obrigatórios', 'VALIDATION_ERROR');
-      if (!payload.condutor?.nome || !payload.condutor?.cpf) return err('condutor.nome e condutor.cpf são obrigatórios', 'VALIDATION_ERROR');
+
+      // Condutores: aceita `condutor` (objeto) ou `condutores` (lista)
+      const condutoresIn = (Array.isArray(payload.condutores) && payload.condutores.length > 0)
+        ? payload.condutores
+        : (payload.condutor ? [payload.condutor] : []);
+      const condutoresNorm = condutoresIn
+        .map((c: any) => ({ nome: String(c?.nome || c?.xNome || '').trim(), cpf: String(c?.cpf || c?.CPF || '').replace(/\D/g, '') }))
+        .filter((c) => c.nome && c.cpf.length === 11);
+      if (condutoresNorm.length === 0)
+        return err('Informe ao menos um condutor com nome e CPF (condutor{} ou condutores[])', 'VALIDATION_ERROR');
+
       if (!Array.isArray(payload.documentos) || payload.documentos.length === 0)
         return err('documentos[] é obrigatório (mín. 1 NF-e ou CT-e)', 'VALIDATION_ERROR');
-      for (const d of payload.documentos) {
-        if (!d.chave || d.chave.replace(/\D/g, '').length !== 44)
-          return err('Cada documento precisa de chave de 44 dígitos', 'VALIDATION_ERROR');
+
+      // Município de descarga: por documento ou herdado de municipios_descarregamento[0]
+      const munDescFb: any = Array.isArray(payload.municipios_descarregamento) ? payload.municipios_descarregamento[0] : null;
+      const fbCod = String(munDescFb?.codigo ?? munDescFb?.c_mun ?? munDescFb?.codigo_municipio ?? '').replace(/\D/g, '');
+      const fbNom = String(munDescFb?.nome ?? munDescFb?.x_mun ?? munDescFb?.municipio ?? '').trim();
+      const documentosNorm = payload.documentos.map((d: any) => ({
+        tipo: (d.tipo || (String(d.chave || '').replace(/\D/g, '').substr(20, 2) === '57' ? 'cte' : 'nfe')) as 'nfe' | 'cte',
+        chave: String(d.chave || '').replace(/\D/g, ''),
+        c_mun_descarga: String(d.c_mun_descarga ?? d.codigo_municipio_descarga ?? fbCod).replace(/\D/g, ''),
+        x_mun_descarga: String(d.x_mun_descarga ?? d.municipio_descarga ?? fbNom).trim(),
+      }));
+      for (const d of documentosNorm) {
+        if (d.chave.length !== 44) return err('Cada documento precisa de chave de 44 dígitos', 'VALIDATION_ERROR');
         if (!d.c_mun_descarga || !d.x_mun_descarga)
-          return err('Cada documento precisa de c_mun_descarga e x_mun_descarga', 'VALIDATION_ERROR');
+          return err('Informe c_mun_descarga e x_mun_descarga no documento ou em municipios_descarregamento[]', 'VALIDATION_ERROR');
       }
       if (!payload.totais || typeof payload.totais.valor_carga !== 'number' || typeof payload.totais.peso_bruto !== 'number')
         return err('totais.valor_carga e totais.peso_bruto são obrigatórios', 'VALIDATION_ERROR');
+
 
       const serie = payload.serie || '1';
 
