@@ -217,7 +217,12 @@ Deno.serve(async (req) => {
           expira_em: cert.data_vencimento,
           dias_restantes: diasRestantes,
           status,
+          csc: {
+            id_csc: empresa?.csc_id || null,
+            configurado: !!(empresa?.csc_id && empresa?.csc_token),
+          },
         },
+
       });
     }
 
