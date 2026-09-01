@@ -37,3 +37,12 @@ verify_jwt = false
 [functions.fiscal-cron-tick]
 verify_jwt = false
 
+[functions.process-mdfe-queue]
+verify_jwt = false
+
+[functions.process-cte-queue]
+verify_jwt = false
+
+[functions.process-nfse-queue]
+verify_jwt = false
+

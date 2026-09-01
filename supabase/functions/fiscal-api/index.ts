@@ -2715,11 +2715,126 @@ Deno.serve(async (req) => {
         }
       }
 
+      // --- Transporte (MDF-e 58, CT-e 57/67): consulta direta pela chave ---
+      for (const tabela of ['mdfe', 'cte'] as const) {
+        const { data: docs } = await supabase
+          .from(tabela)
+          .select('id, empresa_id, numero, serie, chave_acesso, motivo_retorno, erro_processamento')
+          .eq('status', 'rejeitada')
+          .gte('created_at', desde)
+          .not('chave_acesso', 'is', null)
+          .limit(100);
+
+        for (const doc of (docs || []) as any[]) {
+          const msg = `${doc.motivo_retorno || ''} ${doc.erro_processamento || ''}`;
+          if (!/539|duplicid/i.test(msg)) continue;
+
+          const { data: empresa } = await supabase
+            .from('empresas').select('api_key_fiscal').eq('id', doc.empresa_id).maybeSingle();
+          if (!empresa?.api_key_fiscal) continue;
+
+          const rota = tabela === 'mdfe' ? '/mdfe/consulta-chave' : '/cte/consultar';
+          try {
+            const resp = await fetch(`${FISCAL_API_BASE_URL}${rota}?api_key=${encodeURIComponent((empresa as any).api_key_fiscal)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ chave: doc.chave_acesso }),
+            });
+            const json: any = await resp.json().catch(() => ({}));
+            const dados = json?.data ?? json;
+            const xml = dados?.xml_retorno ? atob(String(dados.xml_retorno)) : '';
+            const cStat = String(dados?.cStat || xml.match(/<cStat>(\d+)<\/cStat>/)?.[1] || '');
+            const prot = String(dados?.protocolo || xml.match(/<nProt>(\d+)<\/nProt>/)?.[1] || '');
+            if (['100', '132', '135'].includes(cStat) && prot) {
+              await supabase.from(tabela).update({
+                status: 'autorizada',
+                protocolo: prot,
+                codigo_retorno: cStat,
+                motivo_retorno: 'Autorizado o uso (recuperado por varredura de duplicidade)',
+                data_autorizacao: new Date().toISOString(),
+                xml_retorno: xml || null,
+                erro_processamento: null,
+              }).eq('id', doc.id).neq('status', 'cancelada');
+              resultados.push({ tabela, id: doc.id, numero: doc.numero, recuperada: true, chave: doc.chave_acesso });
+            }
+          } catch (e) {
+            console.warn(`sweep_539 ${tabela} ${doc.numero}:`, (e as Error)?.message);
+          }
+        }
+      }
+
       return new Response(
         JSON.stringify({ success: true, horas, recuperadas: resultados.length, resultados }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       );
     }
+
+    // ========================================================================
+    // ACTION: sweep_presos — varredura preventiva de documentos travados em
+    // 'pendente'/'processando' e de itens de fila órfãos, em TODOS os modelos.
+    // ========================================================================
+    if (action === 'sweep_presos') {
+      const minutos = Number(body?.minutos || 10);
+      const corte = new Date(Date.now() - minutos * 60_000).toISOString();
+      const TERMINAIS = ['autorizada', 'cancelada', 'inutilizada', 'encerrada', 'denegada', 'abortada', 'rejeitada'];
+      const MAPA = [
+        { tabela: 'nfe',  fila: 'fila_processamento_nfe',  fk: 'nfe_id' },
+        { tabela: 'nfce', fila: 'fila_processamento',      fk: 'nfce_id' },
+        { tabela: 'mdfe', fila: 'fila_processamento_mdfe', fk: 'mdfe_id' },
+        { tabela: 'cte',  fila: 'fila_processamento_cte',  fk: 'cte_id' },
+        { tabela: 'nfse', fila: 'fila_processamento_nfse', fk: 'nfse_id' },
+      ] as const;
+
+      const resumo: any[] = [];
+
+      for (const m of MAPA) {
+        let reenfileirados = 0;
+        let filaLimpa = 0;
+
+        // 1) documentos parados sem item de fila → reenfileira
+        const { data: presos } = await supabase
+          .from(m.tabela)
+          .select('id, status')
+          .in('status', ['pendente', 'processando'])
+          .lt('updated_at', corte)
+          .limit(100);
+
+        for (const d of (presos || []) as any[]) {
+          const { data: naFila } = await supabase.from(m.fila).select('id').eq(m.fk, d.id).maybeSingle();
+          if (naFila) continue;
+          if (d.status === 'processando') {
+            await supabase.from(m.tabela).update({
+              status: 'pendente',
+              erro_processamento: 'Processamento interrompido — reenfileirado pela varredura automática',
+            }).eq('id', d.id).eq('status', 'processando');
+          }
+          const { error: insErr } = await supabase.from(m.fila).insert({
+            [m.fk]: d.id, prioridade: 5, tentativas: 0, max_tentativas: 3,
+            proximo_processamento: new Date().toISOString(),
+          });
+          if (!insErr) reenfileirados++;
+        }
+
+        // 2) itens de fila cujo documento já está em estado final → remove
+        const { data: itens } = await supabase.from(m.fila).select(`id, ${m.fk}`).limit(500);
+        for (const it of (itens || []) as any[]) {
+          const { data: doc } = await supabase.from(m.tabela).select('status').eq('id', it[m.fk]).maybeSingle();
+          if (!doc || TERMINAIS.includes(String((doc as any).status))) {
+            await supabase.from(m.fila).delete().eq('id', it.id);
+            filaLimpa++;
+          }
+        }
+
+        resumo.push({ modelo: m.tabela, reenfileirados, fila_limpa: filaLimpa });
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, minutos, resumo }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+
 
 
     // ========================================================================
