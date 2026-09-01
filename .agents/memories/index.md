@@ -1,2 +1,3 @@
 - [Duplicidade 539 e Contingência](mem://tecnologia/duplicidade-539-contingencia)
 - [Data de emissão e numeração fiscal](mem://tecnologia/data-emissao-e-numeracao) — dhEmi nunca futuro (703) e devolução de número em rejeições
+- [Automação Todos os Modelos](mem://funcionalidades/automacao-todos-modelos)
