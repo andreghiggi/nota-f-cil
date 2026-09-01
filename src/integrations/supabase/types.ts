@@ -949,6 +949,50 @@ export type Database = {
           },
         ]
       }
+      fila_processamento_nfse: {
+        Row: {
+          created_at: string
+          erro_ultimo: string | null
+          id: string
+          max_tentativas: number
+          nfse_id: string
+          prioridade: number
+          proximo_processamento: string
+          tentativas: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          erro_ultimo?: string | null
+          id?: string
+          max_tentativas?: number
+          nfse_id: string
+          prioridade?: number
+          proximo_processamento?: string
+          tentativas?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          erro_ultimo?: string | null
+          id?: string
+          max_tentativas?: number
+          nfse_id?: string
+          prioridade?: number
+          proximo_processamento?: string
+          tentativas?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fila_processamento_nfse_nfse_id_fkey"
+            columns: ["nfse_id"]
+            isOneToOne: false
+            referencedRelation: "nfse"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       job_circuit: {
         Row: {
           consecutive_failures: number
