@@ -32,8 +32,12 @@ type Tarefa = {
 const TAREFAS: Tarefa[] = [
   { nome: 'fila-nfce',      fn: 'process-nfce-queue',        cadaSegundos: 120,  ttlSegundos: 600, circuito: 'sefaz-api2' },
   { nome: 'fila-nfe',       fn: 'process-nfe-queue',         cadaSegundos: 120,  ttlSegundos: 600, circuito: 'sefaz-api2' },
+  { nome: 'fila-mdfe',      fn: 'process-mdfe-queue',        cadaSegundos: 180,  ttlSegundos: 600, circuito: 'sefaz-api2' },
+  { nome: 'fila-cte',       fn: 'process-cte-queue',         cadaSegundos: 180,  ttlSegundos: 600, circuito: 'sefaz-api2' },
+  { nome: 'fila-nfse',      fn: 'process-nfse-queue',        cadaSegundos: 300,  ttlSegundos: 600, circuito: 'sefin-nfse' },
   { nome: 'contingencia',   fn: 'nfce-contingencia-worker',  cadaSegundos: 300,  ttlSegundos: 600, circuito: 'sefaz-api2' },
   { nome: 'sweep-539',      fn: 'fiscal-api',                cadaSegundos: 3600, ttlSegundos: 900, circuito: 'sefaz-api2', body: { action: 'sweep_539' } },
+  { nome: 'sweep-presos',   fn: 'fiscal-api',                cadaSegundos: 900,  ttlSegundos: 900, circuito: 'sefaz-api2', body: { action: 'sweep_presos' } },
 ];
 
 const CIRCUITO_LIMITE = 5;      // falhas consecutivas antes de abrir
