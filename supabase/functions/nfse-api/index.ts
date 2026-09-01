@@ -186,6 +186,9 @@ Deno.serve(async (req) => {
         p_ip_origem: req.headers.get('x-forwarded-for'),
       });
 
+      // Fila como fallback: se a emissão síncrona falhar, o worker reprocessa.
+      await supabase.from('fila_processamento_nfse').insert({ nfse_id: row.id, prioridade: 5 });
+
       const { data: fr, error: fe } = await supabase.functions.invoke('fiscal-api', {
         body: { action: 'emit_nfse', nfse_id: row.id },
       });
@@ -193,6 +196,8 @@ Deno.serve(async (req) => {
         const detalhe = await extractInvokeError(fe, fr);
         return err('Erro ao emitir na SEFIN: ' + detalhe, 'SEFIN_ERROR', 502);
       }
+
+      await supabase.from('fila_processamento_nfse').delete().eq('nfse_id', row.id);
 
       return ok(fr.data, 201);
     }
