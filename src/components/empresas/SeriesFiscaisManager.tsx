@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { 
   Plus, Trash2, Loader2, Edit2, Check, X, 
-  FileText, ShoppingCart, Truck, FileSignature 
+  FileText, ShoppingCart, Truck, FileSignature, PackageCheck, Bus 
 } from "lucide-react";
 import {
   AlertDialog,
@@ -29,7 +29,7 @@ import { cn } from "@/lib/utils";
 
 interface SeriesFiscaisManagerProps {
   empresaId: string;
-  tipo: 'nfe' | 'nfce' | 'mdfe' | 'nfse';
+  tipo: 'nfe' | 'nfce' | 'mdfe' | 'nfse' | 'cte' | 'cteos';
 }
 
 export function SeriesFiscaisManager({ empresaId, tipo }: SeriesFiscaisManagerProps) {
@@ -46,8 +46,14 @@ export function SeriesFiscaisManager({ empresaId, tipo }: SeriesFiscaisManagerPr
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const series = allSeries?.filter(s => s.tipo === tipo) || [];
-  const label = tipo === 'nfe' ? 'NF-e' : tipo === 'nfce' ? 'NFC-e' : tipo === 'mdfe' ? 'MDF-e' : 'NFS-e';
-  const Icon = tipo === 'nfe' ? FileText : tipo === 'nfce' ? ShoppingCart : tipo === 'mdfe' ? Truck : FileSignature;
+  const LABELS: Record<string, string> = {
+    nfe: 'NF-e', nfce: 'NFC-e', mdfe: 'MDF-e', nfse: 'NFS-e', cte: 'CT-e', cteos: 'CT-e OS',
+  };
+  const ICONS: Record<string, typeof FileText> = {
+    nfe: FileText, nfce: ShoppingCart, mdfe: Truck, nfse: FileSignature, cte: PackageCheck, cteos: Bus,
+  };
+  const label = LABELS[tipo] ?? tipo.toUpperCase();
+  const Icon = ICONS[tipo] ?? FileText;
 
 
   const handleAdd = async () => {
