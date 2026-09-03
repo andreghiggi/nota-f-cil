@@ -164,6 +164,9 @@ const empresaSchema = z.object({
   nfse_aliquota_padrao: z.coerce.number().min(0).max(100).optional().nullable(),
   nfse_ctribnac_padrao: z.string().max(10).optional().nullable(),
   nfse_cnbs_padrao: z.string().max(20).optional().nullable(),
+  cte_ativo: z.boolean().default(false),
+  serie_cte: z.string().min(1).max(3).default("1"),
+  serie_cteos: z.string().min(1).max(3).default("1"),
 
   
   // CSC (Código de Segurança do Contribuinte)
@@ -272,6 +275,9 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
       nfse_aliquota_padrao: null,
       nfse_ctribnac_padrao: "",
       nfse_cnbs_padrao: "",
+      cte_ativo: false,
+      serie_cte: "1",
+      serie_cteos: "1",
 
       csc_id: "",
       csc_token: "",
@@ -320,6 +326,9 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         nfse_aliquota_padrao: (empresa as any).nfse_aliquota_padrao ?? null,
         nfse_ctribnac_padrao: (empresa as any).nfse_ctribnac_padrao || "",
         nfse_cnbs_padrao: (empresa as any).nfse_cnbs_padrao || "",
+        cte_ativo: (empresa as any).cte_ativo ?? false,
+        serie_cte: (empresa as any).serie_cte || "1",
+        serie_cteos: (empresa as any).serie_cteos || "1",
         rntrc: (empresa as any).rntrc || "",
         csc_id: empresa.csc_id || "",
         csc_token: empresa.csc_token || "",
@@ -364,6 +373,9 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         nfse_aliquota_padrao: null,
         nfse_ctribnac_padrao: "",
         nfse_cnbs_padrao: "",
+      cte_ativo: false,
+      serie_cte: "1",
+      serie_cteos: "1",
         csc_id: "",
         csc_token: "",
         resp_tec_cnpj: "",
@@ -523,6 +535,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         nfse_aliquota_padrao: data.nfse_aliquota_padrao ?? null,
         nfse_ctribnac_padrao: data.nfse_ctribnac_padrao || null,
         nfse_cnbs_padrao: data.nfse_cnbs_padrao || null,
+        cte_ativo: data.cte_ativo,
         ativo: data.ativo,
       };
 
@@ -538,6 +551,8 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
           serie_nfce: data.serie_nfce,
           serie_mdfe: data.serie_mdfe,
           serie_nfse: data.serie_nfse,
+          serie_cte: data.serie_cte,
+          serie_cteos: data.serie_cteos,
         } as any);
         toast.success("Empresa cadastrada com sucesso!");
       }
@@ -570,7 +585,7 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
              <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="grid w-full grid-cols-7">
+              <TabsList className="grid w-full grid-cols-8">
                 <TabsTrigger value="dados" className="flex items-center gap-2">
                   <Building2 className="h-4 w-4" />
                   Dados
@@ -598,6 +613,10 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                 <TabsTrigger value="nfse" className="flex items-center gap-2">
                   <FileSignature className="h-4 w-4" />
                   NFS-e
+                </TabsTrigger>
+                <TabsTrigger value="cte" className="flex items-center gap-2">
+                  <PackageCheck className="h-4 w-4" />
+                  CT-e
                 </TabsTrigger>
               </TabsList>
 
@@ -1484,6 +1503,108 @@ export function EmpresaFormDialog({ open, onOpenChange, empresa, onSuccess }: Em
                   </p>
                 </div>
               </TabsContent>
+
+              <TabsContent value="cte" className="space-y-4 mt-4">
+                <FormField
+                  control={form.control}
+                  name="cte_ativo"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center justify-between rounded-lg border p-3">
+                      <div className="space-y-0.5 pr-4">
+                        <FormLabel>Habilitar CT-e / CT-e OS</FormLabel>
+                        <FormDescription>
+                          Permite que o ERP emita CT-e (modelo 57) e CT-e OS (modelo 67) para esta empresa.
+                        </FormDescription>
+                      </div>
+                      <FormControl>
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+
+                {isEditing && empresa ? (
+                  <div className="space-y-6">
+                    <SeriesFiscaisManager empresaId={empresa.id} tipo="cte" />
+                    <SeriesFiscaisManager empresaId={empresa.id} tipo="cteos" />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="serie_cte"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Série CT-e Inicial</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="1"
+                              maxLength={3}
+                              {...field}
+                              onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="serie_cteos"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Série CT-e OS Inicial</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="1"
+                              maxLength={3}
+                              {...field}
+                              onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="rntrc"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>RNTRC</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="00000000"
+                          maxLength={8}
+                          {...field}
+                          value={field.value || ""}
+                          onChange={(e) => field.onChange(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Mesmo registro ANTT usado no MDF-e. Obrigatório para transportadores rodoviários.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="p-4 bg-info/10 border border-info/20 rounded-lg">
+                  <h4 className="font-medium text-foreground mb-2 flex items-center gap-2">
+                    <PackageCheck className="h-4 w-4" />
+                    Configurações CT-e (modelos 57 e 67)
+                  </h4>
+                  <p className="text-sm text-muted-foreground">
+                    O CT-e usa o mesmo certificado digital A1 e ambiente configurados na aba Fiscal.
+                    Habilite a permissão <code className="text-xs bg-muted px-1 py-0.5 rounded">emitir_cte</code> nos
+                    tokens de API que devem emitir CT-e ou CT-e OS.
+                  </p>
+                </div>
+              </TabsContent>
+
             </Tabs>
 
             <DialogFooter>
