@@ -208,6 +208,40 @@ async function rotinasBanco(forcar: boolean) {
   return saidas;
 }
 
+/** Dispara alerta quando o pulso ficou parado por muito tempo. */
+async function alertarSeParado() {
+  try {
+    const { data } = await supabase
+      .from('job_runs')
+      .select('started_at')
+      .eq('job', 'tick')
+      .order('started_at', { ascending: false })
+      .limit(1);
+    const ultimo = data?.[0]?.started_at ? new Date(data[0].started_at).getTime() : null;
+    if (!ultimo) return null;
+    const minutos = Math.round((Date.now() - ultimo) / 60000);
+    if (minutos <= 10) return null;
+
+    console.error(`ALERTA: pulso das rotinas parado por ${minutos} minutos`);
+    const alvo = Deno.env.get('ALERT_WEBHOOK_URL');
+    if (alvo) {
+      await fetch(alvo, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          evento: 'rotinas.degradado',
+          minutos_parado: minutos,
+          ultimo_tick: new Date(ultimo).toISOString(),
+          ts: new Date().toISOString(),
+        }),
+      }).catch(() => {});
+    }
+    return minutos;
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -219,12 +253,20 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   }
 
+  // Saúde das rotinas (consulta agregada)
+  if (req.method === 'GET' && url.pathname.endsWith('/status')) {
+    const { data, error } = await supabase.rpc('job_health');
+    return new Response(JSON.stringify(error ? { error: error.message } : data),
+      { status: error ? 500 : 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
   const body = await req.json().catch(() => ({} as any));
   const forcar = body?.forcar === true || url.searchParams.get('forcar') === '1';
   const somente: string[] | null = Array.isArray(body?.tarefas) ? body.tarefas : null;
 
   const inicio = Date.now();
   const resultados: unknown[] = [];
+  let tickRunId: string | null = null;
 
   try {
     // Trava global do tick: se o anterior ainda roda, este sai imediatamente.
@@ -239,6 +281,14 @@ Deno.serve(async (req) => {
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
+    // Detecta parada do pulso antes de registrar a execução atual
+    const minutosParado = await alertarSeParado();
+
+    // Registro do próprio pulso: torna visível quando ele deixa de rodar
+    const { data: rid } = await supabase.rpc('job_run_start', { p_job: 'tick' });
+    tickRunId = (rid as string) ?? null;
+
+
     try {
       // Tarefas sequenciais — nunca em paralelo, para não repetir a saturação.
       for (const tarefa of TAREFAS) {
@@ -252,15 +302,35 @@ Deno.serve(async (req) => {
       await supabase.rpc('release_job_lock', { p_key: 'job:tick', p_owner: tickOwner });
     }
 
+    const erros = resultados.filter((r: any) => r?.resultado === 'erro').length;
+    if (tickRunId) {
+      await supabase.rpc('job_run_finish', {
+        p_run_id: tickRunId,
+        p_status: erros > 0 ? 'error' : 'ok',
+        p_processed: resultados.length,
+        p_errors: erros,
+        p_erro: erros > 0 ? 'uma ou mais tarefas falharam' : null,
+        p_detalhes: { resultados, minutos_parado: minutosParado },
+      });
+    }
+
     return new Response(
-      JSON.stringify({ success: true, duracao_ms: Date.now() - inicio, resultados }),
+      JSON.stringify({ success: true, duracao_ms: Date.now() - inicio, minutos_parado: minutosParado, resultados }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {
     console.error('tick erro:', e);
+    const msg = (e as Error)?.message ?? String(e);
+    if (tickRunId) {
+      await supabase.rpc('job_run_finish', {
+        p_run_id: tickRunId, p_status: 'error', p_processed: 0, p_errors: 1,
+        p_erro: msg.slice(0, 1000), p_detalhes: null,
+      }).catch?.(() => {});
+    }
     return new Response(
-      JSON.stringify({ success: false, error: (e as Error)?.message ?? String(e), resultados }),
+      JSON.stringify({ success: false, error: msg, resultados }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+
 });

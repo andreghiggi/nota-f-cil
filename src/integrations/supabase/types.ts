@@ -2737,6 +2737,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      job_health: { Args: never; Returns: Json }
       job_run_finish: {
         Args: {
           p_detalhes?: Json
