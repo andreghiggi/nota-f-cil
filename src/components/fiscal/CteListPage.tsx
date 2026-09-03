@@ -12,6 +12,9 @@ import {
   FileText,
   RefreshCw,
   Trash2,
+  SearchCheck,
+  PencilLine,
+  Ban,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -81,6 +84,13 @@ export function CteListPage({ modelo, title, subtitle }: CteListPageProps) {
   const [cancelTarget, setCancelTarget] = useState<{ id: string; numero: string } | null>(null);
   const [justificativa, setJustificativa] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cceTarget, setCceTarget] = useState<{ id: string; numero: string } | null>(null);
+  const [cceGrupo, setCceGrupo] = useState("ide");
+  const [cceCampo, setCceCampo] = useState("");
+  const [cceValor, setCceValor] = useState("");
+  const [inutTarget, setInutTarget] = useState<
+    { id: string; numero: string; serie: string; empresa_id: string } | null
+  >(null);
 
   const queryClient = useQueryClient();
   const { ambiente } = useEnvironment();
@@ -198,6 +208,96 @@ export function CteListPage({ modelo, title, subtitle }: CteListPageProps) {
     }
     queryClient.invalidateQueries({ queryKey: ["cte"] });
     toast.success(`CT-e ${numero} excluído`);
+  };
+
+  const handleConsultar = async (id: string, numero: string) => {
+    toast.loading("Consultando SEFAZ...", { id: "consulta" });
+    try {
+      const { data, error } = await supabase.functions.invoke("fiscal-api", {
+        body: { action: "consult_cte_sefaz", cte_id: id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const d = (data as any)?.data || {};
+      toast.success(`CT-e ${numero}: [${d.cStat || "-"}] ${d.xMotivo || "consulta concluída"}`, {
+        id: "consulta",
+      });
+      queryClient.invalidateQueries({ queryKey: ["cte"] });
+    } catch (e: any) {
+      toast.error(`Erro na consulta: ${e.message}`, { id: "consulta" });
+    }
+  };
+
+  const handleCce = async () => {
+    if (!cceTarget) return;
+    if (cceValor.trim().length < 15) {
+      toast.error("O valor corrigido deve ter pelo menos 15 caracteres");
+      return;
+    }
+    if (!cceCampo.trim()) {
+      toast.error("Informe o campo alterado");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fiscal-api", {
+        body: {
+          action: "cce_cte",
+          cte_id: cceTarget.id,
+          correcoes: [{ grupo: cceGrupo, campo: cceCampo, valor: cceValor }],
+          sequencia: 1,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(`Carta de correção registrada para o CT-e ${cceTarget.numero}`);
+      setCceTarget(null);
+      setCceCampo("");
+      setCceValor("");
+      queryClient.invalidateQueries({ queryKey: ["cte"] });
+    } catch (e: any) {
+      toast.error(`Erro na carta de correção: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInutilizar = async () => {
+    if (!inutTarget) return;
+    const just =
+      justificativa.trim().length >= 15
+        ? justificativa.trim()
+        : "CTE NAO CONSTA NA BASE DE DADOS DA SEFAZ";
+    setLoading(true);
+    try {
+      const numeroInt = parseInt(String(inutTarget.numero).replace(/\D/g, ""), 10);
+      const { data, error } = await supabase.functions.invoke("fiscal-api", {
+        body: {
+          action: "inutilizar_cte",
+          empresa_id: inutTarget.empresa_id,
+          serie: inutTarget.serie,
+          numero_inicial: numeroInt,
+          numero_final: numeroInt,
+          justificativa: just,
+          modelo,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.success === false || (data as any)?.error)
+        throw new Error((data as any).error || "Falha na inutilização");
+      await (supabase as any)
+        .from("cte")
+        .update({ status: "inutilizada", motivo_retorno: just, codigo_retorno: "102" })
+        .eq("id", inutTarget.id);
+      toast.success(`Numeração ${inutTarget.numero} inutilizada`);
+      setInutTarget(null);
+      setJustificativa("");
+      queryClient.invalidateQueries({ queryKey: ["cte"] });
+    } catch (e: any) {
+      toast.error(`Erro ao inutilizar: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCancelar = async () => {
@@ -416,6 +516,41 @@ export function CteListPage({ modelo, title, subtitle }: CteListPageProps) {
                               <Download className="h-4 w-4 mr-2" />
                               Baixar XML
                             </DropdownMenuItem>
+                            {c.chave_acesso && (
+                              <DropdownMenuItem onSelect={() => handleConsultar(c.id, c.numero)}>
+                                <SearchCheck className="h-4 w-4 mr-2" />
+                                Consultar SEFAZ
+                              </DropdownMenuItem>
+                            )}
+                            {c.status === "autorizada" && (
+                              <DropdownMenuItem
+                                onSelect={() =>
+                                  setTimeout(() => setCceTarget({ id: c.id, numero: c.numero }), 0)
+                                }
+                              >
+                                <PencilLine className="h-4 w-4 mr-2" />
+                                Carta de Correção
+                              </DropdownMenuItem>
+                            )}
+                            {["rejeitada", "denegada", "pendente"].includes(c.status) && (
+                              <DropdownMenuItem
+                                onSelect={() =>
+                                  setTimeout(
+                                    () =>
+                                      setInutTarget({
+                                        id: c.id,
+                                        numero: c.numero,
+                                        serie: c.serie,
+                                        empresa_id: c.empresa_id,
+                                      }),
+                                    0,
+                                  )
+                                }
+                              >
+                                <Ban className="h-4 w-4 mr-2" />
+                                Inutilizar numeração
+                              </DropdownMenuItem>
+                            )}
                             {c.status === "autorizada" && (
                               <DropdownMenuItem onSelect={() => handleDacte(c.id, c.numero)}>
                                 <FileText className="h-4 w-4 mr-2" />
@@ -505,6 +640,111 @@ export function CteListPage({ modelo, title, subtitle }: CteListPageProps) {
               disabled={loading}
             >
               {loading ? "Cancelando..." : "Confirmar cancelamento"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!cceTarget}
+        onOpenChange={(open) => {
+          if (!open) setCceTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Carta de Correção — CT-e {cceTarget?.numero}</AlertDialogTitle>
+            <AlertDialogDescription>
+              A CC-e não pode alterar valores, datas de emissão nem partes envolvidas na prestação.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="cce-grupo">Grupo alterado</Label>
+                <Input
+                  id="cce-grupo"
+                  value={cceGrupo}
+                  onChange={(e) => setCceGrupo(e.target.value)}
+                  placeholder="ide"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cce-campo">Campo alterado</Label>
+                <Input
+                  id="cce-campo"
+                  value={cceCampo}
+                  onChange={(e) => setCceCampo(e.target.value)}
+                  placeholder="xObs"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cce-valor">Valor corrigido (mínimo 15 caracteres)</Label>
+              <Textarea
+                id="cce-valor"
+                value={cceValor}
+                onChange={(e) => setCceValor(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleCce();
+              }}
+              disabled={loading}
+            >
+              {loading ? "Enviando..." : "Registrar correção"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!inutTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInutTarget(null);
+            setJustificativa("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Inutilizar numeração {inutTarget?.numero}</AlertDialogTitle>
+            <AlertDialogDescription>
+              A numeração da série {inutTarget?.serie} será inutilizada na SEFAZ e não poderá mais
+              ser usada.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="justificativa-inut">Justificativa</Label>
+            <Textarea
+              id="justificativa-inut"
+              value={justificativa}
+              onChange={(e) => setJustificativa(e.target.value)}
+              placeholder="CTE NAO CONSTA NA BASE DE DADOS DA SEFAZ"
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground">
+              Em branco, será usada a justificativa padrão "CTE NAO CONSTA NA BASE DE DADOS DA
+              SEFAZ".
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleInutilizar();
+              }}
+              disabled={loading}
+            >
+              {loading ? "Inutilizando..." : "Confirmar inutilização"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
