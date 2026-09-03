@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { FileText, ShoppingCart, Truck, FileSignature } from "lucide-react";
+import { FileText, ShoppingCart, Truck, FileSignature, PackageCheck, Bus } from "lucide-react";
 import { Empresa } from "@/hooks/useSupabaseData";
 import { SeriesFiscaisManager } from "@/components/empresas/SeriesFiscaisManager";
 import { cn } from "@/lib/utils";
@@ -11,20 +11,24 @@ const modelos = [
   { id: "nfce" as const, label: "NFC-e (Modelo 65)", desc: "Cupom Fiscal Eletrônico para venda ao consumidor", icon: ShoppingCart },
   { id: "mdfe" as const, label: "MDF-e (Modelo 58)", desc: "Manifesto Eletrônico para transporte de cargas", icon: Truck },
   { id: "nfse" as const, label: "NFS-e (Nacional)", desc: "Nota Fiscal de Serviço no padrão nacional (SEFIN/ADN)", icon: FileSignature },
+  { id: "cte" as const, label: "CT-e (Modelo 57)", desc: "Conhecimento de Transporte Eletrônico de cargas", icon: PackageCheck },
+  { id: "cteos" as const, label: "CT-e OS (Modelo 67)", desc: "Conhecimento de Transporte para Outros Serviços", icon: Bus },
 ];
 
 
+export type ModeloFiscal = "nfe" | "nfce" | "mdfe" | "nfse" | "cte" | "cteos";
+
 interface Props {
   empresa: Empresa;
-  selected: Set<"nfe" | "nfce" | "mdfe" | "nfse">;
-  onSelectedChange: (s: Set<"nfe" | "nfce" | "mdfe" | "nfse">) => void;
+  selected: Set<ModeloFiscal>;
+  onSelectedChange: (s: Set<ModeloFiscal>) => void;
   onContinue: () => void;
 }
 
 export function StepSeries({ empresa, selected, onSelectedChange, onContinue }: Props) {
   const [touched, setTouched] = useState(false);
 
-  const toggle = (id: "nfe" | "nfce" | "mdfe" | "nfse") => {
+  const toggle = (id: ModeloFiscal) => {
     const next = new Set(selected);
     next.has(id) ? next.delete(id) : next.add(id);
     onSelectedChange(next);
@@ -34,7 +38,7 @@ export function StepSeries({ empresa, selected, onSelectedChange, onContinue }: 
     <div className="space-y-6">
       <div>
         <h3 className="text-sm font-semibold mb-3">Quais documentos esta empresa irá emitir?</h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {modelos.map(m => {
             const active = selected.has(m.id);
             const Icon = m.icon;

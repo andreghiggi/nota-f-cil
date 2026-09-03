@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { OnboardingStepper, OnboardingStep } from "@/components/onboarding/OnboardingStepper";
 import { StepEmpresa } from "@/components/onboarding/StepEmpresa";
 import { StepCertificado } from "@/components/onboarding/StepCertificado";
-import { StepSeries } from "@/components/onboarding/StepSeries";
+import { StepSeries, ModeloFiscal } from "@/components/onboarding/StepSeries";
 import { StepToken } from "@/components/onboarding/StepToken";
 import { Empresa } from "@/hooks/useSupabaseData";
 import { ArrowLeft, CheckCircle2, Building2, ShieldCheck, FileText, Key, PartyPopper } from "lucide-react";
@@ -13,7 +13,7 @@ import { ArrowLeft, CheckCircle2, Building2, ShieldCheck, FileText, Key, PartyPo
 const steps: OnboardingStep[] = [
   { id: "empresa", label: "Empresa", description: "Dados cadastrais" },
   { id: "certificado", label: "Certificado", description: "A1 (.pfx)" },
-  { id: "series", label: "Séries e Modelos", description: "NF-e / NFC-e / MDF-e" },
+  { id: "series", label: "Séries e Modelos", description: "NF-e / NFC-e / MDF-e / CT-e" },
   { id: "token", label: "Token API", description: "Integração com ERP" },
   { id: "conclusao", label: "Conclusão", description: "Tudo pronto" },
 ];
@@ -23,7 +23,7 @@ export default function Onboarding() {
   const [current, setCurrent] = useState(0);
   const [completed, setCompleted] = useState<Set<number>>(new Set());
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
-  const [modelos, setModelos] = useState<Set<"nfe" | "nfce" | "mdfe" | "nfse">>(new Set(["nfce"]));
+  const [modelos, setModelos] = useState<Set<ModeloFiscal>>(new Set(["nfce"]));
   const [certOk, setCertOk] = useState(false);
   const [tokenOk, setTokenOk] = useState(false);
 
