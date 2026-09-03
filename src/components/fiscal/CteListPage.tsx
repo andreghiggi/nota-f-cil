@@ -12,6 +12,9 @@ import {
   FileText,
   RefreshCw,
   Trash2,
+  SearchCheck,
+  PencilLine,
+  Ban,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -81,6 +84,13 @@ export function CteListPage({ modelo, title, subtitle }: CteListPageProps) {
   const [cancelTarget, setCancelTarget] = useState<{ id: string; numero: string } | null>(null);
   const [justificativa, setJustificativa] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cceTarget, setCceTarget] = useState<{ id: string; numero: string } | null>(null);
+  const [cceGrupo, setCceGrupo] = useState("ide");
+  const [cceCampo, setCceCampo] = useState("");
+  const [cceValor, setCceValor] = useState("");
+  const [inutTarget, setInutTarget] = useState<
+    { id: string; numero: string; serie: string; empresa_id: string } | null
+  >(null);
 
   const queryClient = useQueryClient();
   const { ambiente } = useEnvironment();
@@ -198,6 +208,96 @@ export function CteListPage({ modelo, title, subtitle }: CteListPageProps) {
     }
     queryClient.invalidateQueries({ queryKey: ["cte"] });
     toast.success(`CT-e ${numero} excluído`);
+  };
+
+  const handleConsultar = async (id: string, numero: string) => {
+    toast.loading("Consultando SEFAZ...", { id: "consulta" });
+    try {
+      const { data, error } = await supabase.functions.invoke("fiscal-api", {
+        body: { action: "consult_cte_sefaz", cte_id: id },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const d = (data as any)?.data || {};
+      toast.success(`CT-e ${numero}: [${d.cStat || "-"}] ${d.xMotivo || "consulta concluída"}`, {
+        id: "consulta",
+      });
+      queryClient.invalidateQueries({ queryKey: ["cte"] });
+    } catch (e: any) {
+      toast.error(`Erro na consulta: ${e.message}`, { id: "consulta" });
+    }
+  };
+
+  const handleCce = async () => {
+    if (!cceTarget) return;
+    if (cceValor.trim().length < 15) {
+      toast.error("O valor corrigido deve ter pelo menos 15 caracteres");
+      return;
+    }
+    if (!cceCampo.trim()) {
+      toast.error("Informe o campo alterado");
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fiscal-api", {
+        body: {
+          action: "cce_cte",
+          cte_id: cceTarget.id,
+          correcoes: [{ grupo: cceGrupo, campo: cceCampo, valor: cceValor }],
+          sequencia: 1,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      toast.success(`Carta de correção registrada para o CT-e ${cceTarget.numero}`);
+      setCceTarget(null);
+      setCceCampo("");
+      setCceValor("");
+      queryClient.invalidateQueries({ queryKey: ["cte"] });
+    } catch (e: any) {
+      toast.error(`Erro na carta de correção: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleInutilizar = async () => {
+    if (!inutTarget) return;
+    const just =
+      justificativa.trim().length >= 15
+        ? justificativa.trim()
+        : "CTE NAO CONSTA NA BASE DE DADOS DA SEFAZ";
+    setLoading(true);
+    try {
+      const numeroInt = parseInt(String(inutTarget.numero).replace(/\D/g, ""), 10);
+      const { data, error } = await supabase.functions.invoke("fiscal-api", {
+        body: {
+          action: "inutilizar_cte",
+          empresa_id: inutTarget.empresa_id,
+          serie: inutTarget.serie,
+          numero_inicial: numeroInt,
+          numero_final: numeroInt,
+          justificativa: just,
+          modelo,
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.success === false || (data as any)?.error)
+        throw new Error((data as any).error || "Falha na inutilização");
+      await (supabase as any)
+        .from("cte")
+        .update({ status: "inutilizada", motivo_retorno: just, codigo_retorno: "102" })
+        .eq("id", inutTarget.id);
+      toast.success(`Numeração ${inutTarget.numero} inutilizada`);
+      setInutTarget(null);
+      setJustificativa("");
+      queryClient.invalidateQueries({ queryKey: ["cte"] });
+    } catch (e: any) {
+      toast.error(`Erro ao inutilizar: ${e.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCancelar = async () => {
@@ -416,6 +516,41 @@ export function CteListPage({ modelo, title, subtitle }: CteListPageProps) {
                               <Download className="h-4 w-4 mr-2" />
                               Baixar XML
                             </DropdownMenuItem>
+                            {c.chave_acesso && (
+                              <DropdownMenuItem onSelect={() => handleConsultar(c.id, c.numero)}>
+                                <SearchCheck className="h-4 w-4 mr-2" />
+                                Consultar SEFAZ
+                              </DropdownMenuItem>
+                            )}
+                            {c.status === "autorizada" && (
+                              <DropdownMenuItem
+                                onSelect={() =>
+                                  setTimeout(() => setCceTarget({ id: c.id, numero: c.numero }), 0)
+                                }
+                              >
+                                <PencilLine className="h-4 w-4 mr-2" />
+                                Carta de Correção
+                              </DropdownMenuItem>
+                            )}
+                            {["rejeitada", "denegada", "pendente"].includes(c.status) && (
+                              <DropdownMenuItem
+                                onSelect={() =>
+                                  setTimeout(
+                                    () =>
+                                      setInutTarget({
+                                        id: c.id,
+                                        numero: c.numero,
+                                        serie: c.serie,
+                                        empresa_id: c.empresa_id,
+                                      }),
+                                    0,
+                                  )
+                                }
+                              >
+                                <Ban className="h-4 w-4 mr-2" />
+                                Inutilizar numeração
+                              </DropdownMenuItem>
+                            )}
                             {c.status === "autorizada" && (
                               <DropdownMenuItem onSelect={() => handleDacte(c.id, c.numero)}>
                                 <FileText className="h-4 w-4 mr-2" />
