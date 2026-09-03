@@ -3207,6 +3207,15 @@ Deno.serve(async (req) => {
     if (action === 'dacte_cte') {
       return await handleCteDacte(supabase, body.cte_id);
     }
+    if (action === 'consult_cte_sefaz') {
+      return await handleCteConsultar(supabase, body.cte_id);
+    }
+    if (action === 'inutilizar_cte') {
+      return await handleCteInutilizar(
+        supabase, body.empresa_id, body.serie, body.numero_inicial, body.numero_final,
+        body.justificativa, Number(body.modelo || 57),
+      );
+    }
 
 
 
@@ -4443,3 +4452,113 @@ async function handleCteDacte(supabase: any, cteId: string) {
   return new Response(JSON.stringify({ success: true, data: { pdf: data.pdf } }),
     { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 }
+
+async function handleCteConsultar(supabase: any, cteId: string) {
+  const { data: cte } = await supabase.from('cte').select('*').eq('id', cteId).single();
+  if (!cte) {
+    return new Response(JSON.stringify({ error: 'CT-e não encontrado' }),
+      { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  if (!cte.chave_acesso) {
+    return new Response(JSON.stringify({ error: 'CT-e sem chave de acesso — não é possível consultar na SEFAZ' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const { empresa, certificate } = await ensureRegistered(supabase, cte.empresa_id);
+  if (!empresa?.api_key_fiscal) {
+    return new Response(JSON.stringify({ error: 'Empresa não registrada' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const payload: any = { api_key: empresa.api_key_fiscal, chave: cte.chave_acesso };
+  if (certificate) payload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
+
+  const resp = await fetch(`${FISCAL_API_BASE_URL}/cte/consultar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${empresa.api_key_fiscal}` },
+    body: JSON.stringify(payload),
+  });
+  const text = await resp.text();
+  let data: any; try { data = JSON.parse(text); } catch { data = { raw: text.substring(0, 400) }; }
+  console.log(`📡 CT-e consulta (${resp.status}):`, text.substring(0, 300));
+
+  if (!resp.ok || data.erro || data.error) {
+    return new Response(JSON.stringify({ error: 'Erro ao consultar CT-e na SEFAZ', details: data }),
+      { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const cStat = String(data.cStat || '');
+  const update: any = {
+    codigo_retorno: cStat || cte.codigo_retorno,
+    motivo_retorno: data.xMotivo || cte.motivo_retorno,
+  };
+  if (cStat === '100' || cStat === '150') {
+    update.status = 'autorizada';
+    update.protocolo = data.protocolo || cte.protocolo;
+    update.data_autorizacao = cte.data_autorizacao || new Date().toISOString();
+    update.erro_processamento = null;
+  } else if (cStat === '101' || cStat === '135' || cStat === '155') {
+    update.status = 'cancelada';
+  } else if (cStat === '110' || cStat === '301' || cStat === '302') {
+    update.status = 'denegada';
+  }
+  if (cte.status !== 'cancelada') {
+    await supabase.from('cte').update(update).eq('id', cteId);
+  }
+
+  return new Response(JSON.stringify({ success: true, data: { id: cteId, ...update, cStat, xMotivo: data.xMotivo } }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
+async function handleCteInutilizar(
+  supabase: any, empresaId: string, serie: string, numeroInicial: number,
+  numeroFinal: number, justificativa?: string, modelo = 57,
+) {
+  if (!empresaId || !numeroInicial) {
+    return new Response(JSON.stringify({ error: 'empresa_id, serie e numero_inicial são obrigatórios' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+  const just = justificativa && justificativa.length >= 15
+    ? justificativa
+    : 'CTE NAO CONSTA NA BASE DE DADOS DA SEFAZ';
+
+  const { empresa, certificate } = await ensureRegistered(supabase, empresaId);
+  if (!empresa?.api_key_fiscal) {
+    return new Response(JSON.stringify({ error: 'Empresa não registrada' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const payload: any = {
+    api_key: empresa.api_key_fiscal,
+    serie: parseInt(String(serie || '1').replace(/\D/g, ''), 10) || 1,
+    numero_inicial: Number(numeroInicial),
+    numero_final: Number(numeroFinal || numeroInicial),
+    justificativa: just,
+    modelo,
+  };
+  if (certificate) payload.certificado = { pfx_base64: certificate.base64, senha: certificate.senha };
+
+  const resp = await fetch(`${FISCAL_API_BASE_URL}/cte/inutilizar?api_key=${encodeURIComponent(empresa.api_key_fiscal)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${empresa.api_key_fiscal}` },
+    body: JSON.stringify(payload),
+  });
+  const text = await resp.text();
+  let data: any; try { data = JSON.parse(text); } catch { data = { raw: text.substring(0, 400) }; }
+  console.log(`📡 CT-e inutilizar (${resp.status}):`, text.substring(0, 300));
+
+  if (!resp.ok || data.erro || data.error || data.sucesso === false) {
+    return new Response(JSON.stringify({ error: data.erro || data.error || 'Erro ao inutilizar CT-e', details: data }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  }
+
+  const tipo = modelo === 67 ? 'cteos' : 'cte';
+  await supabase.rpc('registrar_log', {
+    p_empresa_id: empresaId, p_nfce_id: null, p_token_api_id: null,
+    p_tipo: 'sucesso', p_categoria: 'inutilizacao',
+    p_mensagem: `Numeração ${tipo} série ${serie} ${numeroInicial}-${numeroFinal || numeroInicial} inutilizada`,
+    p_detalhes: { modelo, protocolo: data.protocolo, cStat: data.cStat },
+  });
+
+  return new Response(JSON.stringify({ success: true, data }),
+    { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+}
+
