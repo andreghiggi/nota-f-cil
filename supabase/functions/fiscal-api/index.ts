@@ -2978,6 +2978,68 @@ Deno.serve(async (req) => {
         }
       }
 
+      // CT-e (57) e CT-e OS (67)
+      {
+        let qc = supabase
+          .from('cte')
+          .select('id, empresa_id, numero, serie, modelo, motivo_retorno, erro_processamento')
+          .eq('status', 'rejeitada')
+          .gte('data_emissao', inicio)
+          .lt('data_emissao', fim)
+          .limit(500);
+        if (empresa_id) qc = qc.eq('empresa_id', empresa_id);
+        const { data: ctes, error: cteErr } = await qc;
+        if (cteErr) {
+          console.error('inutilizar_rejeitadas_do_dia: erro ao listar cte:', cteErr.message);
+        } else {
+          for (const doc of (ctes || [])) {
+            const d: any = doc;
+            const msg = `${d.motivo_retorno || ''} ${d.erro_processamento || ''}`;
+            if (/539|duplicid/i.test(msg)) {
+              resumo.ignoradas_duplicidade++;
+              continue;
+            }
+            resumo.analisadas++;
+            const tabela = Number(d.modelo) === 67 ? 'cteos' : 'cte';
+            const numeroInt = parseInt(String(d.numero).replace(/\D/g, ''), 10);
+            if (!numeroInt) continue;
+            if (dryRun) {
+              resumo.itens.push({ tabela, numero: d.numero, serie: d.serie, resultado: 'seria inutilizada' });
+              continue;
+            }
+            try {
+              const resp = await handleCteInutilizar(
+                supabase, d.empresa_id, d.serie, numeroInt, numeroInt,
+                'CTE NAO CONSTA NA BASE DE DADOS DA SEFAZ', Number(d.modelo) || 57,
+              );
+              const respJson = await resp.clone().json().catch(() => ({}));
+              if (resp.ok && (respJson as any)?.success) {
+                resumo.inutilizadas++;
+                resumo.itens.push({ tabela, numero: d.numero, serie: d.serie, resultado: 'inutilizada' });
+                await supabase.from('cte').update({
+                  status: 'inutilizada' as any,
+                  motivo_retorno: 'CTE NAO CONSTA NA BASE DE DADOS DA SEFAZ',
+                  codigo_retorno: '102',
+                  erro_processamento: null,
+                }).eq('id', d.id);
+              } else {
+                resumo.falhas++;
+                resumo.itens.push({
+                  tabela, numero: d.numero, serie: d.serie,
+                  resultado: 'falha na inutilização',
+                  detalhe: String((respJson as any)?.error || '').substring(0, 200),
+                });
+              }
+            } catch (e) {
+              resumo.falhas++;
+              resumo.itens.push({ tabela, numero: d.numero, serie: d.serie, resultado: `erro: ${(e as Error)?.message}` });
+            }
+          }
+        }
+      }
+
+
+
       console.log(`🧹 inutilizar_rejeitadas_do_dia ${alvo}:`, JSON.stringify({ ...resumo, itens: undefined }));
       return new Response(
         JSON.stringify({ success: true, ...resumo }),
