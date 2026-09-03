@@ -302,15 +302,35 @@ Deno.serve(async (req) => {
       await supabase.rpc('release_job_lock', { p_key: 'job:tick', p_owner: tickOwner });
     }
 
+    const erros = resultados.filter((r: any) => r?.resultado === 'erro').length;
+    if (tickRunId) {
+      await supabase.rpc('job_run_finish', {
+        p_run_id: tickRunId,
+        p_status: erros > 0 ? 'error' : 'ok',
+        p_processed: resultados.length,
+        p_errors: erros,
+        p_erro: erros > 0 ? 'uma ou mais tarefas falharam' : null,
+        p_detalhes: { resultados, minutos_parado: minutosParado },
+      });
+    }
+
     return new Response(
-      JSON.stringify({ success: true, duracao_ms: Date.now() - inicio, resultados }),
+      JSON.stringify({ success: true, duracao_ms: Date.now() - inicio, minutos_parado: minutosParado, resultados }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (e) {
     console.error('tick erro:', e);
+    const msg = (e as Error)?.message ?? String(e);
+    if (tickRunId) {
+      await supabase.rpc('job_run_finish', {
+        p_run_id: tickRunId, p_status: 'error', p_processed: 0, p_errors: 1,
+        p_erro: msg.slice(0, 1000), p_detalhes: null,
+      }).catch?.(() => {});
+    }
     return new Response(
-      JSON.stringify({ success: false, error: (e as Error)?.message ?? String(e), resultados }),
+      JSON.stringify({ success: false, error: msg, resultados }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
+
 });
