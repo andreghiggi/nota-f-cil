@@ -46,3 +46,7 @@ verify_jwt = false
 [functions.process-nfse-queue]
 verify_jwt = false
 
+[functions.cte-api]
+verify_jwt = false
+
+
