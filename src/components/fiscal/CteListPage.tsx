@@ -644,6 +644,111 @@ export function CteListPage({ modelo, title, subtitle }: CteListPageProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <AlertDialog
+        open={!!cceTarget}
+        onOpenChange={(open) => {
+          if (!open) setCceTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Carta de Correção — CT-e {cceTarget?.numero}</AlertDialogTitle>
+            <AlertDialogDescription>
+              A CC-e não pode alterar valores, datas de emissão nem partes envolvidas na prestação.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="cce-grupo">Grupo alterado</Label>
+                <Input
+                  id="cce-grupo"
+                  value={cceGrupo}
+                  onChange={(e) => setCceGrupo(e.target.value)}
+                  placeholder="ide"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cce-campo">Campo alterado</Label>
+                <Input
+                  id="cce-campo"
+                  value={cceCampo}
+                  onChange={(e) => setCceCampo(e.target.value)}
+                  placeholder="xObs"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="cce-valor">Valor corrigido (mínimo 15 caracteres)</Label>
+              <Textarea
+                id="cce-valor"
+                value={cceValor}
+                onChange={(e) => setCceValor(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleCce();
+              }}
+              disabled={loading}
+            >
+              {loading ? "Enviando..." : "Registrar correção"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={!!inutTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setInutTarget(null);
+            setJustificativa("");
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Inutilizar numeração {inutTarget?.numero}</AlertDialogTitle>
+            <AlertDialogDescription>
+              A numeração da série {inutTarget?.serie} será inutilizada na SEFAZ e não poderá mais
+              ser usada.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="justificativa-inut">Justificativa</Label>
+            <Textarea
+              id="justificativa-inut"
+              value={justificativa}
+              onChange={(e) => setJustificativa(e.target.value)}
+              placeholder="CTE NAO CONSTA NA BASE DE DADOS DA SEFAZ"
+              rows={3}
+            />
+            <p className="text-xs text-muted-foreground">
+              Em branco, será usada a justificativa padrão "CTE NAO CONSTA NA BASE DE DADOS DA
+              SEFAZ".
+            </p>
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={loading}>Voltar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleInutilizar();
+              }}
+              disabled={loading}
+            >
+              {loading ? "Inutilizando..." : "Confirmar inutilização"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }
