@@ -319,6 +319,44 @@ Deno.serve(async (req) => {
       return ok(fr.data);
     }
 
+    // ---------- POST /cte-api/:id/consultar ----------
+    if (method === 'POST' && sub.length === 2 && sub[1] === 'consultar') {
+      if (!has('consultar')) return err('Permission denied', 'PERMISSION_DENIED', 403);
+      const { data: cte } = await supabase.from('cte').select('id, chave_acesso')
+        .eq('id', sub[0]).eq('empresa_id', empresa_id).maybeSingle();
+      if (!cte) return err('CT-e not found', 'NOT_FOUND', 404);
+      if (!cte.chave_acesso) return err('CT-e sem chave de acesso', 'INVALID_STATUS');
+      const { data: fr, error: fe } = await supabase.functions.invoke('fiscal-api', {
+        body: { action: 'consult_cte_sefaz', cte_id: cte.id }
+      });
+      if (fe || !fr?.success) return err('Erro ao consultar na SEFAZ: ' + await extractInvokeError(fe, fr), 'SEFAZ_ERROR', 502);
+      return ok(fr.data);
+    }
+
+    // ---------- POST /cte-api/inutilizar ----------
+    if (method === 'POST' && sub.length === 1 && sub[0] === 'inutilizar') {
+      if (!has('emitir_cte') && !has('emitir')) return err('Permission denied', 'PERMISSION_DENIED', 403);
+      const body = await req.json().catch(() => ({}));
+      const numeroInicial = Number(body.numero_inicial ?? body.numero);
+      if (!numeroInicial || numeroInicial <= 0)
+        return err('numero_inicial é obrigatório', 'VALIDATION_ERROR');
+      const modelo = Number(body.modelo ?? 57);
+      if (![57, 67].includes(modelo)) return err('modelo deve ser 57 ou 67', 'VALIDATION_ERROR');
+      const { data: fr, error: fe } = await supabase.functions.invoke('fiscal-api', {
+        body: {
+          action: 'inutilizar_cte',
+          empresa_id,
+          serie: String(body.serie ?? '1'),
+          numero_inicial: numeroInicial,
+          numero_final: Number(body.numero_final ?? numeroInicial),
+          justificativa: body.justificativa,
+          modelo,
+        }
+      });
+      if (fe || !fr?.success) return err('Erro ao inutilizar: ' + await extractInvokeError(fe, fr), 'SEFAZ_ERROR', 502);
+      return ok(fr.data);
+    }
+
     // ---------- POST /cte-api/:id/reprocessar ----------
     if (method === 'POST' && sub.length === 2 && sub[1] === 'reprocessar') {
       if (!has('emitir_cte') && !has('emitir')) return err('Permission denied', 'PERMISSION_DENIED', 403);
