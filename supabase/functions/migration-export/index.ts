@@ -1,192 +1,194 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
+import postgres from 'npm:postgres@3.4.4'
 
-// Gera token no formato ff_<48 chars> e retorna { plain, hash, prefix }
-async function gerarToken() {
-  const bytes = new Uint8Array(36)
-  crypto.getRandomValues(bytes)
-  const b64 = btoa(String.fromCharCode(...bytes))
-    .replace(/\+/g, '')
-    .replace(/\//g, '')
-    .replace(/=/g, '')
-    .slice(0, 48)
-  const plain = `ff_${b64}`
-  const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(plain))
-  const hash = Array.from(new Uint8Array(hashBuf))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('')
-  return { plain, hash, prefix: plain.slice(0, 12) }
-}
+const PROJECT_REF = 'vdzkhealunurfgrujekg'
+
+const TABLES = [
+  'empresas',
+  'certificados_digitais',
+  'tokens_api',
+  'user_roles',
+  'nfce',
+  'nfce_itens',
+  'nfce_eventos',
+  'nfe',
+  'nfe_itens',
+  'nfe_eventos',
+  'mdfe',
+  'mdfe_documentos',
+  'mdfe_eventos',
+  'cte',
+  'cte_documentos',
+  'cte_eventos',
+  'nfse',
+  'series_fiscais',
+  'series_numeros_liberados',
+  'configuracoes_fiscais',
+  'dfe_recebidas',
+  'dfe_eventos',
+  'dfe_distribuicao_controle',
+  'logs_fiscais',
+  'fila_processamento',
+  'fila_processamento_nfe',
+  'fila_processamento_mdfe',
+  'fila_processamento_cte',
+  'fila_processamento_nfse',
+  'nfce_contingencia_queue',
+  'job_runs',
+  'job_locks',
+  'job_circuit',
+  'webhooks',
+  'webhook_logs',
+]
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  })
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  try {
-    const token = req.headers.get('x-migration-token') ||
-                  req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
-    const expected = Deno.env.get('MIGRATION_TOKEN')
+  // ---- Auth (somente header x-migration-token) ----
+  const token =
+    req.headers.get('x-migration-token') ||
+    req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
+  const expected = Deno.env.get('MIGRATION_TOKEN')
+  if (!expected || !token || token !== expected) {
+    return json({ error: 'unauthorized' }, 401)
+  }
 
-    if (!expected || !token || token !== expected) {
-      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-        status: 401,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+  const url = new URL(req.url)
+  const mode = url.searchParams.get('mode')
+  const resource = url.searchParams.get('resource')
+  const table = url.searchParams.get('table')
+  const offset = Math.max(0, parseInt(url.searchParams.get('offset') ?? '0', 10) || 0)
+  const limit = Math.min(2000, Math.max(1, parseInt(url.searchParams.get('limit') ?? '500', 10) || 500))
+
+  // ---- ping (rápido, sem tocar no banco) ----
+  if (mode === 'ping' || (!resource && !table)) {
+    return json({ ok: true, project: PROJECT_REF, tables: TABLES })
+  }
+
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+  )
+
+  try {
+    // ---- export de tabela paginado ----
+    if (table) {
+      if (!TABLES.includes(table)) {
+        return json({ error: 'table_not_allowed', table, tables: TABLES }, 400)
+      }
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .range(offset, offset + limit - 1)
+      if (error) throw error
+      const rows = data ?? []
+      return json({ table, offset, limit, rows, has_more: rows.length === limit })
+    }
+
+    // ---- auth.users + auth.identities (com hash de senha) ----
+    if (resource === 'auth-users') {
+      const dbUrl = Deno.env.get('SUPABASE_DB_URL')
+      if (!dbUrl) return json({ error: 'db_unavailable' }, 503)
+      const sql = postgres(dbUrl, { prepare: false, max: 1, idle_timeout: 5 })
+      try {
+        const users = await sql`
+          SELECT id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
+                 invited_at, confirmation_sent_at, recovery_sent_at, last_sign_in_at,
+                 raw_app_meta_data, raw_user_meta_data, is_super_admin, is_sso_user,
+                 phone, phone_confirmed_at, banned_until, deleted_at,
+                 created_at, updated_at
+            FROM auth.users
+           ORDER BY created_at
+           LIMIT ${limit} OFFSET ${offset}
+        `
+        const ids = users.map((u: any) => u.id)
+        const identities = ids.length
+          ? await sql`
+              SELECT id, user_id, provider, provider_id, identity_data,
+                     last_sign_in_at, created_at, updated_at
+                FROM auth.identities
+               WHERE user_id = ANY(${sql.array(ids)}::uuid[])
+            `
+          : []
+        return json({
+          resource: 'auth-users',
+          offset,
+          limit,
+          users,
+          identities,
+          has_more: users.length === limit,
+        })
+      } finally {
+        await sql.end({ timeout: 5 })
+      }
+    }
+
+    // ---- storage: só listagem de paths ----
+    if (resource === 'storage-list') {
+      const bucket = url.searchParams.get('bucket') ?? 'certificados'
+      const prefix = url.searchParams.get('prefix') ?? ''
+      const { data, error } = await supabase.storage.from(bucket).list(prefix, {
+        limit,
+        offset,
+        sortBy: { column: 'name', order: 'asc' },
+      })
+      if (error) throw error
+      const objects = (data ?? []).map((o: any) => ({
+        name: prefix ? `${prefix}/${o.name}` : o.name,
+        id: o.id,
+        metadata: o.metadata,
+      }))
+      return json({
+        resource: 'storage-list',
+        bucket,
+        prefix,
+        offset,
+        limit,
+        objects,
+        has_more: objects.length === limit,
       })
     }
 
-    const url = new URL(req.url)
-    // ?regenerate=1 => cria um novo token por empresa e devolve o valor em claro (só aparece agora)
-    // ?regenerate=1&empresa_id=xxx => regenera só uma empresa
-    // ?fix_permissions=1 => atualiza tokens com permissões pontilhadas para o formato legado das APIs
-    const regenerate = url.searchParams.get('regenerate') === '1'
-    const fixPermissions = url.searchParams.get('fix_permissions') === '1'
-    const empresaFilter = url.searchParams.get('empresa_id')
-    const cnpjFilter = (url.searchParams.get('cnpj') || '').replace(/\D/g, '')
-
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    )
-
-    const PERMISSOES_LEGADO = [
-      'emitir_nfe', 'emitir_nfce', 'emitir_mdfe', 'emitir_cte', 'emitir_nfse',
-      'emitir', 'consultar', 'cancelar', 'inutilizar', 'manifestar', 'gerenciar',
-      'reprocessar',
-    ]
-
-    if (fixPermissions) {
-      let tokensQuery = supabase
-        .from('tokens_api')
-        .select('id, empresa_id, token_prefix, permissoes, status')
-        .eq('status', 'ativo')
-      if (empresaFilter) tokensQuery = tokensQuery.eq('empresa_id', empresaFilter)
-
-      const { data: tokens, error: eTok } = await tokensQuery
-      if (eTok) throw eTok
-
-      let empresaIdsFilter: Set<string> | null = null
-      if (cnpjFilter) {
-        const { data: emps, error: eEmp } = await supabase
-          .from('empresas')
-          .select('id, cnpj')
-          .eq('cnpj', cnpjFilter)
-        if (eEmp) throw eEmp
-        empresaIdsFilter = new Set((emps ?? []).map((e: any) => e.id))
+    // ---- contagem por tabela (planejamento da migração) ----
+    if (resource === 'counts') {
+      const counts: Record<string, number | string> = {}
+      for (const t of TABLES) {
+        const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true })
+        counts[t] = error ? `erro: ${error.message}` : (count ?? 0)
       }
-
-      const atualizados: any[] = []
-      for (const t of tokens ?? []) {
-        if (empresaIdsFilter && !empresaIdsFilter.has(t.empresa_id)) continue
-        const current = Array.isArray(t.permissoes) ? t.permissoes : []
-        const hasDotted = current.some((p: string) => typeof p === 'string' && p.includes('.'))
-        const missingLegacy = PERMISSOES_LEGADO.some((p) => !current.includes(p))
-        if (!hasDotted && !missingLegacy) continue
-
-        const merged = Array.from(new Set([...current, ...PERMISSOES_LEGADO]))
-        const { error: eUp } = await supabase
-          .from('tokens_api')
-          .update({ permissoes: merged })
-          .eq('id', t.id)
-        if (eUp) {
-          atualizados.push({ id: t.id, prefix: t.token_prefix, erro: eUp.message })
-        } else {
-          atualizados.push({ id: t.id, prefix: t.token_prefix, permissoes: merged })
-        }
-      }
-
-      return new Response(
-        JSON.stringify({
-          modo: 'fix_permissions',
-          atualizados: atualizados.length,
-          tokens: atualizados,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
+      return json({ resource: 'counts', counts })
     }
 
-    let empresasQuery = supabase
-      .from('empresas')
-      .select('id, razao_social, nome_fantasia, cnpj, cpf, tipo_pessoa, inscricao_estadual, uf, municipio, codigo_municipio, ambiente, regime_tributario, ativo, created_at')
-      .order('razao_social', { ascending: true })
-
-    if (empresaFilter) empresasQuery = empresasQuery.eq('id', empresaFilter)
-    if (cnpjFilter) empresasQuery = empresasQuery.eq('cnpj', cnpjFilter)
-
-    const { data: empresas, error: e1 } = await empresasQuery
-    if (e1) throw e1
-
-    const { data: tokensExistentes, error: e2 } = await supabase
-      .from('tokens_api')
-      .select('id, empresa_id, nome, token_prefix, status, permissoes, ultimo_uso, expires_at, created_at')
-    if (e2) throw e2
-
-    const byEmpresa = new Map<string, any[]>()
-    for (const t of tokensExistentes ?? []) {
-      const arr = byEmpresa.get(t.empresa_id) ?? []
-      arr.push(t)
-      byEmpresa.set(t.empresa_id, arr)
+    // ---- dados de conexão (sem expor senha) ----
+    if (resource === 'db-uri') {
+      const dbUrl = Deno.env.get('SUPABASE_DB_URL')
+      if (!dbUrl) return json({ 'db-uri': 'unavailable' })
+      try {
+        const u = new URL(dbUrl)
+        return json({
+          hint: 'Grave CLOUD_DATABASE_URL na VPS em /opt/apps/agilize-apis/config/.pgpass — não repita a senha no chat',
+          pooler_host: u.hostname,
+          port: Number(u.port || 5432),
+          user: decodeURIComponent(u.username),
+          database: u.pathname.replace(/^\//, '') || 'postgres',
+        })
+      } catch {
+        return json({ 'db-uri': 'unavailable' })
+      }
     }
 
-    const result: any[] = []
-    for (const e of empresas ?? []) {
-      const item: any = {
-        ...e,
-        tokens_existentes: byEmpresa.get(e.id) ?? [],
-      }
-
-      if (regenerate) {
-        const { plain, hash, prefix } = await gerarToken()
-        const { data: novo, error: eIns } = await supabase
-          .from('tokens_api')
-          .insert({
-            empresa_id: e.id,
-            nome: `Migração ${new Date().toISOString().slice(0, 10)}`,
-            token_hash: hash,
-            token_prefix: prefix,
-            status: 'ativo',
-            permissoes: [
-              // Formato legado exigido por nfe-api / nfce-api / mdfe-api / management-api
-              'emitir_nfe', 'emitir_nfce', 'emitir_mdfe', 'emitir_cte', 'emitir_nfse',
-              'emitir', 'consultar', 'cancelar', 'inutilizar', 'manifestar', 'gerenciar',
-              'reprocessar',
-            ],
-          })
-          .select('id, nome, token_prefix, permissoes, created_at')
-          .single()
-        if (eIns) {
-          item.token_novo_erro = eIns.message
-        } else {
-          item.token_novo = {
-            id: novo!.id,
-            nome: novo!.nome,
-            prefix: novo!.token_prefix,
-            token_plain: plain, // VISÍVEL APENAS AGORA
-            permissoes: novo!.permissoes,
-            aviso: 'Copie este token agora. Ele não poderá ser recuperado depois.',
-          }
-        }
-      }
-
-      result.push(item)
-    }
-
-    return new Response(
-      JSON.stringify({
-        modo: regenerate ? 'regenerar' : 'listar',
-        total_empresas: result.length,
-        aviso: regenerate
-          ? 'Novos tokens foram criados. Os valores em claro só aparecem nesta resposta — salve o JSON.'
-          : 'Tokens existentes têm apenas hash — o valor original não é recuperável. Use ?regenerate=1 para criar novos.',
-        empresas: result,
-      }, null, 2),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-    )
+    return json({ error: 'unknown_request', usage: ['?mode=ping', '?table=NOME&offset=0&limit=500', '?resource=auth-users', '?resource=storage-list&bucket=certificados', '?resource=counts', '?resource=db-uri'] }, 400)
   } catch (err) {
     console.error('migration-export error', err)
-    return new Response(JSON.stringify({ error: String((err as Error)?.message ?? err) }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+    return json({ error: String((err as Error)?.message ?? err) }, 500)
   }
 })
