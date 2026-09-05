@@ -158,6 +158,22 @@ Deno.serve(async (req) => {
       })
     }
 
+    // ---- storage: download de um objeto em base64 ----
+    if (resource === 'storage-download') {
+      const bucket = url.searchParams.get('bucket') ?? 'certificados'
+      const path = url.searchParams.get('path') ?? ''
+      if (!path) return json({ error: 'path_required' }, 400)
+      const { data, error } = await supabase.storage.from(bucket).download(path)
+      if (error || !data) return json({ error: 'not_found', bucket, path }, 404)
+      const buf = new Uint8Array(await data.arrayBuffer())
+      let bin = ''
+      const CH = 0x8000
+      for (let i = 0; i < buf.length; i += CH) {
+        bin += String.fromCharCode(...buf.subarray(i, i + CH))
+      }
+      return json({ bucket, path, size: buf.length, data_b64: btoa(bin) })
+    }
+
     // ---- contagem por tabela (planejamento da migração) ----
     if (resource === 'counts') {
       const counts: Record<string, number | string> = {}
