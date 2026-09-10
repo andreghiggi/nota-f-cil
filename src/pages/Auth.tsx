@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FileText, Eye, EyeOff, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, ArrowRight, Loader2 } from "lucide-react";
+import brandIcon from "@/assets/emit-smart-icone.svg";
+
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -101,9 +103,8 @@ export default function Auth() {
         <div className="absolute inset-0 bg-gradient-to-br from-primary/20 to-transparent" />
         <div className="relative z-10 flex flex-col justify-between p-12 w-full">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sidebar-primary">
-              <FileText className="h-5 w-5 text-sidebar-primary-foreground" />
-            </div>
+            <img src={brandIcon} alt="Emit Smart" className="h-10 w-10 rounded-lg" />
+
             <div>
               <span className="text-lg font-semibold text-sidebar-foreground">NFC-e SaaS</span>
             </div>
@@ -147,9 +148,8 @@ export default function Auth() {
         <div className="w-full max-w-md space-y-8">
           {/* Mobile logo */}
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
-              <FileText className="h-5 w-5 text-primary-foreground" />
-            </div>
+            <img src={brandIcon} alt="Emit Smart" className="h-10 w-10 rounded-lg" />
+
             <span className="text-lg font-semibold text-foreground">NFC-e SaaS</span>
           </div>
 
