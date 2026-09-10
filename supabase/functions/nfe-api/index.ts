@@ -2,7 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-api-key, x-partner-key',
   'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 };
 
@@ -531,17 +531,47 @@ Deno.serve(async (req) => {
         );
       }
 
-      // Create empresa owned by the platform admin so it is manageable in the panel
-      // (API-driven registration has no authenticated user)
+      // ===== Parceiro (opcional). Sem chave => comportamento atual (i9) =====
+      // Chave enviada no header x-partner-key ou no corpo (partner_key / chave_parceiro).
+      const partnerKey = (req.headers.get('x-partner-key') || body.partner_key || body.chave_parceiro || '').trim();
+      let parceiroId: string | null = null;
+      if (partnerKey) {
+        const partnerHash = await hashToken(partnerKey);
+        const { data: parceiroValido } = await supabase
+          .rpc('validar_chave_parceiro', { _chave_hash: partnerHash });
+        const resolvido = Array.isArray(parceiroValido) ? parceiroValido[0] : parceiroValido;
+        parceiroId = (typeof resolvido === 'string' ? resolvido : resolvido?.id) ?? null;
+        if (!parceiroId) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Chave de parceiro inválida ou inativa.', code: 'PARTNER_INVALID' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      // Dono da empresa: usuário do parceiro quando houver; senão o admin da plataforma
+      // (cadastro via API não tem usuário autenticado).
       let ownerUserId = '00000000-0000-0000-0000-000000000000';
-      const { data: adminRole } = await supabase
-        .from('user_roles')
-        .select('user_id, created_at')
-        .eq('role', 'admin')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .maybeSingle();
-      if (adminRole?.user_id) ownerUserId = adminRole.user_id;
+      if (parceiroId) {
+        const { data: parceiroUser } = await supabase
+          .from('parceiro_usuarios')
+          .select('user_id, created_at')
+          .eq('parceiro_id', parceiroId)
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (parceiroUser?.user_id) ownerUserId = parceiroUser.user_id;
+      }
+      if (ownerUserId === '00000000-0000-0000-0000-000000000000') {
+        const { data: adminRole } = await supabase
+          .from('user_roles')
+          .select('user_id, created_at')
+          .eq('role', 'admin')
+          .order('created_at', { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (adminRole?.user_id) ownerUserId = adminRole.user_id;
+      }
 
       const empresaInsert: any = {
         user_id: ownerUserId,
@@ -560,6 +590,7 @@ Deno.serve(async (req) => {
         telefone: body.telefone ? String(body.telefone).replace(/\D/g, '') : null,
         ambiente: 'homologacao',
       };
+      if (parceiroId) empresaInsert.parceiro_id = parceiroId;
       if (tipoPessoa === 'PF') {
         empresaInsert.cpf = cnpjClean;
         empresaInsert.inscricao_estadual = inscricao_estadual || null;

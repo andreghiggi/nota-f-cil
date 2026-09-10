@@ -456,6 +456,74 @@ app.post('/webhooks/fiscal', (req, res) => {
   </tbody>
 </table>
 
+<hr>
+
+<h2>11. Reforma Tributária — IBS, CBS e Imposto Seletivo</h2>
+<div class="info">
+  Os grupos da Reforma Tributária são <strong>opcionais</strong>. Só entram no XML quando o ERP envia
+  <code>enviar_ibs_cbs: true</code>. Sem esse indicador, a emissão segue exatamente como hoje.
+</div>
+<table>
+  <thead><tr><th>Campo (por item)</th><th>Descrição</th></tr></thead>
+  <tbody>
+    <tr><td><code>cst_ibs_cbs</code></td><td>CST do IBS/CBS (ex.: 000)</td></tr>
+    <tr><td><code>c_class_trib</code></td><td>Código de classificação tributária</td></tr>
+    <tr><td><code>vbc_ibs_cbs</code></td><td>Base de cálculo do IBS/CBS</td></tr>
+    <tr><td><code>aliquota_ibs_uf</code></td><td>Alíquota do IBS estadual (%)</td></tr>
+    <tr><td><code>aliquota_ibs_mun</code></td><td>Alíquota do IBS municipal (%)</td></tr>
+    <tr><td><code>aliquota_cbs</code></td><td>Alíquota da CBS (%)</td></tr>
+    <tr><td><code>p_red_aliq_ibs_uf</code> / <code>p_red_aliq_ibs_mun</code> / <code>p_red_aliq_cbs</code></td><td>Percentuais de redução de alíquota</td></tr>
+    <tr><td><code>valor_dif_ibs_uf</code> / <code>valor_dif_ibs_mun</code> / <code>valor_dif_cbs</code></td><td>Valores diferidos</td></tr>
+    <tr><td><code>cst_is</code>, <code>c_class_trib_is</code>, <code>vbc_is</code>, <code>aliquota_is</code></td><td>Imposto Seletivo (quando aplicável)</td></tr>
+    <tr><td><code>ind_doacao</code>, <code>ind_bem_movel_usado</code></td><td>Indicadores especiais da operação</td></tr>
+  </tbody>
+</table>
+<pre><code>{
+  "external_id": "PED-2026-001",
+  "enviar_ibs_cbs": true,
+  "itens": [{
+    "codigo": "PROD001",
+    "descricao": "Produto exemplo",
+    "ncm": "61091000",
+    "cfop": "5102",
+    "unidade": "UN",
+    "quantidade": 1,
+    "valor_unitario": 100.00,
+    "csosn": "102",
+    "cst_ibs_cbs": "000",
+    "c_class_trib": "000001",
+    "vbc_ibs_cbs": 100.00,
+    "aliquota_ibs_uf": 0.10,
+    "aliquota_ibs_mun": 0.05,
+    "aliquota_cbs": 0.90
+  }]
+}</code></pre>
+
+<hr>
+
+<h2>12. Cadastro automático de empresa (chave de parceiro)</h2>
+<p><span class="badge post">POST</span> <code>/nfe-api/register</code></p>
+<p>Enviando o header <code>x-partner-key</code>, a empresa nasce dentro da conta do parceiro e fica isolada das demais.
+Sem esse header, o comportamento atual é mantido.</p>
+<pre><code>POST /nfe-api/register
+x-partner-key: pk_sua_chave_de_parceiro
+
+{
+  "cnpj": "12345678000199",
+  "razao_social": "Empresa Exemplo LTDA",
+  "nome_fantasia": "Exemplo",
+  "inscricao_estadual": "1234567890",
+  "uf": "SP",
+  "municipio": "SAO PAULO",
+  "codigo_municipio": "3550308",
+  "regime_tributario": "simples_nacional"
+}
+
+// 201
+{ "success": true, "data": { "api_key": "sk_live_...", "empresa_id": "uuid", "ambiente": "homologacao" } }
+// 401 PARTNER_INVALID  -> chave de parceiro inválida ou inativa
+// 409 ALREADY_REGISTERED -> CNPJ/CPF já cadastrado</code></pre>
+
 <footer>
   Documentação API NF-e — Fiscal Flow &bull; Gerado em Março 2026
 </footer>

@@ -18,6 +18,7 @@ import {
   Bus,
   ChevronDown,
   Layers,
+  Handshake,
 } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
@@ -34,6 +35,7 @@ const topLevel: NavItem[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard },
   { name: "Empresas", href: "/empresas", icon: Building2 },
   { name: "Novo Cliente", href: "/onboarding", icon: Rocket },
+  { name: "Parceiros", href: "/parceiros", icon: Handshake },
 ];
 
 const groups: NavGroup[] = [
