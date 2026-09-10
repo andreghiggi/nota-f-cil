@@ -24,6 +24,8 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import brandIcon from "@/assets/emit-smart-icone.svg";
+
 
 type NavItem = { name: string; href: string; icon: typeof FileText };
 type NavGroup = { id: string; name: string; icon: typeof FileText; items: NavItem[] };
@@ -137,9 +139,8 @@ export function AppSidebar() {
     <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-sidebar flex flex-col">
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
-          <FileText className="h-5 w-5 text-sidebar-primary-foreground" />
-        </div>
+        <img src={brandIcon} alt="Emit Smart" className="h-9 w-9 rounded-lg" />
+
         <div className="flex flex-col">
           <span className="text-sm font-semibold text-sidebar-foreground">NFC-e SaaS</span>
           <span className="text-xs text-sidebar-foreground/60">Plataforma Fiscal</span>
