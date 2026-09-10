@@ -2,7 +2,19 @@
 
 Objetivo: um segundo parceiro usar a mesma plataforma nos ERPs dele, com empresas, notas, certificados e tokens totalmente separados dos da i9, documentação pronta (NF-e e NFC-e, incluindo IBS/CBS) e rotinas fiscais funcionando.
 
+## Regra inegociável: nenhuma empresa da i9 pode parar
+
+Nada do que está emitindo hoje pode ser interrompido. Por isso:
+
+- Toda mudança de acesso é feita **adicionando** vínculo de parceiro, com as empresas atuais já migradas para o parceiro "i9" na mesma operação — nunca fica uma empresa sem dono.
+- As chaves e tokens que os ERPs atuais já usam continuam válidos, sem regeneração e sem troca de URL.
+- A chave de parceiro no cadastro é **opcional**: quem não enviar continua caindo na conta i9, exatamente como hoje.
+- Cada etapa é aplicada e conferida em separado; após cada uma, faço uma emissão de teste e confirmo que as listagens da i9 seguem completas antes de seguir.
+- Se qualquer verificação apontar risco de perda de acesso, a etapa é revertida na hora.
+
 ## O que verifiquei agora
+
+
 
 - A VPS nova está no Brasil e respondendo bem: `api2.agilizeerp.com.br` no IP 191.252.179.49, resposta em 0,7s, anunciando os modelos 55, 65, 58, 57, 67 e NFS-e nacional. Integração ativa.
 - O cadastro automático de empresa pela API (`/nfe-api/register`) hoje vincula toda empresa nova ao **primeiro administrador da plataforma** — ou seja, as empresas do parceiro nasceriam dentro da conta da i9. Esse é o ponto crítico a corrigir.
