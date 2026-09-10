@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documentação API NFC-e (Modelo 65)</title>
+  <meta name="description" content="Guia de integração da API de NFC-e modelo 65: emissão, consulta, cancelamento, inutilização, contingência, webhooks e Reforma Tributária.">
+  <style>
+    @media print { body { font-size: 11px; } pre { font-size: 9px; } }
+    body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #1a1a2e; line-height: 1.6; }
+    h1 { color: #1a1a2e; border-bottom: 3px solid #6366f1; padding-bottom: 10px; }
+    h2 { color: #6366f1; margin-top: 30px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+    h3 { color: #374151; margin-top: 20px; }
+    pre { background: #1e1e2e; color: #e2e8f0; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 12px; line-height: 1.5; }
+    code { font-family: 'Fira Code', 'Consolas', monospace; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-right: 6px; }
+    .get { background: #d1fae5; color: #065f46; }
+    .post { background: #dbeafe; color: #1e40af; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+    th, td { border: 1px solid #e5e7eb; padding: 8px 12px; text-align: left; font-size: 13px; }
+    th { background: #f3f4f6; font-weight: 600; }
+    .note { background: #fffbeb; border-left: 4px solid #f59e0b; padding: 12px; margin: 12px 0; border-radius: 0 6px 6px 0; }
+    .info { background: #eff6ff; border-left: 4px solid #3b82f6; padding: 12px; margin: 12px 0; border-radius: 0 6px 6px 0; }
+    footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #9ca3af; font-size: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+
+<h1>🧾 API NFC-e — Modelo 65 (Consumidor)</h1>
+<p><strong>Base URL:</strong> <code>https://vdzkhealunurfgrujekg.supabase.co/functions/v1/nfce-api</code></p>
+<p>Guia de integração para emissão, consulta, cancelamento, inutilização e contingência de NFC-e.</p>
+
+<div class="info">
+  <strong>Autenticação:</strong> todas as requisições exigem o header <code>x-api-key: SEU_TOKEN_API</code>.
+  Gere tokens no painel em <em>Tokens API</em>.
+</div>
+
+<div class="note">
+  <strong>Pré-requisitos da NFC-e:</strong> certificado digital válido, CSC (Código de Segurança do Contribuinte)
+  com ID CSC cadastrados e uma série fiscal ativa do tipo <code>nfce</code>.
+</div>
+
+<hr>
+
+<h2>1. Endpoints</h2>
+<table>
+  <thead><tr><th>Método</th><th>Endpoint</th><th>Descrição</th></tr></thead>
+  <tbody>
+    <tr><td><span class="badge post">POST</span></td><td><code>/nfce-api</code></td><td>Emitir nova NFC-e</td></tr>
+    <tr><td><span class="badge get">GET</span></td><td><code>/nfce-api?status=...&amp;limit=...</code></td><td>Listar NFC-e com filtros</td></tr>
+    <tr><td><span class="badge get">GET</span></td><td><code>/nfce-api/{id}</code></td><td>Consultar NFC-e por ID</td></tr>
+    <tr><td><span class="badge post">POST</span></td><td><code>/nfce-api/{id}/cancelar</code></td><td>Cancelar NFC-e autorizada (até 30 min)</td></tr>
+    <tr><td><span class="badge post">POST</span></td><td><code>/nfce-api/{id}/reprocessar</code></td><td>Reprocessar NFC-e rejeitada</td></tr>
+    <tr><td><span class="badge post">POST</span></td><td><code>/nfce-api/inutilizar</code></td><td>Inutilizar faixa de numeração</td></tr>
+    <tr><td><span class="badge post">POST</span></td><td><code>/nfce-api/abortar-online</code></td><td>Encerrar contingência e voltar ao modo online</td></tr>
+    <tr><td><span class="badge get">GET</span></td><td><code>/nfce-api/{id}/xml</code></td><td>Obter XML autorizado</td></tr>
+  </tbody>
+</table>
+
+<h2>2. Emitir NFC-e</h2>
+<pre><code>POST /nfce-api
+x-api-key: SEU_TOKEN_API
+
+{
+  "external_id": "VENDA-12345",
+  "serie": "1",
+  "consumidor": {
+    "cpf_cnpj": "12345678909",
+    "nome": "Consumidor Final"
+  },
+  "itens": [{
+    "codigo": "PROD001",
+    "descricao": "Camiseta Básica Algodão",
+    "ncm": "61091000",
+    "cfop": "5102",
+    "unidade": "UN",
+    "quantidade": 2,
+    "valor_unitario": 49.90,
+    "csosn": "102",
+    "aliquota_icms": 0
+  }],
+  "pagamentos": [{ "forma": "01", "valor": 99.80 }],
+  "valor_desconto": 0
+}
+
+// 201
+{
+  "success": true,
+  "data": {
+    "id": "uuid-da-nota",
+    "status": "processando",
+    "numero": 5329,
+    "serie": "1"
+  }
+}</code></pre>
+
+<div class="note">
+  <strong>Idempotência:</strong> reenvios com o mesmo <code>external_id</code> dentro de 10 minutos retornam
+  a mesma nota, sem duplicar numeração.
+</div>
+
+<h3>Formas de pagamento (tPag)</h3>
+<table>
+  <thead><tr><th>Código</th><th>Forma</th></tr></thead>
+  <tbody>
+    <tr><td><code>01</code></td><td>Dinheiro</td></tr>
+    <tr><td><code>02</code></td><td>Cheque</td></tr>
+    <tr><td><code>03</code></td><td>Cartão de crédito</td></tr>
+    <tr><td><code>04</code></td><td>Cartão de débito</td></tr>
+    <tr><td><code>05</code></td><td>Crédito da loja</td></tr>
+    <tr><td><code>17</code></td><td>PIX</td></tr>
+    <tr><td><code>90</code></td><td>Sem pagamento</td></tr>
+    <tr><td><code>99</code></td><td>Outros</td></tr>
+  </tbody>
+</table>
+
+<h2>3. Cancelamento</h2>
+<pre><code>POST /nfce-api/{id}/cancelar
+{ "justificativa": "Venda cancelada pelo cliente" }</code></pre>
+<p>Justificativa entre 15 e 255 caracteres. Prazo legal da NFC-e: 30 minutos após a autorização.</p>
+
+<h2>4. Inutilização</h2>
+<pre><code>POST /nfce-api/inutilizar
+{
+  "empresa_cnpj": "12345678000199",
+  "serie": "1",
+  "numero_inicial": 100,
+  "numero_final": 105,
+  "justificativa": "NFC-e nao consta na base de dados da SEFAZ"
+}</code></pre>
+
+<h2>5. Contingência</h2>
+<p>Quando a SEFAZ fica indisponível, a NFC-e é emitida em contingência offline e transmitida automaticamente
+assim que o serviço volta. Para forçar o retorno ao modo online:</p>
+<pre><code>POST /nfce-api/abortar-online
+{ "empresa_cnpj": "12345678000199" }</code></pre>
+
+<h2>6. Webhooks</h2>
+<table>
+  <thead><tr><th>Evento</th><th>Descrição</th></tr></thead>
+  <tbody>
+    <tr><td><code>nfce.autorizada</code></td><td>NFC-e autorizada pela SEFAZ</td></tr>
+    <tr><td><code>nfce.rejeitada</code></td><td>NFC-e rejeitada pela SEFAZ</td></tr>
+    <tr><td><code>nfce.cancelada</code></td><td>NFC-e cancelada com sucesso</td></tr>
+    <tr><td><code>nfce.denegada</code></td><td>NFC-e denegada pela SEFAZ</td></tr>
+  </tbody>
+</table>
+<p>Todos os envios trazem assinatura HMAC-SHA256 no header <code>X-Webhook-Signature</code> e o segredo
+configurado em <code>X-Webhook-Secret</code>. Reenvio automático em até 3 tentativas com backoff.</p>
+
+<h2>7. Reforma Tributária — IBS, CBS e Imposto Seletivo</h2>
+<div class="info">
+  Os grupos da Reforma Tributária são <strong>opcionais</strong>. Só entram no XML quando o ERP envia
+  <code>enviar_ibs_cbs: true</code>. Sem esse indicador, a emissão segue exatamente como hoje.
+</div>
+<table>
+  <thead><tr><th>Campo (por item)</th><th>Descrição</th></tr></thead>
+  <tbody>
+    <tr><td><code>cst_ibs_cbs</code></td><td>CST do IBS/CBS (ex.: 000)</td></tr>
+    <tr><td><code>c_class_trib</code></td><td>Código de classificação tributária</td></tr>
+    <tr><td><code>vbc_ibs_cbs</code></td><td>Base de cálculo do IBS/CBS</td></tr>
+    <tr><td><code>aliquota_ibs_uf</code></td><td>Alíquota do IBS estadual (%)</td></tr>
+    <tr><td><code>aliquota_ibs_mun</code></td><td>Alíquota do IBS municipal (%)</td></tr>
+    <tr><td><code>aliquota_cbs</code></td><td>Alíquota da CBS (%)</td></tr>
+    <tr><td><code>cst_is</code>, <code>c_class_trib_is</code>, <code>vbc_is</code>, <code>aliquota_is</code></td><td>Imposto Seletivo (quando aplicável)</td></tr>
+  </tbody>
+</table>
+<pre><code>{
+  "external_id": "VENDA-12345",
+  "enviar_ibs_cbs": true,
+  "itens": [{
+    "codigo": "PROD001",
+    "descricao": "Produto exemplo",
+    "ncm": "61091000",
+    "cfop": "5102",
+    "unidade": "UN",
+    "quantidade": 1,
+    "valor_unitario": 100.00,
+    "csosn": "102",
+    "cst_ibs_cbs": "000",
+    "c_class_trib": "000001",
+    "vbc_ibs_cbs": 100.00,
+    "aliquota_ibs_uf": 0.10,
+    "aliquota_ibs_mun": 0.05,
+    "aliquota_cbs": 0.90
+  }],
+  "pagamentos": [{ "forma": "01", "valor": 100.00 }]
+}</code></pre>
+
+<h2>8. Cadastro automático de empresa (chave de parceiro)</h2>
+<p><span class="badge post">POST</span> <code>/nfe-api/register</code> — vale para NF-e e NFC-e.</p>
+<p>Enviando o header <code>x-partner-key</code>, a empresa nasce dentro da conta do parceiro e fica isolada
+das demais. Sem esse header, o comportamento atual é mantido.</p>
+<pre><code>POST /nfe-api/register
+x-partner-key: pk_sua_chave_de_parceiro
+
+{
+  "cnpj": "12345678000199",
+  "razao_social": "Empresa Exemplo LTDA",
+  "uf": "SP",
+  "municipio": "SAO PAULO",
+  "codigo_municipio": "3550308",
+  "regime_tributario": "simples_nacional"
+}
+
+// 201 -> { "success": true, "data": { "api_key": "sk_live_...", "empresa_id": "uuid" } }
+// 401 PARTNER_INVALID    -> chave de parceiro inválida ou inativa
+// 409 ALREADY_REGISTERED -> CNPJ/CPF já cadastrado</code></pre>
+
+<h2>9. Códigos de erro</h2>
+<table>
+  <thead><tr><th>Código</th><th>HTTP</th><th>Descrição</th></tr></thead>
+  <tbody>
+    <tr><td><code>AUTH_REQUIRED</code></td><td>401</td><td>Token de API não fornecido</td></tr>
+    <tr><td><code>AUTH_INVALID</code></td><td>401</td><td>Token inválido, expirado ou revogado</td></tr>
+    <tr><td><code>PARTNER_INVALID</code></td><td>401</td><td>Chave de parceiro inválida ou inativa</td></tr>
+    <tr><td><code>PERMISSION_DENIED</code></td><td>403</td><td>Token sem permissão para a operação</td></tr>
+    <tr><td><code>NOT_FOUND</code></td><td>404</td><td>NFC-e não encontrada</td></tr>
+    <tr><td><code>VALIDATION_ERROR</code></td><td>400</td><td>Dados inválidos na requisição</td></tr>
+    <tr><td><code>INVALID_STATUS</code></td><td>400</td><td>Operação não permitida para o status atual</td></tr>
+    <tr><td><code>INTERNAL_ERROR</code></td><td>500</td><td>Erro interno do servidor</td></tr>
+  </tbody>
+</table>
+
+<h2>10. Fluxo de status</h2>
+<p><code>pendente</code> → <code>processando</code> → <code>autorizada</code> | <code>rejeitada</code> |
+<code>denegada</code> | <code>contingencia</code> → <code>cancelada</code> | <code>inutilizada</code></p>
+
+<footer>
+  Documentação API NFC-e — Plataforma Fiscal
+</footer>
+
+</body>
+</html>

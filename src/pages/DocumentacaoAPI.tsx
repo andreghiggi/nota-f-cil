@@ -26,6 +26,91 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 const NFCE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/nfce-api`;
 const NFE_API_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/nfe-api`;
 
+// ==================== Reforma Tributária (IBS / CBS / IS) ====================
+const ibsCbsExemplo = `// Enviar IBS/CBS somente quando o ERP tiver os dados.
+// Sem "enviar_ibs_cbs", nada muda na emissão atual.
+const response = await fetch('${NFE_API_URL}', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'x-api-key': 'SEU_TOKEN_API' },
+  body: JSON.stringify({
+    external_id: 'PED-2026-001',
+    enviar_ibs_cbs: true,
+    itens: [
+      {
+        codigo: 'PROD001',
+        descricao: 'Produto exemplo',
+        ncm: '61091000',
+        cfop: '5102',
+        unidade: 'UN',
+        quantidade: 1,
+        valor_unitario: 100.00,
+        csosn: '102',
+        // Grupo IBS/CBS
+        cst_ibs_cbs: '000',
+        c_class_trib: '000001',
+        vbc_ibs_cbs: 100.00,
+        aliquota_ibs_uf: 0.10,
+        aliquota_ibs_mun: 0.05,
+        aliquota_cbs: 0.90,
+        // Imposto Seletivo (opcional)
+        cst_is: '000',
+        c_class_trib_is: '000001',
+        vbc_is: 0,
+        aliquota_is: 0
+      }
+    ]
+  })
+});
+
+// Resposta (trecho)
+{
+  "success": true,
+  "data": {
+    "id": "uuid-da-nota",
+    "status": "processando",
+    "numero": 1234,
+    "serie": "1",
+    "ibs_cbs": { "aplicado": true }
+  }
+}`;
+
+// ==================== Cadastro automático com chave de parceiro ====================
+const cadastroParceiroExemplo = `// Cadastro de empresa vinculado ao parceiro
+const response = await fetch('${NFE_API_URL}/register', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'x-partner-key': 'pk_sua_chave_de_parceiro' // opcional
+  },
+  body: JSON.stringify({
+    cnpj: '12345678000199',
+    razao_social: 'Empresa Exemplo LTDA',
+    nome_fantasia: 'Exemplo',
+    inscricao_estadual: '1234567890',
+    email: 'contato@exemplo.com.br',
+    uf: 'SP',
+    municipio: 'SAO PAULO',
+    codigo_municipio: '3550308',
+    regime_tributario: 'simples_nacional'
+  })
+});
+
+// Resposta 201
+{
+  "success": true,
+  "data": {
+    "api_key": "sk_live_...",   // guarde: não é exibida novamente
+    "empresa_id": "uuid",
+    "cnpj": "12345678000199",
+    "ambiente": "homologacao"
+  }
+}
+
+// Erros possíveis
+// 401 PARTNER_INVALID     -> chave de parceiro inválida ou inativa
+// 409 ALREADY_REGISTERED  -> CNPJ/CPF já cadastrado`;
+
+
 // ==================== NFC-e Code Examples ====================
 const nfceCodeExamples = {
   emitir: `// Emitir NFC-e
@@ -922,6 +1007,75 @@ export default function DocumentacaoAPI() {
             </div>
           </div>
         )}
+
+        {/* Reforma Tributária: IBS / CBS / IS */}
+        <div className="card-elevated p-6" id="ibs-cbs">
+          <h3 className="text-base font-semibold text-foreground mb-2 flex items-center gap-2">
+            <Zap className="h-5 w-5 text-primary" />
+            Reforma Tributária — IBS, CBS e Imposto Seletivo
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            Os grupos da Reforma Tributária são <strong>opcionais</strong>. Eles só entram no XML quando o
+            ERP envia <code>enviar_ibs_cbs: true</code> no corpo da requisição. Sem esse indicador, a emissão
+            segue exatamente como hoje — nada muda para quem já integra.
+          </p>
+
+          <div className="overflow-x-auto mb-6">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left text-sm font-medium text-muted-foreground py-2">Campo (por item)</th>
+                  <th className="text-left text-sm font-medium text-muted-foreground py-2">Descrição</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border text-sm">
+                {[
+                  ["cst_ibs_cbs", "CST do IBS/CBS (ex.: 000)"],
+                  ["c_class_trib", "Código de classificação tributária"],
+                  ["vbc_ibs_cbs", "Base de cálculo do IBS/CBS"],
+                  ["aliquota_ibs_uf", "Alíquota do IBS estadual (%)"],
+                  ["aliquota_ibs_mun", "Alíquota do IBS municipal (%)"],
+                  ["aliquota_cbs", "Alíquota da CBS (%)"],
+                  ["p_red_aliq_ibs_uf / p_red_aliq_ibs_mun / p_red_aliq_cbs", "Percentuais de redução de alíquota"],
+                  ["valor_dif_ibs_uf / valor_dif_ibs_mun / valor_dif_cbs", "Valores diferidos"],
+                  ["cst_is, c_class_trib_is, vbc_is, aliquota_is", "Imposto Seletivo (quando aplicável)"],
+                  ["ind_doacao, ind_bem_movel_usado", "Indicadores especiais da operação"],
+                ].map(([campo, desc]) => (
+                  <tr key={campo}>
+                    <td className="py-2"><code className="text-xs">{campo}</code></td>
+                    <td className="py-2 text-muted-foreground">{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="relative">
+            <pre className="bg-sidebar text-sidebar-foreground p-4 rounded-lg overflow-x-auto text-sm max-h-[420px]">
+              <code>{ibsCbsExemplo}</code>
+            </pre>
+            <CopyButton text={ibsCbsExemplo} section="ibs-cbs" />
+          </div>
+        </div>
+
+        {/* Cadastro automático de empresa (parceiros) */}
+        <div className="card-elevated p-6" id="cadastro-parceiro">
+          <h3 className="text-base font-semibold text-foreground mb-2 flex items-center gap-2">
+            <Key className="h-5 w-5 text-primary" />
+            Cadastro automático de empresa (chave de parceiro)
+          </h3>
+          <p className="text-muted-foreground mb-4">
+            O ERP cadastra a empresa e já recebe a chave de API. Enviando o header
+            <code className="mx-1">x-partner-key</code>, a empresa nasce dentro da conta do parceiro e fica
+            isolada das demais. Sem esse header, o comportamento atual é mantido.
+          </p>
+          <div className="relative">
+            <pre className="bg-sidebar text-sidebar-foreground p-4 rounded-lg overflow-x-auto text-sm max-h-[420px]">
+              <code>{cadastroParceiroExemplo}</code>
+            </pre>
+            <CopyButton text={cadastroParceiroExemplo} section="cadastro-parceiro" />
+          </div>
+        </div>
 
         {/* Webhooks Section */}
         <div className="card-elevated p-6">
