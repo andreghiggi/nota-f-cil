@@ -56,3 +56,7 @@ verify_jwt = false
 
 [functions.sync-bonappetit-webhooks]
 verify_jwt = false
+
+[functions.fiscal-diagnostics]
+verify_jwt = false
+
