@@ -45,6 +45,7 @@ import { cn } from "@/lib/utils";
 import { useWebhooks, useEmpresas, useUpdateWebhook, useDeleteWebhook, useWebhookLogs } from "@/hooks/useSupabaseData";
 import { WebhookFormDialog } from "@/components/webhooks/WebhookFormDialog";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { Link } from "react-router-dom";
 
 const eventLabels: Record<string, string> = {
@@ -62,6 +63,7 @@ export default function Webhooks() {
   const [deleteWebhookId, setDeleteWebhookId] = useState<string | null>(null);
   const [logsWebhookId, setLogsWebhookId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   const { data: webhooks, isLoading, refetch } = useWebhooks();
   const { data: empresas } = useEmpresas();
@@ -100,6 +102,23 @@ export default function Webhooks() {
     }
   };
 
+  const handleSyncBonAppetit = async () => {
+    setIsSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("sync-bonappetit-webhooks");
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Falha na sincronização");
+      toast.success(
+        `Bon Appetit: ${data.total_configurados} empresa(s) configurada(s) — ${data.criados} novo(s), ${data.reativados} reativado(s).`
+      );
+      refetch();
+    } catch (error: any) {
+      toast.error(`Erro ao sincronizar: ${error.message}`);
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   const activeCount = webhooks?.filter(w => w.ativo).length || 0;
 
   return (
@@ -117,10 +136,20 @@ export default function Webhooks() {
             </div>
           </div>
           
-          <Button className="btn-gradient" onClick={() => setFormOpen(true)} disabled={!empresas?.length}>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Webhook
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={handleSyncBonAppetit} disabled={isSyncing}>
+              {isSyncing ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Sincronizar webhooks Bon Appetit para todas empresas
+            </Button>
+            <Button className="btn-gradient" onClick={() => setFormOpen(true)} disabled={!empresas?.length}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Webhook
+            </Button>
+          </div>
         </div>
 
         {/* Info box */}
