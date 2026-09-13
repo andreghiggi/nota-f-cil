@@ -1268,7 +1268,12 @@ Deno.serve(async (req) => {
       await supabase.from('nfce').update({ status: 'processando' }).eq('id', nfce_id).not('status', 'in', '(abortada,cancelada,autorizada)');
 
       // Build payload for PHP
-      const clientePayload = buildNfceClientePayload(nfce.payload_entrada?.cliente, empresa.ambiente);
+      // Aceita o consumidor em qualquer um dos blocos equivalentes enviados pelo ERP.
+      const entradaNfce = nfce.payload_entrada || {};
+      const blocoConsumidor = [entradaNfce.cliente, entradaNfce.destinatario, entradaNfce.dest, entradaNfce.consumidor]
+        .find((b: any) => b && typeof b === 'object' && [b.cpf, b.cnpj, b.cpf_cnpj, b.documento]
+          .some((v: any) => typeof v === 'string' && v.replace(/\D/g, '').length >= 11));
+      const clientePayload = buildNfceClientePayload(blocoConsumidor ?? entradaNfce.cliente, empresa.ambiente);
 
       const itensObj: Record<string, any> = {};
       const payloadItens: any[] = Array.isArray(nfce.payload_entrada?.itens) ? nfce.payload_entrada.itens : [];
