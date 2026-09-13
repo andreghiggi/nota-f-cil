@@ -1026,8 +1026,8 @@ function buildNfceClientePayload(rawCliente: any, ambiente: string) {
   const cliente = rawCliente && typeof rawCliente === 'object' ? rawCliente : {};
   const nome = typeof cliente.nome === 'string' && cliente.nome.trim() ? cliente.nome.trim() : undefined;
   const rawDoc = [cliente.cpf, cliente.cnpj, cliente.cpf_cnpj, cliente.documento]
-    .find((value) => typeof value === 'string' && value.trim());
-  const documento = typeof rawDoc === 'string' ? rawDoc.replace(/\D/g, '') : '';
+    .find((value) => (typeof value === 'string' && value.trim()) || typeof value === 'number');
+  const documento = rawDoc !== undefined && rawDoc !== null ? String(rawDoc).replace(/\D/g, '') : '';
 
   if (documento.length > 11) {
     return nome ? { cnpj: documento, nome } : { cnpj: documento };
