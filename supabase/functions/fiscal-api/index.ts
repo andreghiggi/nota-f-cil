@@ -1272,7 +1272,7 @@ Deno.serve(async (req) => {
       const entradaNfce = nfce.payload_entrada || {};
       const blocoConsumidor = [entradaNfce.cliente, entradaNfce.destinatario, entradaNfce.dest, entradaNfce.consumidor]
         .find((b: any) => b && typeof b === 'object' && [b.cpf, b.cnpj, b.cpf_cnpj, b.documento]
-          .some((v: any) => typeof v === 'string' && v.replace(/\D/g, '').length >= 11));
+          .some((v: any) => (typeof v === 'string' || typeof v === 'number') && String(v).replace(/\D/g, '').length >= 11));
       const clientePayload = buildNfceClientePayload(blocoConsumidor ?? entradaNfce.cliente, empresa.ambiente);
 
       const itensObj: Record<string, any> = {};
