@@ -13,7 +13,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
+const FISCAL_API_BASE_URL = Deno.env.get('FISCAL_API_BASE_URL') || Deno.env.get('API2_PUBLIC_URL') || 'https://api2.agilizeerp.com.br';
 
 /** Conferir deploy: GET .../fiscal-api?build=1 */
 const FISCAL_API_BUILD_ID = '17jun26-cst51-full-dif-zero';
