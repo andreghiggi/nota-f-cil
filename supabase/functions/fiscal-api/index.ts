@@ -13,7 +13,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
+const FISCAL_API_BASE_URL = Deno.env.get('FISCAL_API_BASE_URL') || Deno.env.get('API2_PUBLIC_URL') || 'https://api2.agilizeerp.com.br';
 
 /** Conferir deploy: GET .../fiscal-api?build=1 */
 const FISCAL_API_BUILD_ID = '17jun26-cst51-full-dif-zero';
@@ -1026,8 +1026,8 @@ function buildNfceClientePayload(rawCliente: any, ambiente: string) {
   const cliente = rawCliente && typeof rawCliente === 'object' ? rawCliente : {};
   const nome = typeof cliente.nome === 'string' && cliente.nome.trim() ? cliente.nome.trim() : undefined;
   const rawDoc = [cliente.cpf, cliente.cnpj, cliente.cpf_cnpj, cliente.documento]
-    .find((value) => typeof value === 'string' && value.trim());
-  const documento = typeof rawDoc === 'string' ? rawDoc.replace(/\D/g, '') : '';
+    .find((value) => (typeof value === 'string' && value.trim()) || typeof value === 'number');
+  const documento = rawDoc !== undefined && rawDoc !== null ? String(rawDoc).replace(/\D/g, '') : '';
 
   if (documento.length > 11) {
     return nome ? { cnpj: documento, nome } : { cnpj: documento };
@@ -1272,7 +1272,7 @@ Deno.serve(async (req) => {
       const entradaNfce = nfce.payload_entrada || {};
       const blocoConsumidor = [entradaNfce.cliente, entradaNfce.destinatario, entradaNfce.dest, entradaNfce.consumidor]
         .find((b: any) => b && typeof b === 'object' && [b.cpf, b.cnpj, b.cpf_cnpj, b.documento]
-          .some((v: any) => typeof v === 'string' && v.replace(/\D/g, '').length >= 11));
+          .some((v: any) => (typeof v === 'string' || typeof v === 'number') && String(v).replace(/\D/g, '').length >= 11));
       const clientePayload = buildNfceClientePayload(blocoConsumidor ?? entradaNfce.cliente, empresa.ambiente);
 
       const itensObj: Record<string, any> = {};
