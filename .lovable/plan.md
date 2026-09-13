@@ -15,6 +15,8 @@ Verificado agora:
 2. Reiniciar apenas o serviço das funções fiscais no servidor, sem tocar em banco, certificados ou demais rotinas.
 3. Conferir, na próxima nota emitida de verdade, que o comprador consta na nota autorizada e que o cupom sai com "CONSUMIDOR - CNPJ ...".
 
+Velocidade: a mudança apenas lê um campo a mais do pedido já recebido, sem consulta extra ao banco nem chamada externa. O tempo de emissão continua igual; a única pausa é a reinicialização do serviço (poucos segundos), feita em momento de baixo movimento.
+
 ## Fora do escopo
 
 - Nenhuma alteração de telas, layout do cupom, NF-e, MDF-e, CT-e ou NFS-e.
