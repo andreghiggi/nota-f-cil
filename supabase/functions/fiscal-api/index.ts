@@ -4342,7 +4342,20 @@ async function handleCteEmit(supabase: any, cteId: string) {
   let data: any;
   const looksLikeHtml = /<br\s*\/?>|<b>|Fatal error|Stack trace|<html/i.test(text);
   if (looksLikeHtml) {
-    data = { erro: (text.match(/Uncaught[^<]+/i)?.[0] || 'Fatal error PHP na API fiscal CT-e').substring(0, 500), php_error: true };
+    // Extrai o motivo real do erro PHP (Uncaught / Fatal error / mensagem em <b>)
+    const limpo = text
+      .replace(/<br\s*\/?>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    const detalhe =
+      limpo.match(/Uncaught[^]{0,400}?(?= in \/| Stack trace|$)/i)?.[0] ||
+      limpo.match(/Fatal error:?[^]{0,400}?(?= in \/| Stack trace|$)/i)?.[0] ||
+      limpo.slice(0, 400);
+    data = {
+      erro: `Falha na API fiscal CT-e: ${detalhe}`.substring(0, 900),
+      php_error: true,
+    };
   } else {
     try { data = JSON.parse(text); } catch { data = { erro: 'Resposta não-JSON da API fiscal', raw: text.substring(0, 500) }; }
   }
