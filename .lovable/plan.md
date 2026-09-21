@@ -46,14 +46,25 @@ Conclusão: o mínimo está de pé para NF-e e NFC-e.
 - Quando a reforma passar a ser exigida pela SEFAZ, aí sim os itens pendentes viram bloqueio — por isso vale resolver antes, com calma.
 - As correções propostas são feitas por etapa, com teste em homologação antes, e podem ser revertidas. Nenhuma toca no fluxo atual de NFC-e em horário de loja.
 
-## Sugestão de ordem de execução (quando você autorizar)
+## Execução na janela das 00:01
 
-1. Corrigir o erro fatal do CT-e e a mensagem de erro devolvida.
-2. Fechar o teste do CT-e OS em homologação.
-3. Unificar o pacote de schemas da NF-e e adicionar validação clara dos campos da reforma.
-4. Imposto Seletivo e grupos complementares de IBS/CBS.
-5. Mostrar a reforma no DANFE e no cupom.
-6. Estender a reforma aos demais modelos e atualizar o manual.
+Escopo desta execução (apenas o que foi auditado, nada além):
+
+1. Corrigir a causa do erro fatal de PHP no CT-e e devolver o motivo real ao ERP em vez da mensagem genérica.
+2. Preencher no CT-e os campos hoje fixos/vazios: saída da origem, chegada no destino e indicador de globalizado.
+3. Unificar o pacote de schemas da NF-e (um ponto ainda usa `PL_010_V1`, o resto usa `PL_010_V1.30`).
+4. Avisar com mensagem clara quando a classificação tributária da reforma vier inválida, em vez de trocar em silêncio por 000001.
+
+Ficam de fora desta rodada (mudanças maiores, para uma etapa própria): Imposto Seletivo, grupos complementares de IBS/CBS, reforma no DANFE/cupom, reforma nos demais modelos e teste do CT-e OS.
+
+Regras da execução:
+
+- Cada arquivo alterado tem cópia de segurança antes, e `php -l` antes de recarregar.
+- Recarga suave do serviço; sem reinício do banco e sem mexer em dados.
+- Se aparecer algo diferente do que foi auditado, paro e deixo como está, sem alterar.
+- Comparação antes/depois e um resumo completo no chat ao final.
+
+Sobre o horário: eu não consigo ficar aguardando até 00:01 — assim que você aprovar, a execução acontece. Duas opções: você aprova por volta das 00:01 e eu executo na hora, ou aprova agora e eu executo imediatamente (as mudanças acima não interrompem emissão de NFC-e/NF-e; só o CT-e fica alguns segundos indisponível na recarga).
 
 ## Notas técnicas
 
