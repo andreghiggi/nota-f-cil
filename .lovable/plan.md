@@ -38,6 +38,14 @@ Conclusão: o mínimo está de pé para NF-e e NFC-e.
 5. Alinhar a ativação por empresa: ou passar a exigir o módulo ativo, ou remover a exigência para não confundir.
 6. Conferir a impressão do DACTE do modelo 67.
 
+## Impacto nas lojas hoje
+
+- A auditoria em si não parou nada: só leitura de arquivos e consultas. Venda e emissão seguem normais.
+- Nada do que falta na reforma para hoje: enquanto o ERP não mandar os campos novos, as notas saem como sempre. As lojas não param por isso.
+- O risco real de parada está no CT-e, e só no transporte: o erro de PHP já derrubou 2 emissões. Não afeta NFC-e nem NF-e das lojas.
+- Quando a reforma passar a ser exigida pela SEFAZ, aí sim os itens pendentes viram bloqueio — por isso vale resolver antes, com calma.
+- As correções propostas são feitas por etapa, com teste em homologação antes, e podem ser revertidas. Nenhuma toca no fluxo atual de NFC-e em horário de loja.
+
 ## Sugestão de ordem de execução (quando você autorizar)
 
 1. Corrigir o erro fatal do CT-e e a mensagem de erro devolvida.
