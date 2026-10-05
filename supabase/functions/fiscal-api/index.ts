@@ -2547,6 +2547,29 @@ Deno.serve(async (req) => {
       }
 
       if (!response.ok) {
+        const txtErro = String(responseData?.erro || responseData?.error || responseData?.xMotivo || '');
+        const cStatErro = String(responseData?.cStat || responseData?.codigo_retorno || '');
+        if (cStatErro === '208' || /\[?208\]?\s*-?\s*Rejei[cç][aã]o:\s*CNPJ do destinat/i.test(txtErro)) {
+          const p: any = payload || {};
+          const destDoc = String(
+            p?.dest?.CNPJ || p?.dest?.CPF || p?.dest?.cnpj || p?.dest?.cpf ||
+            p?.destinatario?.cnpj || p?.destinatario?.cpf || p?.destinatario?.cpf_cnpj ||
+            p?.cliente?.cnpj || p?.cliente?.cpf || p?.cliente?.cpf_cnpj || ''
+          ).replace(/\D/g, '');
+          const msg208 = `Rejeição 208: CNPJ do destinatário inválido${destDoc ? ` (enviado: ${destDoc})` : ''}. Corrija o CNPJ do destinatário e reenvie.`;
+          await supabase.from('nfe').update({
+            status: 'rejeitada',
+            codigo_retorno: '208',
+            motivo_retorno: msg208,
+            erro_processamento: msg208,
+            chave_acesso: null,
+            protocolo: null,
+          }).eq('id', nfeId);
+          return new Response(
+            JSON.stringify({ success: false, error: msg208, code: 'SEFAZ_208', cStat: '208', xMotivo: txtErro || 'CNPJ do destinatario invalido', dest_documento: destDoc || null }),
+            { status: 422, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+          );
+        }
         await supabase.from('nfe').update({
           status: 'rejeitada',
           erro_processamento: responseData.error || 'Erro na API fiscal',
