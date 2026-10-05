@@ -284,6 +284,25 @@ function extractChaveNfeFromSefazMessage(raw: any): string {
   return '';
 }
 
+/**
+ * Confere se uma chave de 44 dígitos pertence à nota: CNPJ/CPF do emitente,
+ * modelo, série e número. Evita adotar chave de NF-e referenciada (refNFe)
+ * de outra empresa encontrada no payload/resposta.
+ */
+function chavePertenceANota(
+  chaveRaw: string,
+  opts: { cpfCnpj?: string | null; numero?: string | number | null; serie?: string | number | null; modelo?: string | number | null },
+): boolean {
+  const chave = String(chaveRaw || '').replace(/\D/g, '');
+  if (chave.length !== 44) return false;
+  const doc = String(opts.cpfCnpj || '').replace(/\D/g, '');
+  if (doc && chave.substring(6, 20) !== doc.padStart(14, '0')) return false;
+  if (opts.modelo != null && String(opts.modelo) !== '' && chave.substring(20, 22) !== String(opts.modelo).padStart(2, '0')) return false;
+  if (opts.serie != null && String(opts.serie) !== '' && parseInt(chave.substring(22, 25), 10) !== parseInt(String(opts.serie), 10)) return false;
+  if (opts.numero != null && String(opts.numero) !== '' && parseInt(chave.substring(25, 34), 10) !== parseInt(String(opts.numero), 10)) return false;
+  return true;
+}
+
 // ============================================================================
 // DUPLICIDADE (539): cNF determinístico + montagem de chave + recuperação
 // ============================================================================
