@@ -3112,16 +3112,24 @@ Deno.serve(async (req) => {
       }
 
       const xmlCand = normalizeFiscalXml(nfe.xml_retorno || nfe.xml_envio || '');
+      const donoNota = {
+        cpfCnpj: (empresa as any)?.cnpj || (empresa as any)?.cpf || null,
+        numero: nfe.numero,
+        serie: nfe.serie,
+        modelo: '55',
+      };
       let chave = String(nfe.chave_acesso || '').replace(/\D/g, '');
+      if (!chavePertenceANota(chave, donoNota)) chave = '';
       if (chave.length !== 44) {
         chave = extractChaveNfeFromXml(xmlCand);
+        if (!chavePertenceANota(chave, donoNota)) chave = '';
       }
       if (chave.length !== 44) {
         chave = extractChaveNfeFromSefazMessage({
           motivo_retorno: nfe.motivo_retorno,
           erro_processamento: nfe.erro_processamento,
-          payload_entrada: nfe.payload_entrada,
         });
+        if (!chavePertenceANota(chave, donoNota)) chave = '';
       }
 
       const payloadEntrada = (nfe.payload_entrada && typeof nfe.payload_entrada === 'object')
@@ -3147,7 +3155,8 @@ Deno.serve(async (req) => {
       const chaveExistente = extractChaveNfeFromSefazMessage(consultData);
       const deveReconsultarChaveExistente = (!response.ok || String(consultData?.cStat || '') === '613')
         && chaveExistente.length === 44
-        && chaveExistente !== chave;
+        && chaveExistente !== chave
+        && chavePertenceANota(chaveExistente, donoNota);
       if (deveReconsultarChaveExistente) {
         console.log(`🔎 NF-e ${nfe.numero}: consulta retornou chave existente ${chaveExistente}; reconsultando por ela`);
         consultBody = { ...consultBody, chave: chaveExistente };
@@ -3169,6 +3178,13 @@ Deno.serve(async (req) => {
       const updateData = buildNfUpdateData(consultData);
       if (updateData.xml_retorno && !xmlContemNfeCompleta(updateData.xml_retorno)) {
         delete updateData.xml_retorno;
+      }
+      if (updateData.chave_acesso && !chavePertenceANota(String(updateData.chave_acesso), donoNota)) {
+        console.warn(`⛔ NF-e ${nfe.numero}: SEFAZ devolveu chave ${updateData.chave_acesso} de outra nota — não gravada`);
+        return new Response(
+          JSON.stringify({ error: 'A consulta retornou a chave de outra nota (provavelmente a NF-e referenciada). Nada foi alterado.' }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
       }
       let reformaAusenteNoXmlConsulta = false;
       const xmlConsultaCompleto = normalizeFiscalXml(updateData.xml_retorno || nfe.xml_retorno || nfe.xml_envio || '');
