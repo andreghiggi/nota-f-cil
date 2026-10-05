@@ -3380,6 +3380,17 @@ Deno.serve(async (req) => {
 
       let xml = normalizeXmlForDanfe(nfe.xml_retorno) || normalizeXmlForDanfe(nfe.xml_envio);
 
+      if (!xml && nfe.chave_acesso) {
+        const { data: empDono } = await supabase.from('empresas').select('cnpj, cpf').eq('id', nfe.empresa_id).maybeSingle();
+        const docDono = (empDono as any)?.cnpj || (empDono as any)?.cpf || null;
+        if (!chavePertenceANota(String(nfe.chave_acesso), { cpfCnpj: docDono, numero: nfe.numero, modelo: '55' })) {
+          return new Response(
+            JSON.stringify({ error: `A NF-e ${nfe.numero} está com a chave de outra nota gravada (${nfe.chave_acesso}). O XML autorizado dela não existe; é preciso corrigir o status da nota antes de gerar a DANFE.` }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
       // Fallback: nota autorizada sem XML gravado (ex.: recuperada por consulta de chave)
       // → remonta o XML a partir do payload original e anexa o protocolo autorizado.
       if (!xml && nfe.status === 'autorizada' && nfe.protocolo && String(nfe.chave_acesso || '').replace(/\D/g, '').length === 44) {
