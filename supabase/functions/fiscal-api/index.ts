@@ -428,7 +428,8 @@ async function recuperarDuplicidade539(opts: {
   });
   if (chaveCalc) candidatas.push(chaveCalc);
   const chaveMsg = extractChaveNfeFromSefazMessage(opts.respostaErro);
-  if (chaveMsg.length === 44) candidatas.push(chaveMsg);
+  const donoNota = { cpfCnpj: opts.cpfCnpj, numero: opts.numero, serie: opts.serie, modelo: opts.modelo };
+  if (chaveMsg.length === 44 && chavePertenceANota(chaveMsg, donoNota)) candidatas.push(chaveMsg);
 
   const unicas = [...new Set(candidatas)];
   const consultUrl = `${FISCAL_API_BASE_URL}/nfe/consulta-chave?api_key=${encodeURIComponent(opts.empresaApiKey)}`;
@@ -453,6 +454,10 @@ async function recuperarDuplicidade539(opts: {
         // A chave/protocolo do infProt retornado pela SEFAZ mandam sobre a consultada
         const chaveProt = String(data?.chave_acesso || data?.chave || '').replace(/\D/g, '');
         updateData.chave_acesso = chaveProt.length === 44 ? chaveProt : (updateData.chave_acesso || chave);
+        if (!chavePertenceANota(String(updateData.chave_acesso), donoNota)) {
+          console.warn(`⛔ ${opts.label}: chave ${updateData.chave_acesso} autorizada é de outra nota — ignorada`);
+          continue;
+        }
         if (!updateData.protocolo && data?.protocolo) updateData.protocolo = String(data.protocolo);
         if (!updateData.data_autorizacao && data?.data_autorizacao) updateData.data_autorizacao = data.data_autorizacao;
         updateData.codigo_retorno = cStat || '100';
