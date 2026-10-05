@@ -1,26 +1,26 @@
-# Corrigir de vez a NF-e 16231 e impedir que se repita
+# Corrigir só a NF-e 16231 e devolver sempre o motivo "CNPJ inválido"
 
 ## O que aconteceu
-A NF-e 000016231 foi rejeitada pela SEFAZ ("CNPJ do destinatário inválido"). Depois, a consulta automática pegou a chave da nota de retorno citada no pedido (de outra empresa) e marcou a 16231 como autorizada. Por isso a DANFE não sai. A trava contra isso já foi publicada na consulta de NF-e; falta corrigir a nota, procurar outros casos iguais e fechar a porta nos demais caminhos.
+A NF-e 000016231 foi rejeitada pela SEFAZ ("Rejeição 208: CNPJ do destinatário inválido"). Depois, a consulta automática gravou nela a chave de outra nota (a nota de retorno citada no pedido) e a marcou como autorizada. A trava que impede essa troca de chave já foi publicada.
 
 ## O que será feito
-1. **Levantamento (só leitura)**: procurar em NF-e, NFC-e, MDF-e e CT-e todas as notas cuja chave gravada não bate com o CNPJ, modelo, série ou número da própria nota. Trago a lista antes de alterar qualquer coisa.
-2. **Confirmar na SEFAZ** cada nota encontrada, consultando pela chave correta dela (calculada a partir dos dados da própria nota):
-   - Se a SEFAZ disser que está autorizada: gravar a chave, o protocolo e o XML corretos.
-   - Se não existir na SEFAZ: voltar para "rejeitada", com o último motivo real (no caso da 16231, "CNPJ do destinatário inválido"), limpar a chave e o protocolo errados e devolver o número para ser usado de novo.
-3. **Trava no banco**: impedir que qualquer nota seja gravada como autorizada com uma chave que não seja dela (CNPJ/CPF, modelo, série e número). Funciona como última barreira, mesmo se algum outro caminho errar.
-4. **Mesma trava no código** das consultas e recuperações de NFC-e, MDF-e e CT-e, igual à que já foi feita na NF-e.
-5. **Avisar o ERP**: enviar a atualização da 16231 (rejeitada) pelo mesmo aviso automático que ele já recebe, para o ERP liberar o reenvio com o CNPJ do destinatário corrigido.
-6. **Validação**: confirmar que a 16231 aparece como rejeitada, que a DANFE de notas autorizadas continua saindo e que não há notas presas na fila.
+1. **Somente a nota 16231** (nenhuma outra nota ou loja é alterada):
+   - Guardar uma cópia dos dados atuais dela.
+   - Voltar o status para "rejeitada", com código 208 e motivo "Rejeição: CNPJ do destinatário inválido".
+   - Apagar a chave e o protocolo da outra nota gravados nela.
+   - Devolver o número para o ERP reenviar com o CNPJ corrigido.
+2. **Mensagem sempre clara para a 208**: quando a SEFAZ devolver "CNPJ do destinatário inválido", o ERP recebe:
+   - o código 208 e o texto da SEFAZ;
+   - o CNPJ que foi enviado;
+   - a orientação: "Corrija o CNPJ do destinatário e reenvie".
+
+   A nota fica como rejeitada e nunca é tratada como autorizada.
+3. **Validação**: confirmar que a 16231 aparece como rejeitada com esse motivo e que a DANFE das notas autorizadas continua saindo.
 
 ## Regras
-- Cópia de segurança das linhas antes de alterar; tudo numa transação, com relatório de antes e depois.
-- Nenhuma nota autorizada de verdade é alterada.
-- A emissão de NF-e, NFC-e e MDF-e continua funcionando durante a correção. Só as funções fiscais são reiniciadas (alguns segundos).
-- Se aparecer algo diferente do esperado, paro e trago aqui.
+- Nenhuma alteração em outras notas ou lojas.
+- A emissão continua funcionando; só as funções fiscais são reiniciadas (alguns segundos), com cópia de segurança.
 
 ## Detalhes técnicos
-- Banco na VPS (`supabase-db-1`). Validação da chave: posições 7-20 = documento do emitente (com 14 dígitos), 21-22 = modelo, 23-25 = série, 26-34 = número.
-- Trigger `BEFORE INSERT OR UPDATE` em `nfe`, `nfce`, `mdfe`, `cte`: se `status='autorizada'` e a chave não pertencer à nota, gera erro. Cria em `db/vps/` e aplica com `php -l`-equivalente (`BEGIN; ... ; ROLLBACK` de teste antes do commit).
-- `chavePertenceANota` reaproveitado em `nfce-api`, `mdfe-api`, `cte-api` e nos caminhos de recuperação 539/573 da `fiscal-api`; publicado na VPS com backup e `docker restart supabase-functions-1`.
-- Aviso ao ERP via `send-webhook` (`nfe.rejeitada`).
+- Banco da VPS: `UPDATE nfe` só no `id` `e056adab-6e54-4fa0-b370-848f9a0e60a2`. Campos alterados: `status='rejeitada'`, `codigo_retorno='208'`, `motivo_retorno`, e `chave_acesso`, `protocolo` e `data_autorizacao` = NULL. A cópia fica antes em `/root/backup-nfe-16231.json`.
+- `fiscal-api`: no tratamento da rejeição, mapear cStat 208 para uma mensagem padrão que traz o documento do destinatário enviado. O mapeamento vale para qualquer nota futura, sem tocar em dados antigos. Publicado na VPS com backup e `docker restart supabase-functions-1`.
