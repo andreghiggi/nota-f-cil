@@ -284,6 +284,25 @@ function extractChaveNfeFromSefazMessage(raw: any): string {
   return '';
 }
 
+/**
+ * Confere se uma chave de 44 dígitos pertence à nota: CNPJ/CPF do emitente,
+ * modelo, série e número. Evita adotar chave de NF-e referenciada (refNFe)
+ * de outra empresa encontrada no payload/resposta.
+ */
+function chavePertenceANota(
+  chaveRaw: string,
+  opts: { cpfCnpj?: string | null; numero?: string | number | null; serie?: string | number | null; modelo?: string | number | null },
+): boolean {
+  const chave = String(chaveRaw || '').replace(/\D/g, '');
+  if (chave.length !== 44) return false;
+  const doc = String(opts.cpfCnpj || '').replace(/\D/g, '');
+  if (doc && chave.substring(6, 20) !== doc.padStart(14, '0')) return false;
+  if (opts.modelo != null && String(opts.modelo) !== '' && chave.substring(20, 22) !== String(opts.modelo).padStart(2, '0')) return false;
+  if (opts.serie != null && String(opts.serie) !== '' && parseInt(chave.substring(22, 25), 10) !== parseInt(String(opts.serie), 10)) return false;
+  if (opts.numero != null && String(opts.numero) !== '' && parseInt(chave.substring(25, 34), 10) !== parseInt(String(opts.numero), 10)) return false;
+  return true;
+}
+
 // ============================================================================
 // DUPLICIDADE (539): cNF determinístico + montagem de chave + recuperação
 // ============================================================================
@@ -409,7 +428,8 @@ async function recuperarDuplicidade539(opts: {
   });
   if (chaveCalc) candidatas.push(chaveCalc);
   const chaveMsg = extractChaveNfeFromSefazMessage(opts.respostaErro);
-  if (chaveMsg.length === 44) candidatas.push(chaveMsg);
+  const donoNota = { cpfCnpj: opts.cpfCnpj, numero: opts.numero, serie: opts.serie, modelo: opts.modelo };
+  if (chaveMsg.length === 44 && chavePertenceANota(chaveMsg, donoNota)) candidatas.push(chaveMsg);
 
   const unicas = [...new Set(candidatas)];
   const consultUrl = `${FISCAL_API_BASE_URL}/nfe/consulta-chave?api_key=${encodeURIComponent(opts.empresaApiKey)}`;
@@ -434,6 +454,10 @@ async function recuperarDuplicidade539(opts: {
         // A chave/protocolo do infProt retornado pela SEFAZ mandam sobre a consultada
         const chaveProt = String(data?.chave_acesso || data?.chave || '').replace(/\D/g, '');
         updateData.chave_acesso = chaveProt.length === 44 ? chaveProt : (updateData.chave_acesso || chave);
+        if (!chavePertenceANota(String(updateData.chave_acesso), donoNota)) {
+          console.warn(`⛔ ${opts.label}: chave ${updateData.chave_acesso} autorizada é de outra nota — ignorada`);
+          continue;
+        }
         if (!updateData.protocolo && data?.protocolo) updateData.protocolo = String(data.protocolo);
         if (!updateData.data_autorizacao && data?.data_autorizacao) updateData.data_autorizacao = data.data_autorizacao;
         updateData.codigo_retorno = cStat || '100';
@@ -3088,16 +3112,24 @@ Deno.serve(async (req) => {
       }
 
       const xmlCand = normalizeFiscalXml(nfe.xml_retorno || nfe.xml_envio || '');
+      const donoNota = {
+        cpfCnpj: (empresa as any)?.cnpj || (empresa as any)?.cpf || null,
+        numero: nfe.numero,
+        serie: nfe.serie,
+        modelo: '55',
+      };
       let chave = String(nfe.chave_acesso || '').replace(/\D/g, '');
+      if (!chavePertenceANota(chave, donoNota)) chave = '';
       if (chave.length !== 44) {
         chave = extractChaveNfeFromXml(xmlCand);
+        if (!chavePertenceANota(chave, donoNota)) chave = '';
       }
       if (chave.length !== 44) {
         chave = extractChaveNfeFromSefazMessage({
           motivo_retorno: nfe.motivo_retorno,
           erro_processamento: nfe.erro_processamento,
-          payload_entrada: nfe.payload_entrada,
         });
+        if (!chavePertenceANota(chave, donoNota)) chave = '';
       }
 
       const payloadEntrada = (nfe.payload_entrada && typeof nfe.payload_entrada === 'object')
@@ -3123,7 +3155,8 @@ Deno.serve(async (req) => {
       const chaveExistente = extractChaveNfeFromSefazMessage(consultData);
       const deveReconsultarChaveExistente = (!response.ok || String(consultData?.cStat || '') === '613')
         && chaveExistente.length === 44
-        && chaveExistente !== chave;
+        && chaveExistente !== chave
+        && chavePertenceANota(chaveExistente, donoNota);
       if (deveReconsultarChaveExistente) {
         console.log(`🔎 NF-e ${nfe.numero}: consulta retornou chave existente ${chaveExistente}; reconsultando por ela`);
         consultBody = { ...consultBody, chave: chaveExistente };
@@ -3145,6 +3178,13 @@ Deno.serve(async (req) => {
       const updateData = buildNfUpdateData(consultData);
       if (updateData.xml_retorno && !xmlContemNfeCompleta(updateData.xml_retorno)) {
         delete updateData.xml_retorno;
+      }
+      if (updateData.chave_acesso && !chavePertenceANota(String(updateData.chave_acesso), donoNota)) {
+        console.warn(`⛔ NF-e ${nfe.numero}: SEFAZ devolveu chave ${updateData.chave_acesso} de outra nota — não gravada`);
+        return new Response(
+          JSON.stringify({ error: 'A consulta retornou a chave de outra nota (provavelmente a NF-e referenciada). Nada foi alterado.' }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
       }
       let reformaAusenteNoXmlConsulta = false;
       const xmlConsultaCompleto = normalizeFiscalXml(updateData.xml_retorno || nfe.xml_retorno || nfe.xml_envio || '');
@@ -3339,6 +3379,17 @@ Deno.serve(async (req) => {
       }
 
       let xml = normalizeXmlForDanfe(nfe.xml_retorno) || normalizeXmlForDanfe(nfe.xml_envio);
+
+      if (!xml && nfe.chave_acesso) {
+        const { data: empDono } = await supabase.from('empresas').select('cnpj, cpf').eq('id', nfe.empresa_id).maybeSingle();
+        const docDono = (empDono as any)?.cnpj || (empDono as any)?.cpf || null;
+        if (!chavePertenceANota(String(nfe.chave_acesso), { cpfCnpj: docDono, numero: nfe.numero, modelo: '55' })) {
+          return new Response(
+            JSON.stringify({ error: `A NF-e ${nfe.numero} está com a chave de outra nota gravada (${nfe.chave_acesso}). O XML autorizado dela não existe; é preciso corrigir o status da nota antes de gerar a DANFE.` }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
 
       // Fallback: nota autorizada sem XML gravado (ex.: recuperada por consulta de chave)
       // → remonta o XML a partir do payload original e anexa o protocolo autorizado.

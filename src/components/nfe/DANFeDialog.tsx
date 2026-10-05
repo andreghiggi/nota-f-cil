@@ -33,7 +33,17 @@ export function DANFeDialog({ open, onOpenChange, nfeId, autoPrint = false, onAu
       const { data, error } = await supabase.functions.invoke("fiscal-api", {
         body: { action: "danfe_nfe", nfe_id: nfeId },
       });
-      if (error) throw new Error(error.message || "Falha ao gerar DANFE");
+      if (error) {
+        let msg = error.message || "Falha ao gerar DANFE";
+        try {
+          const ctx = (error as any).context;
+          if (ctx && typeof ctx.json === "function") {
+            const j = await ctx.json();
+            msg = j?.error || j?.erro || j?.message || msg;
+          }
+        } catch { /* mantém msg */ }
+        throw new Error(msg);
+      }
       if (!data?.pdf_base64) throw new Error(data?.error || "PDF indisponível");
       return data as { pdf_base64: string; filename: string; numero?: string; chave?: string };
     },
