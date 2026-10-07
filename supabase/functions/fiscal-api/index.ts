@@ -2087,7 +2087,11 @@ Deno.serve(async (req) => {
         : null;
 
       // Transporte (transp + veicTransp + vol) — aceita aliases vindos do ERP (transportador, transportadora, flat)
-      const transpSrc = nfe.transporte || payloadEntrada.transporte || payloadEntrada.transp || payloadEntrada.transportador || payloadEntrada.transportadora || null;
+      const _rootVols = Array.isArray(payloadEntrada.volumes) ? payloadEntrada.volumes : (payloadEntrada.vol ? (Array.isArray(payloadEntrada.vol) ? payloadEntrada.vol : [payloadEntrada.vol]) : null);
+      const _transpBase = nfe.transporte || payloadEntrada.transporte || payloadEntrada.transp || payloadEntrada.transportador || payloadEntrada.transportadora || null;
+      const transpSrc: any = _transpBase
+        ? ((!_transpBase.volumes && !_transpBase.vol && _rootVols) ? { ..._transpBase, volumes: _rootVols } : _transpBase)
+        : (_rootVols ? { volumes: _rootVols } : null);
       let transpPayload: any = null;
       if (transpSrc) {
         const t: any = { modFrete: String(transpSrc.modFrete ?? transpSrc.mod_frete ?? nfe.modalidade_frete ?? '9') };
@@ -2122,16 +2126,23 @@ Deno.serve(async (req) => {
             ...(veic.rntc || veic.RNTC ? { RNTC: veic.rntc || veic.RNTC } : {}),
           };
         }
-        const vols = Array.isArray(transpSrc.volumes) ? transpSrc.volumes : (transpSrc.vol ? [transpSrc.vol] : []);
+        const vols = Array.isArray(transpSrc.volumes) ? transpSrc.volumes : (Array.isArray(transpSrc.vol) ? transpSrc.vol : (transpSrc.vol ? [transpSrc.vol] : []));
         if (vols.length) {
-          t.vol = vols.map((v: any) => ({
-            ...(v.qVol || v.quantidade ? { qVol: v.qVol || v.quantidade } : {}),
-            ...(v.esp || v.especie ? { esp: v.esp || v.especie } : {}),
-            ...(v.marca ? { marca: v.marca } : {}),
-            ...(v.nVol || v.numeracao ? { nVol: v.nVol || v.numeracao } : {}),
-            ...(v.pesoL || v.peso_liquido ? { pesoL: Number(v.pesoL || v.peso_liquido).toFixed(3) } : {}),
-            ...(v.pesoB || v.peso_bruto ? { pesoB: Number(v.pesoB || v.peso_bruto).toFixed(3) } : {}),
-          }));
+          t.vol = vols.map((v: any) => {
+            const q = v.qVol ?? v.q_vol ?? v.quantidade;
+            const n = v.nVol ?? v.n_vol ?? v.numeracao;
+            const pl = v.pesoL ?? v.peso_l ?? v.peso_liquido;
+            const pb = v.pesoB ?? v.peso_b ?? v.peso_bruto;
+            const esp = v.esp ?? v.especie;
+            return {
+              ...(q ? { qVol: q } : {}),
+              ...(esp ? { esp } : {}),
+              ...(v.marca ? { marca: v.marca } : {}),
+              ...(n ? { nVol: n } : {}),
+              ...(pl ? { pesoL: Number(pl).toFixed(3) } : {}),
+              ...(pb ? { pesoB: Number(pb).toFixed(3) } : {}),
+            };
+          });
         }
         transpPayload = t;
       }
