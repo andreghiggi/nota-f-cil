@@ -234,6 +234,18 @@ const data = await response.json();
   </tbody>
 </table>
 
+<h3>2.1 Volumes transportados (grupo &lt;vol&gt;)</h3>
+<p>Envie <code>volumes</code> dentro de <code>transportador</code> (recomendado) ou na raiz do payload. Nomes aceitos: <code>qVol</code>/<code>q_vol</code>/<code>quantidade</code>, <code>esp</code>/<code>especie</code>, <code>marca</code>, <code>nVol</code>/<code>n_vol</code>/<code>numeracao</code>, <code>pesoL</code>/<code>peso_l</code>/<code>peso_liquido</code>, <code>pesoB</code>/<code>peso_b</code>/<code>peso_bruto</code>.</p>
+<pre>"transportador": {
+  "mod_frete": 0,
+  "cnpj": "00000000000000",
+  "razao_social": "Transportadora X",
+  "volumes": [
+    { "q_vol": 30, "esp": "m²", "marca": "granito", "n_vol": "1", "peso_l": 1840, "peso_b": 1840 }
+  ]
+}</pre>
+
+
 <hr>
 
 <h2>3. Consultar NF-e</h2>
