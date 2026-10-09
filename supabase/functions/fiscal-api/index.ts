@@ -65,10 +65,12 @@ function buildIbscbsBlock(item: Record<string, unknown>, valorTotal: number): Re
 
   const cst = normalizeIbsCbsCst(cstIbsCbs);
   const cClassTrib = normalizeCClassTrib(item.c_class_trib ?? item.cClassTrib);
-  const vbc = +vbcIbsCbs.toFixed(2);
-  const vIbsUf = +(Number(item.valor_ibs_uf ?? (vbc * aliqIbsUf / 100))).toFixed(2);
-  const vIbsMun = +(Number(item.valor_ibs_mun ?? (vbc * aliqIbsMun / 100))).toFixed(2);
-  const vCbs = +(Number(item.valor_cbs ?? (vbc * aliqCbs / 100))).toFixed(2);
+  // Arredondamento half-up (igual ao round() do PHP); toFixed dava 0,01 para 0,015.
+  const rnd2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
+  const vbc = rnd2(vbcIbsCbs);
+  const vIbsUf = rnd2(Number(item.valor_ibs_uf ?? (vbc * aliqIbsUf / 100)));
+  const vIbsMun = rnd2(Number(item.valor_ibs_mun ?? (vbc * aliqIbsMun / 100)));
+  const vCbs = rnd2(Number(item.valor_cbs ?? (vbc * aliqCbs / 100)));
 
   const gIBSUF: Record<string, unknown> = {
     vBC: vbc,
