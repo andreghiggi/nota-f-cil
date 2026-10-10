@@ -1416,7 +1416,11 @@ Deno.serve(async (req) => {
       const tpEmisNfce = Number((body as any)?.tp_emis ?? (nfce as any).tp_emis ?? 1) === 9 ? 9 : 1;
       const contBlock = tpEmisNfce === 9 ? {
         tpEmis: 9,
-        dhCont: (nfce as any).contingencia_dh || nfce.data_emissao,
+        // TDataHora: sem milissegundos e com offset -03:00 (evita rejeição de schema)
+        dhCont: (() => {
+          const d = new Date((nfce as any).contingencia_dh || nfce.data_emissao || Date.now());
+          return isoSaoPauloFiscal(isNaN(d.getTime()) ? new Date() : d);
+        })(),
         xJust: (nfce as any).contingencia_justificativa || 'SEFAZ indisponivel - emissao em contingencia offline',
       } : { tpEmis: 1 };
       const payload: any = {
