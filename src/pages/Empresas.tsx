@@ -267,8 +267,37 @@ export default function Empresas() {
                       Ações
                     </th>
                   </tr>
+                  <tr className="border-b border-border">
+                    {([
+                      ["empresa", "Nome ou razão social"],
+                      ["doc", "CNPJ/CPF ou UF"],
+                      ["regime", "Regime"],
+                      ["certificado", "Certificado"],
+                      ["ambiente", "Ambiente"],
+                      ["serie", "Série"],
+                    ] as const).map(([k, ph]) => (
+                      <th key={k} className="px-3 py-2">
+                        <Input
+                          placeholder={`Filtrar ${ph.toLowerCase()}...`}
+                          className="h-8 text-xs"
+                          value={colFilters[k]}
+                          onChange={(e) => setCol(k, e.target.value)}
+                        />
+                      </th>
+                    ))}
+                    <th className="px-3 py-2 text-right text-xs text-muted-foreground font-normal">
+                      {filteredEmpresas.length} de {empresas.length}
+                    </th>
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
+                  {filteredEmpresas.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                        Nenhuma empresa encontrada com esses filtros
+                      </td>
+                    </tr>
+                  )}
                   {filteredEmpresas.map((empresa) => {
                     const certInfo = getCertificadoInfo(empresa.id);
                     const certStyle = certificadoStyles[certInfo.status as keyof typeof certificadoStyles] || certificadoStyles.sem_certificado;

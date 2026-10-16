@@ -100,6 +100,15 @@ export default function Tokens() {
   const { data: empresas, isLoading: empresasLoading } = useEmpresas();
   const createToken = useCreateToken();
   const queryClient = useQueryClient();
+  const [empresaBusca, setEmpresaBusca] = useState("");
+  const normTxt = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const empresasFiltradas = (empresas || []).filter((e) => {
+    if (!empresaBusca.trim()) return true;
+    const t = normTxt(empresaBusca);
+    const d = empresaBusca.replace(/\D/g, "");
+    return normTxt(`${e.nome_fantasia ?? ""} ${e.razao_social}`).includes(t) ||
+      (!!d && ((e.cnpj ?? "").includes(d) || (e.cpf ?? "").includes(d)));
+  });
 
   const handleCreateToken = async () => {
     if (!newTokenName.trim() || !selectedEmpresa || selectedPermissoes.length === 0) {
@@ -232,18 +241,32 @@ export default function Tokens() {
 
                       <div className="space-y-2">
                         <Label>Empresa</Label>
-                        <Select value={selectedEmpresa} onValueChange={setSelectedEmpresa}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione uma empresa" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {empresas?.map((empresa) => (
-                              <SelectItem key={empresa.id} value={empresa.id}>
-                                {empresa.nome_fantasia || empresa.razao_social}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Input
+                          placeholder="Digite nome, razão social ou CNPJ..."
+                          value={empresaBusca}
+                          onChange={(e) => setEmpresaBusca(e.target.value)}
+                        />
+                        <div className="max-h-48 overflow-y-auto rounded-md border border-border divide-y divide-border">
+                          {empresasFiltradas.length === 0 && (
+                            <p className="p-3 text-xs text-muted-foreground">Nenhuma empresa encontrada</p>
+                          )}
+                          {empresasFiltradas.map((empresa) => (
+                            <button
+                              type="button"
+                              key={empresa.id}
+                              onClick={() => setSelectedEmpresa(empresa.id)}
+                              className={cn(
+                                "w-full text-left px-3 py-2 text-sm hover:bg-muted/50",
+                                selectedEmpresa === empresa.id && "bg-primary/10 text-primary font-medium"
+                              )}
+                            >
+                              {empresa.nome_fantasia || empresa.razao_social}
+                              <span className="block text-xs text-muted-foreground font-mono">
+                                {empresa.cnpj || empresa.cpf} · {empresa.razao_social}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     </div>
 
