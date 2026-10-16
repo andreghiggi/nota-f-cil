@@ -64,14 +64,34 @@ export default function Empresas() {
   const deleteEmpresa = useDeleteEmpresa();
   const navigate = useNavigate();
 
+  const [colFilters, setColFilters] = useState({ empresa: "", doc: "", regime: "", certificado: "", ambiente: "", serie: "" });
+  const setCol = (k: keyof typeof colFilters, v: string) => setColFilters(prev => ({ ...prev, [k]: v }));
+  const norm = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const has = (value: string, term: string) => !term || norm(value).includes(norm(term));
+
   const filteredEmpresas = empresas?.filter(emp => {
     const searchLower = searchTerm.toLowerCase();
     const docSearch = searchTerm.replace(/\D/g, '');
+    const geral = !searchTerm || (
+      norm(emp.razao_social).includes(norm(searchLower)) ||
+      norm(emp.nome_fantasia ?? "").includes(norm(searchLower)) ||
+      (!!docSearch && !!emp.cnpj && emp.cnpj.includes(docSearch)) ||
+      (!!docSearch && !!emp.cpf && emp.cpf.includes(docSearch))
+    );
+    if (!geral) return false;
+    const docDigits = colFilters.doc.replace(/\D/g, '');
+    const docOk = !colFilters.doc || (docDigits
+      ? ((emp.cnpj ?? "").includes(docDigits) || (emp.cpf ?? "").includes(docDigits))
+      : has(emp.uf ?? "", colFilters.doc));
+    const cert = certificados?.find(c => c.empresa_id === emp.id);
+    const certLabel = (certificadoStyles[(cert?.status ?? 'sem_certificado') as keyof typeof certificadoStyles] || certificadoStyles.sem_certificado).label;
     return (
-      emp.razao_social.toLowerCase().includes(searchLower) ||
-      (emp.nome_fantasia ?? "").toLowerCase().includes(searchLower) ||
-      (emp.cnpj && emp.cnpj.includes(docSearch)) ||
-      (emp.cpf && emp.cpf.includes(docSearch))
+      has(`${emp.nome_fantasia ?? ""} ${emp.razao_social}`, colFilters.empresa) &&
+      docOk &&
+      has(regimeLabels[emp.regime_tributario] ?? "", colFilters.regime) &&
+      has(certLabel, colFilters.certificado) &&
+      has(emp.ambiente === "producao" ? "Produção" : "Homologação", colFilters.ambiente) &&
+      has(emp.serie_nfce ?? "", colFilters.serie)
     );
   });
 
@@ -206,28 +226,20 @@ export default function Empresas() {
         )}
 
         {/* Empty state */}
-        {!isLoading && (!filteredEmpresas || filteredEmpresas.length === 0) && (
+        {!isLoading && (!empresas || empresas.length === 0) && (
           <div className="card-elevated p-12 text-center">
             <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-foreground mb-2">
-              {searchTerm ? "Nenhuma empresa encontrada" : "Nenhuma empresa cadastrada"}
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              {searchTerm 
-                ? "Tente ajustar os termos da busca" 
-                : "Cadastre sua primeira empresa para começar"}
-            </p>
-            {!searchTerm && (
-              <Button onClick={() => navigate("/onboarding")} className="btn-gradient">
-                <Plus className="h-4 w-4 mr-2" />
-                Iniciar Cadastro Guiado
-              </Button>
-            )}
+            <h3 className="text-lg font-semibold text-foreground mb-2">Nenhuma empresa cadastrada</h3>
+            <p className="text-sm text-muted-foreground mb-4">Cadastre sua primeira empresa para começar</p>
+            <Button onClick={() => navigate("/onboarding")} className="btn-gradient">
+              <Plus className="h-4 w-4 mr-2" />
+              Iniciar Cadastro Guiado
+            </Button>
           </div>
         )}
 
         {/* Companies table */}
-        {!isLoading && filteredEmpresas && filteredEmpresas.length > 0 && (
+        {!isLoading && empresas && empresas.length > 0 && filteredEmpresas && (
           <div className="card-elevated">
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -255,8 +267,37 @@ export default function Empresas() {
                       Ações
                     </th>
                   </tr>
+                  <tr className="border-b border-border">
+                    {([
+                      ["empresa", "Nome ou razão social"],
+                      ["doc", "CNPJ/CPF ou UF"],
+                      ["regime", "Regime"],
+                      ["certificado", "Certificado"],
+                      ["ambiente", "Ambiente"],
+                      ["serie", "Série"],
+                    ] as const).map(([k, ph]) => (
+                      <th key={k} className="px-3 py-2">
+                        <Input
+                          placeholder={`Filtrar ${ph.toLowerCase()}...`}
+                          className="h-8 text-xs"
+                          value={colFilters[k]}
+                          onChange={(e) => setCol(k, e.target.value)}
+                        />
+                      </th>
+                    ))}
+                    <th className="px-3 py-2 text-right text-xs text-muted-foreground font-normal">
+                      {filteredEmpresas.length} de {empresas.length}
+                    </th>
+                  </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
+                  {filteredEmpresas.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-5 py-8 text-center text-sm text-muted-foreground">
+                        Nenhuma empresa encontrada com esses filtros
+                      </td>
+                    </tr>
+                  )}
                   {filteredEmpresas.map((empresa) => {
                     const certInfo = getCertificadoInfo(empresa.id);
                     const certStyle = certificadoStyles[certInfo.status as keyof typeof certificadoStyles] || certificadoStyles.sem_certificado;
