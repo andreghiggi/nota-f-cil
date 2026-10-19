@@ -182,21 +182,31 @@ export function CertificadoUploadDialog({ open, onOpenChange, onSuccess }: Certi
       if (uploadError) throw uploadError;
 
       // Create certificate record in database
-      const { error: dbError } = await supabase
+      // Troca atômica: novo arquivo já está salvo; só então substitui o registro.
+      const { data: existente } = await supabase
         .from('certificados_digitais')
-        .insert({
+        .select('id')
+        .eq('empresa_id', selectedEmpresa)
+        .maybeSingle();
+      const registro = {
           empresa_id: selectedEmpresa,
-          tipo: 'A1',
+          tipo: 'A1' as const,
           arquivo_path: fileName,
           cnpj_certificado: validationResult.cnpj,
           emissor: validationResult.emissor,
           data_emissao: validationResult.dataEmissao,
           data_vencimento: validationResult.dataVencimento,
-          senha_hash: btoa(senha), // In production, use proper encryption
+          senha_hash: btoa(unescape(encodeURIComponent(senha))),
           status: calculateStatus(validationResult.dataVencimento!)
-        });
+        };
+      const { error: dbError } = existente
+        ? await supabase.from('certificados_digitais').update({ ...registro, updated_at: new Date().toISOString() }).eq('id', existente.id)
+        : await supabase.from('certificados_digitais').insert(registro);
 
-      if (dbError) throw dbError;
+      if (dbError) {
+        await supabase.storage.from('certificados').remove([fileName]);
+        throw dbError;
+      }
 
       toast.success("Certificado cadastrado com sucesso!");
       handleClose();

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { saveCertificadoAtomico } from '../_shared/pfx.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -361,129 +362,10 @@ Deno.serve(async (req) => {
     // =====================================================================
     if (method === 'POST' && route === 'certificado/upload') {
       const body = await req.json();
-      const { certificado_base64, senha } = body;
-
-      if (!certificado_base64 || !senha) {
-        return jsonResponse({ success: false, error: 'Campos certificado_base64 e senha são obrigatórios.' }, 400);
-      }
-
-      // Validate by trying to decode base64
-      let pfxBytes: Uint8Array;
-      try {
-        const binary = atob(certificado_base64);
-        pfxBytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-          pfxBytes[i] = binary.charCodeAt(i);
-        }
-        if (pfxBytes.length < 100) {
-          throw new Error('too small');
-        }
-      } catch {
-        return jsonResponse({ success: false, error: 'Arquivo de certificado inválido ou corrompido.' }, 400);
-      }
-
-      // Get empresa info
-      const { data: empresa } = await supabase
-        .from('empresas')
-        .select('razao_social, cnpj, cpf, tipo_pessoa')
-        .eq('id', empresa_id)
-        .single();
-
-      const doc = empresa?.tipo_pessoa === 'PF' ? empresa?.cpf : empresa?.cnpj;
-      const docClean = (doc || '').replace(/\D/g, '');
-
-      // Upload to storage
-      const storagePath = `${empresa_id}/${docClean}_${Date.now()}.pfx`;
-      const pfxBuffer = pfxBytes.buffer.slice(pfxBytes.byteOffset, pfxBytes.byteOffset + pfxBytes.byteLength);
-
-      const { error: uploadError } = await supabase.storage
-        .from('certificados')
-        .upload(storagePath, pfxBuffer, { contentType: 'application/x-pkcs12', upsert: true });
-
-      if (uploadError) {
-        console.error('Upload error:', uploadError);
-        return jsonResponse({ success: false, error: 'Erro ao armazenar certificado.' }, 500);
-      }
-
-      // Encode password as base64 for storage (matching existing pattern)
-      const senhaHash = btoa(senha);
-
-      // Default expiry 1 year from now (will be updated when validated)
-      const defaultExpiry = new Date();
-      defaultExpiry.setFullYear(defaultExpiry.getFullYear() + 1);
-
-      // Check if certificate already exists for this empresa
-      const { data: existingCert } = await supabase
-        .from('certificados_digitais')
-        .select('id')
-        .eq('empresa_id', empresa_id)
-        .maybeSingle();
-
-      let certResult;
-      if (existingCert) {
-        const { data, error } = await supabase
-          .from('certificados_digitais')
-          .update({
-            arquivo_path: storagePath,
-            senha_hash: senhaHash,
-            cnpj_certificado: docClean,
-            status: 'valido',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingCert.id)
-          .select()
-          .single();
-        certResult = { data, error };
-      } else {
-        const { data, error } = await supabase
-          .from('certificados_digitais')
-          .insert({
-            empresa_id,
-            tipo: 'A1',
-            arquivo_path: storagePath,
-            senha_hash: senhaHash,
-            cnpj_certificado: docClean,
-            data_vencimento: defaultExpiry.toISOString().split('T')[0],
-            status: 'valido',
-          })
-          .select()
-          .single();
-        certResult = { data, error };
-      }
-
-      if (certResult.error) {
-        return jsonResponse({ success: false, error: 'Erro ao salvar certificado.' }, 500);
-      }
-
-      // Try to validate via fiscal API
-      try {
-        await supabase.functions.invoke('validate-certificate', {
-          body: { empresa_id },
-        });
-      } catch {
-        // Non-critical, continue
-      }
-
-      // Re-fetch to get validated data
-      const { data: updatedCert } = await supabase
-        .from('certificados_digitais')
-        .select('*')
-        .eq('empresa_id', empresa_id)
-        .single();
-
-      const vencimento = new Date(updatedCert?.data_vencimento || defaultExpiry);
-      const diasRestantes = Math.ceil((vencimento.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
-
-      return jsonResponse({
-        success: true,
-        data: {
-          titular: empresa?.razao_social || '',
-          cnpj: doc,
-          validade: vencimento.toISOString(),
-          dias_restantes: diasRestantes,
-          message: 'Certificado instalado com sucesso.',
-        },
-      });
+      const r = await saveCertificadoAtomico(supabase, empresa_id, body?.certificado_base64, body?.senha);
+      if (!r.ok) return jsonResponse({ success: false, error: r.error, code: r.code }, r.status);
+      const dias = Math.ceil((new Date(r.data.validade).getTime() - Date.now()) / 86400000);
+      return jsonResponse({ success: true, data: { ...r.data, dias_restantes: dias, message: 'Certificado instalado com sucesso.' } });
     }
 
     // =====================================================================
