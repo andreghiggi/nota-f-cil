@@ -2179,6 +2179,8 @@ Deno.serve(async (req) => {
           contato: empresa.resp_tec_contato,
           email: empresa.resp_tec_email,
           fone: empresa.resp_tec_fone,
+          id_csrt: empresa.resp_tec_id_csrt,
+          csrt: empresa.resp_tec_csrt,
         } : null
       );
       const respTecPayload = rtSrc && (rtSrc.cnpj || rtSrc.CNPJ) ? {
@@ -2186,6 +2188,7 @@ Deno.serve(async (req) => {
         xContato: (rtSrc.contato || rtSrc.xContato || '').toString().slice(0, 60),
         email: rtSrc.email,
         fone: (rtSrc.fone || rtSrc.telefone || '').toString().replace(/\D/g, ''),
+        ...((rtSrc.idCSRT || rtSrc.id_csrt) && (rtSrc.CSRT || rtSrc.csrt) ? { idCSRT: String(rtSrc.idCSRT || rtSrc.id_csrt), CSRT: String(rtSrc.CSRT || rtSrc.csrt) } : {}),
       } : null;
 
       const cNFEstavelNfe = cNFDeterministico(nfe.id, nfe.numero, nfe.serie);
