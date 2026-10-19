@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { saveCertificadoAtomico } from '../_shared/pfx.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -806,119 +807,10 @@ Deno.serve(async (req) => {
     // ===== POST /nfe-api/certificado - Upload certificado digital =====
     if (method === 'POST' && subPath === 'certificado') {
       const body = await req.json();
-      const { certificado_base64, senha } = body;
-
-      if (!certificado_base64 || !senha) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Campos certificado_base64 e senha são obrigatórios.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Try to extract info from the certificate bytes
-      let titular = null;
-      let cnpjCert = null;
-      let dataVencimento = new Date();
-      dataVencimento.setFullYear(dataVencimento.getFullYear() + 1);
-      let dataEmissao = new Date();
-      dataEmissao.setFullYear(dataEmissao.getFullYear() - 1);
-      let emissor = 'Autoridade Certificadora';
-
-      try {
-        const certBytes = Uint8Array.from(atob(certificado_base64), c => c.charCodeAt(0));
-        const certString = new TextDecoder('latin1').decode(certBytes);
-        
-        // Extract CNPJ/CPF
-        const cnpjMatch = certString.match(/(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})/);
-        const cpfMatch = certString.match(/(\d{3}\.?\d{3}\.?\d{3}-?\d{2})/);
-        if (cnpjMatch) {
-          cnpjCert = cnpjMatch[1].replace(/\D/g, '');
-        } else if (cpfMatch) {
-          cnpjCert = cpfMatch[1].replace(/\D/g, '');
-        }
-
-        // Extract issuer
-        const issuers = ['SERASA', 'CERTISIGN', 'VALID', 'SAFEWEB', 'SOLUTI', 'AC BR', 'ICP-Brasil'];
-        for (const iss of issuers) {
-          if (certString.toUpperCase().includes(iss)) {
-            emissor = `AC ${iss} RFB`;
-            break;
-          }
-        }
-      } catch (_e) { /* parsing optional */ }
-
-      // Get empresa info for titular
-      const { data: empInfo } = await supabase
-        .from('empresas')
-        .select('razao_social, cnpj, cpf')
-        .eq('id', empresa_id)
-        .single();
-
-      titular = empInfo?.razao_social || 'Não identificado';
-      if (!cnpjCert) cnpjCert = empInfo?.cnpj || empInfo?.cpf || null;
-
-      // Determine certificate status
-      const now = new Date();
-      const diffDays = Math.ceil((dataVencimento.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      let certStatus: string = 'valido';
-      if (diffDays <= 0) certStatus = 'expirado';
-      else if (diffDays <= 30) certStatus = 'expirando';
-
-      // Upsert certificate (one per empresa via unique constraint)
-      const { data: existingCert } = await supabase
-        .from('certificados_digitais')
-        .select('id')
-        .eq('empresa_id', empresa_id)
-        .maybeSingle();
-
-      if (existingCert) {
-        await supabase
-          .from('certificados_digitais')
-          .update({
-            arquivo_path: `api-upload/${empresa_id}`,
-            senha_hash: senha,
-            cnpj_certificado: cnpjCert,
-            emissor,
-            data_emissao: dataEmissao.toISOString().split('T')[0],
-            data_vencimento: dataVencimento.toISOString().split('T')[0],
-            status: certStatus,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingCert.id);
-      } else {
-        await supabase
-          .from('certificados_digitais')
-          .insert({
-            empresa_id,
-            tipo: 'A1',
-            arquivo_path: `api-upload/${empresa_id}`,
-            senha_hash: senha,
-            cnpj_certificado: cnpjCert,
-            emissor,
-            data_emissao: dataEmissao.toISOString().split('T')[0],
-            data_vencimento: dataVencimento.toISOString().split('T')[0],
-            status: certStatus,
-          });
-      }
-
-      // Store the base64 certificate in a way the fiscal-api can retrieve it
-      // We'll store it as a storage object
-      const certBlob = new Blob([certificado_base64], { type: 'text/plain' });
-      await supabase.storage
-        .from('certificados')
-        .upload(`${empresa_id}/certificado.pfx.b64`, certBlob, { upsert: true });
-
+      const r = await saveCertificadoAtomico(supabase, empresa_id, body?.certificado_base64, body?.senha);
       return new Response(
-        JSON.stringify({
-          success: true,
-          data: {
-            titular,
-            cnpj: cnpjCert,
-            validade: dataVencimento.toISOString(),
-            message: 'Certificado digital enviado com sucesso',
-          },
-        }),
-        { status: 201, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify(r.ok ? { success: true, data: r.data } : { success: false, error: r.error, code: r.code }),
+        { status: r.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
