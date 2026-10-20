@@ -623,6 +623,7 @@ Deno.serve(async (req) => {
       const PERMISSOES_FULL = [
         'emitir_nfe', 'emitir_nfce', 'emitir_mdfe', 'emitir_cte', 'emitir_nfse',
         'emitir', 'consultar', 'cancelar', 'inutilizar', 'manifestar', 'gerenciar',
+        'reprocessar',
       ];
       const permissoesSolicitadas: string[] = Array.isArray(body.permissoes)
         ? body.permissoes
@@ -1670,7 +1671,7 @@ Deno.serve(async (req) => {
     }
 
     if (method === 'POST' && pathParts.length === 3 && pathParts[0] === 'nfe-api' && pathParts[2] === 'reprocessar') {
-      if (!permissoes.includes('reprocessar')) {
+      if (!['reprocessar', 'emitir_nfe', 'emitir', 'gerenciar'].some((p) => permissoes.includes(p))) {
         return new Response(
           JSON.stringify({ error: 'Permission denied', code: 'PERMISSION_DENIED' }),
           { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
