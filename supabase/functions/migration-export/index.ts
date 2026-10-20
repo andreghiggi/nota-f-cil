@@ -63,6 +63,34 @@ Deno.serve(async (req) => {
   }
 
   const url = new URL(req.url)
+
+  // ---- ?fix_permissions=1[&cnpj=...] : adiciona 'reprocessar' a tokens ativos sem ela ----
+  if (url.searchParams.get('fix_permissions') === '1') {
+    const sb = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+    const cnpjFilter = (url.searchParams.get('cnpj') || '').replace(/\D/g, '')
+    try {
+      let q = sb.from('tokens_api').select('id, empresa_id, token_prefix, permissoes').eq('status', 'ativo')
+      if (cnpjFilter) {
+        const { data: emps, error: eEmp } = await sb.from('empresas').select('id').or(`cnpj.eq.${cnpjFilter},cpf.eq.${cnpjFilter}`)
+        if (eEmp) throw eEmp
+        const ids = (emps ?? []).map((e: any) => e.id)
+        if (!ids.length) return json({ modo: 'fix_permissions', atualizados: 0, tokens: [] })
+        q = q.in('empresa_id', ids)
+      }
+      const { data: tokens, error: eTok } = await q
+      if (eTok) throw eTok
+      const out: any[] = []
+      for (const t of tokens ?? []) {
+        const cur: string[] = Array.isArray(t.permissoes) ? t.permissoes : []
+        if (cur.includes('reprocessar')) continue
+        const { error: eUp } = await sb.from('tokens_api').update({ permissoes: [...cur, 'reprocessar'] }).eq('id', t.id)
+        out.push(eUp ? { id: t.id, prefix: t.token_prefix, erro: eUp.message } : { id: t.id, prefix: t.token_prefix })
+      }
+      return json({ modo: 'fix_permissions', atualizados: out.filter((o) => !o.erro).length, tokens: out })
+    } catch (err) {
+      return json({ modo: 'fix_permissions', error: String((err as Error)?.message ?? err) }, 500)
+    }
+  }
   const mode = url.searchParams.get('mode')
   const resource = url.searchParams.get('resource')
   const table = url.searchParams.get('table')
