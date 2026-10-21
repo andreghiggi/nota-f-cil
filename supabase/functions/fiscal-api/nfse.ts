@@ -6,6 +6,10 @@
 
 export const FISCAL_API_BASE_URL = 'https://api2.agilizeerp.com.br';
 
+// XML fiscal em UTF-8: atob() devolve bytes como Latin-1 e gerava dupla codificação (Ã©).
+const b64ToUtf8 = (b64: string) =>
+  new TextDecoder('utf-8').decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)));
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -163,7 +167,7 @@ export async function handleNfseEmit(supabase: any, ensureRegistered: EnsureRegi
     return fail(`SEFIN: ${r.error}`, 502, d);
   }
 
-  const xmlNfse = d.xml_nfse_base64 ? atob(d.xml_nfse_base64) : null;
+  const xmlNfse = d.xml_nfse_base64 ? b64ToUtf8(d.xml_nfse_base64) : null;
   const autorizada = d.status === 'autorizada' || !!d.chave;
 
   const { data: atualizada } = await supabase.from('nfse').update({
@@ -210,7 +214,7 @@ export async function handleNfseConsultar(supabase: any, ensureRegistered: Ensur
     protocolo: d.protocolo || nfse.protocolo,
     codigo_retorno: d.cStat ? String(d.cStat) : nfse.codigo_retorno,
     motivo_retorno: d.xMotivo || nfse.motivo_retorno,
-    xml_nfse: d.xml_nfse_base64 ? atob(d.xml_nfse_base64) : nfse.xml_nfse,
+    xml_nfse: d.xml_nfse_base64 ? b64ToUtf8(d.xml_nfse_base64) : nfse.xml_nfse,
     resposta: d,
   }).eq('id', nfseId);
 
@@ -320,7 +324,7 @@ export async function handleNfseXml(supabase: any, ensureRegistered: EnsureRegis
   });
   if (!r.ok || !r.data?.xml_base64) return fail(`Falha ao baixar XML: ${r.error || 'sem XML'}`, 502, r.data);
 
-  const xml = atob(r.data.xml_base64);
+  const xml = b64ToUtf8(r.data.xml_base64);
   await supabase.from('nfse').update({ xml_nfse: xml }).eq('id', nfseId);
   return json({ success: true, data: { chave: nfse.chave_acesso, xml } });
 }
