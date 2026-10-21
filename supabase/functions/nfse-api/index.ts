@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
         .select('*').eq('id', empresa_id).maybeSingle();
       if (!empresa) return err('Empresa não encontrada', 'NOT_FOUND', 404);
       if (!empresa.nfse_ativo) return err('NFS-e não habilitada para esta empresa (ative no cadastro da empresa)', 'NFSE_DISABLED');
-      if (!empresa.inscricao_municipal) return err('Empresa sem Inscrição Municipal — configure no cadastro da empresa', 'VALIDATION_ERROR');
+      // IM do prestador é opcional na NFS-e Nacional (SEFIN/ADN); a API2 envia null ao SDK quando vazia.
 
       const toma = payload.tomador || ({} as any);
       const documento = String(toma.cnpj || toma.cpf || toma.documento || '').replace(/\D/g, '');
